@@ -6,6 +6,10 @@
     "status.example.com"
   ],
   "theme": "a-sys-status",
+  "visibility": "public",
+  "profiles": [
+    "forgejo-ha"
+  ],
   "sources": [
     {
       "id": "kuma:watch-1",

@@ -113,6 +113,13 @@ export const SiteConfig = z
     name: safeDisplay(80),
     hostnames: z.array(Hostname).min(1),
     theme: ThemeId,
+    /** `public`: anyone sees the page; `private`: signed-in users with a role only (see src/shared/auth.ts). */
+    visibility: z.enum(["public", "private"]).default("private"),
+    /** Active profiles in order (src/shared/profiles); `generic` is always active and need not be listed. */
+    profiles: z
+      .array(z.string().regex(/^[a-z][a-z0-9-]{0,31}$/))
+      .max(10)
+      .default([]),
     sources: z.array(
       z.object({ id: SourceId, kind: SourceKind, expectedIntervalS: z.number().int().positive() }),
     ),
