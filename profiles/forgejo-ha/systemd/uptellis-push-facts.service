@@ -1,0 +1,21 @@
+# Push the forgejo-ha facts of this node to Uptellis (profiles/forgejo-ha/push-facts.sh).
+# Install: copy push-facts.sh to /usr/local/sbin/uptellis-push-facts (mode 755), write
+# /etc/uptellis/ingest.env (INGEST_URL, KEY_ID=facts-1, INGEST_KEY; mode 600, owner root),
+# copy this unit and the .timer to /etc/systemd/system, then
+#   systemctl daemon-reload && systemctl enable --now uptellis-push-facts.timer
+[Unit]
+Description=Push forgejo-ha facts to Uptellis
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/sbin/uptellis-push-facts
+TimeoutStartSec=120
+Nice=10
+# Reads the stack, the state dir, docker and tailscale; writes only its own temp files.
+PrivateTmp=true
+ProtectHome=read-only
+ProtectSystem=full
+NoNewPrivileges=true

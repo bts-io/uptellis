@@ -1,0 +1,6 @@
+# Build context is the repo root; send only what the image needs.
+*
+!collector/package.json
+!collector/bun.lock
+!collector/src/**
+!src/shared/**

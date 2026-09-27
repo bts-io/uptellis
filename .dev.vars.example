@@ -1,0 +1,11 @@
+# Copy to .dev.vars (gitignored) for `bun run dev`. Leave VIEWER_KEY empty to keep the gate open locally.
+# Production values are Worker secrets: `bunx wrangler secret put VIEWER_KEY` (and VIEWER_COOKIE_SECRET).
+VIEWER_KEY=
+VIEWER_COOKIE_SECRET=
+# Admin: open /admin?admin=<ADMIN_KEY> once to get the admin cookie. With ADMIN_KEY and VIEWER_KEY both
+# empty, /admin is open locally.
+ADMIN_KEY=
+# Seals ingest secrets stored in D1; generate with: openssl rand -base64 32
+SOURCE_MASTER_KEY=
+# Discord webhook URL for the source stale and recovered cards. Leave empty locally: no cards.
+DISCORD_WEBHOOK_URL=

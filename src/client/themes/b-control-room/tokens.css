@@ -1,0 +1,54 @@
+/*
+ * Theme B "Control Room" (mockups/B): near-black bento grid, glass tiles, green-to-cyan brand gradient.
+ * Semantic tokens override the kit defaults under [data-theme="b"] only (theme A owns the :root defaults).
+ * `--b-*` tokens are private to this theme's components.
+ */
+[data-theme="b"] {
+  --color-base: #0a0c10;
+  --color-panel: #12151c;
+  --color-line: rgb(255 255 255 / 0.08);
+  --color-ink: #e6e8ef;
+  --color-muted: #7d8590;
+  --color-accent: #00e5ff;
+  --color-up: #3ddc84;
+  --color-degraded: #ffb020;
+  --color-down: #ff6b6b;
+  --color-maint: #7aa2ff;
+  --color-stale: #ff6b6b;
+  --gradient-brand: linear-gradient(90deg, #39ff14 0%, #00e5ff 100%);
+  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --color-faint: #4b525c;
+  --color-raised: #181c25;
+  --color-hair: rgb(255 255 255 / 0.08);
+  --color-frame: #00e5ff;
+
+  /* Hairlines between cells, the glass header, tile surfaces and the chart's two series (CVD-checked). */
+  --b-hair2: rgb(255 255 255 / 0.05);
+  --b-hair3: rgb(255 255 255 / 0.14);
+  --b-glass: rgb(24 28 37 / 0.6);
+  --b-tile-top: rgb(26 30 40 / 0.66);
+  --b-tile-bottom: rgb(16 19 26 / 0.72);
+  --b-tile-down-top: rgb(60 24 28 / 0.55);
+  --b-tile-down-bottom: rgb(22 16 20 / 0.75);
+  --b-node: rgb(20 24 32 / 0.92);
+  --b-canvas: rgb(8 10 14 / 0.55);
+  --b-dotgrid: rgb(255 255 255 / 0.09);
+  --b-grid: rgb(255 255 255 / 0.03);
+  --b-glow-a: rgb(57 255 20 / 0.07);
+  --b-glow-b: rgb(0 229 255 / 0.04);
+  --b-serving-glow: rgb(0 229 255 / 0.28);
+  --b-shadow: rgb(0 0 0 / 0.4);
+  --b-brand-1: #39ff14;
+  --b-brand-2: #00e5ff;
+  --b-series-1: #4c8fe0;
+  --b-series-2: #c2699b;
+  --b-cal-out: #2e333b;
+  --b-hatch: rgb(255 255 255 / 0.035);
+  --b-hatch-strong: rgb(255 255 255 / 0.22);
+  --b-strip-a: rgb(255 107 107 / 0.16);
+  --b-strip-b: rgb(255 107 107 / 0.1);
+  --b-strip-ink: #ffd3d3;
+
+  color-scheme: dark;
+}

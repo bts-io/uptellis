@@ -1,0 +1,65 @@
+# Lint, typecheck and test every pull request and every push to main and staging, and lint the commit
+# messages (and the PR title) against Conventional Commits. The leak check runs on the maintainers' mirror,
+# which holds its denylist secret; it is not needed here.
+name: CI
+
+on:
+  push:
+    branches: [main, staging]
+  pull_request:
+    branches: [main, staging]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  commitlint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history, so commitlint can walk the commits of the push or the PR.
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.6
+      - run: bun install --frozen-lockfile
+      - name: Lint PR title
+        if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: printf '%s\n' "$PR_TITLE" | bunx commitlint --verbose
+      - name: Lint PR commits
+        if: github.event_name == 'pull_request'
+        run: >-
+          bunx commitlint --verbose
+          --from ${{ github.event.pull_request.base.sha }}
+          --to ${{ github.event.pull_request.head.sha }}
+      - name: Lint pushed commits
+        if: github.event_name == 'push'
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          # A new branch has an all-zero "before"; its commits are linted in the PR that brings them in.
+          if [ -z "${BEFORE//0/}" ]; then exit 0; fi
+          bunx commitlint --verbose --from "$BEFORE" --to "$GITHUB_SHA"
+
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          # Same Bun that wrote bun.lock, so --frozen-lockfile agrees with it.
+          bun-version: 1.3.6
+      - run: bun install --frozen-lockfile
+      # The collector has its own lockfile; its typecheck (in `check`) and bun tests (in `verify`) need it.
+      - run: bun run collector:install
+      - name: Verify (biome ci, check, test)
+        run: bun run verify

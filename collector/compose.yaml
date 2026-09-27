@@ -1,0 +1,46 @@
+# Uptellis Kuma collector on watch-1, next to Uptime Kuma (bound to localhost:3001, hence host
+# networking). Run from the repo checkout:  docker compose -f collector/compose.yaml up -d --build
+# Host files (outside git, owned by uid 1000, mode 600): see collector/README.md "Deploy".
+name: uptellis-collector
+
+services:
+  collector:
+    image: uptellis-collector:latest
+    build:
+      context: ..
+      dockerfile: collector/Dockerfile
+    container_name: uptellis-collector
+    network_mode: host
+    read_only: true
+    tmpfs:
+      - /tmp:size=1m,mode=1777
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    user: "1000:1000"
+    restart: unless-stopped
+    env_file:
+      - /etc/uptellis/collector.env
+    environment:
+      KUMA_PASSWORD_FILE: /run/secrets/kuma_password
+      INGEST_KEY_FILE: /run/secrets/ingest_key
+      CF_ACCESS_CLIENT_SECRET_FILE: /run/secrets/cf_access_client_secret
+    secrets:
+      - kuma_password
+      - ingest_key
+      - cf_access_client_secret
+    mem_limit: 128m
+    pids_limit: 64
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+secrets:
+  kuma_password:
+    file: /etc/uptellis/kuma_password
+  ingest_key:
+    file: /etc/uptellis/ingest_key
+  cf_access_client_secret:
+    file: /etc/uptellis/cf_access_client_secret

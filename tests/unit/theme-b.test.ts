@@ -1,0 +1,116 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it } from "vitest";
+import { THEMES, themeFor } from "@/client/themes";
+import { bControlRoom, THEME_COLOR } from "@/client/themes/b-control-room";
+import { combinedBeats } from "@/client/themes/b-control-room/format";
+import { Kpis } from "@/client/themes/b-control-room/Kpis";
+import { MonitorTile } from "@/client/themes/b-control-room/MonitorTile";
+import { findForbiddenLiterals } from "@/shared/model";
+import { buildSiteView, type SiteView } from "@/shared/view";
+import { FIXTURE_NAMES, type FixtureName } from "../fixtures";
+import { fixtureInput } from "../fixtures/view";
+
+const view = (name: FixtureName) => buildSiteView(fixtureInput(name));
+const render = (v: SiteView) =>
+  renderToStaticMarkup(createElement(bControlRoom.Page, { view: v, commit: "cbe27a13" }));
+const services = (v: SiteView) => v.sections.flatMap((s) => s.services);
+
+/** Terminal transplants dropped after the mock-up review (plan section 2), and the palette chip. */
+const TRANSPLANTS = ["ACCESS GRANTED", "user@", "❯", "▸", "tail -f", "⌘K"];
+
+const UP_DOT = /role="img" aria-label="[^"]*" data-state="up"/;
+
+describe("theme B audit", () => {
+  it.each(FIXTURE_NAMES)("renders the %s fixture without address, email or token literals", (name) => {
+    expect(findForbiddenLiterals(render(view(name)))).toEqual([]);
+  });
+
+  it.each(FIXTURE_NAMES)("renders the %s fixture without terminal transplants", (name) => {
+    const html = render(view(name));
+    for (const t of TRANSPLANTS) expect(html).not.toContain(t);
+  });
+});
+
+describe("theme B page", () => {
+  it("registers as b-control-room on data-theme b with its base colour", () => {
+    expect(bControlRoom).toMatchObject({ id: "b-control-room", label: "Control Room", dataTheme: "b" });
+    expect(THEMES["b-control-room"]).toEqual({ module: bControlRoom, themeColor: THEME_COLOR });
+    expect(themeFor("b-control-room").module).toBe(bControlRoom);
+    expect(THEME_COLOR).toBe("#0a0c10");
+  });
+
+  it("renders every monitor tile, the summary strip and the tiles", () => {
+    const v = view("default");
+    const html = render(v);
+    for (const s of services(v)) expect(html).toContain(s.name);
+    for (const t of ["Topology", "Response time", "Forgejo", "CI runners", "Backup", "Tailnet", "Incidents"])
+      expect(html).toContain(t);
+    expect(html).toContain("All systems operational");
+    expect(html).toContain("v16.0.5");
+    expect(html).toContain("streaming");
+    expect(html.match(/data-check=/g)).toHaveLength(12);
+  });
+
+  it("keeps the topology before the monitors in document order (the phone order)", () => {
+    const html = render(view("default"));
+    expect(html.indexOf('id="infra"')).toBeGreaterThan(-1);
+    expect(html.indexOf('id="infra"')).toBeLessThan(html.indexOf('id="monitors"'));
+  });
+
+  it("keeps no green dot on the stale fixture's monitors and summary", () => {
+    const tiles = (v: SiteView, stale: boolean) =>
+      services(v)
+        .map((s) =>
+          renderToStaticMarkup(createElement(MonitorTile, { service: s, stale, generatedAt: v.generatedAt })),
+        )
+        .join("");
+    const kpis = (v: SiteView) => renderToStaticMarkup(createElement(Kpis, { view: v }));
+    expect(tiles(view("default"), false)).toMatch(UP_DOT);
+    expect(kpis(view("default"))).toMatch(UP_DOT);
+    const stale = view("stale");
+    expect(tiles(stale, true)).not.toMatch(UP_DOT);
+    expect(kpis(stale)).not.toMatch(UP_DOT);
+    expect(services(stale).every((s) => s.state === "stale")).toBe(true);
+  });
+
+  it("marks frozen values and pauses the chart once the data is stale", () => {
+    const html = render(view("stale"));
+    expect(html).toContain("SNAPSHOT STALE");
+    expect(html).toContain("@23:57");
+    expect(html).toContain("as of 23:57");
+    expect(html).toContain("paused");
+    expect(html).toContain("8 stale");
+  });
+
+  it("shows the open incident, the down tile and the broken replication link", () => {
+    const v = view("incident");
+    const html = render(v);
+    expect(v.incidents.open).toHaveLength(1);
+    expect(html).toContain(v.incidents.open[0]!.title);
+    expect(html).toContain("partial outage: Replica Postgres");
+    expect(html).toContain("timeout");
+    expect(html).toContain("replication stopped");
+    expect(html).toContain("no stream");
+    expect(html).toMatch(/data-live="false"/);
+    expect(html).toContain('data-check="down"');
+    // The chart opens on the section with the failing service.
+    expect(html).toMatch(/aria-selected="true"[^>]*>Database</);
+  });
+
+  it("renders a dash for missing facts and survives a site without topology", () => {
+    const v: SiteView = { ...view("default"), factGroups: [], factIndex: {}, topology: null, activity: [] };
+    const html = render(v);
+    expect(html).toContain("No infrastructure facts yet");
+    expect(html).toMatch(/text-\[22px\] font-medium">-</);
+    expect(html).toContain("on -");
+    expect(html).toContain("- online");
+  });
+
+  it("combines the 90-day bars by each day's worst state", () => {
+    const days = combinedBeats(services(view("default")));
+    expect(days).toHaveLength(90);
+    expect(days.filter((d) => d.worst === "down").map((d) => d.day)).toEqual(["2026-09-15", "2026-09-16"]);
+    expect(days.find((d) => d.day === "2026-09-25")?.worst).toBe("degraded");
+  });
+});

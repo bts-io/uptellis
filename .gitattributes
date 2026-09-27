@@ -1,0 +1,14 @@
+# Normalise text to LF in the repo and in checkouts on every platform.
+* text=auto eol=lf
+
+# Binary assets: never diff or convert.
+*.png binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+
+# Generated files: collapsed in GitHub diffs and left out of the language stats.
+bun.lock linguist-generated=true
+collector/bun.lock linguist-generated=true
+CHANGELOG.md linguist-generated=true
+migrations/meta/*.json linguist-generated=true

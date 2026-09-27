@@ -1,0 +1,11 @@
+[Unit]
+Description=Push forgejo-ha facts to Uptellis every 15 minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=15min
+RandomizedDelaySec=30s
+Unit=uptellis-push-facts.service
+
+[Install]
+WantedBy=timers.target

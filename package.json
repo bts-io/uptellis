@@ -1,0 +1,69 @@
+{
+  "name": "uptellis",
+  "version": "0.1.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/borderlesstech/uptellis.git"
+  },
+  "homepage": "https://github.com/borderlesstech/uptellis#readme",
+  "bugs": {
+    "url": "https://github.com/borderlesstech/uptellis/issues"
+  },
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "wrangler types && bun run routes:generate && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.worker.json --noEmit && tsc -p tsconfig.node.json --noEmit && bun run collector:check",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "test": "vite build && vitest run",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "test:ssr": "vite build && vitest run --project ssr",
+    "verify": "biome ci . && bun run check && bun run test && bun run collector:test",
+    "collector:install": "bun install --frozen-lockfile --cwd collector",
+    "collector:check": "tsc -p collector/tsconfig.json --noEmit",
+    "collector:test": "cd collector && bun test",
+    "cf:types": "wrangler types",
+    "routes:generate": "bun scripts/routes-generate.mjs",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate:local": "wrangler d1 migrations apply uptellis-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply uptellis-db --remote",
+    "deploy": "bun run db:migrate:remote && bun run build && wrangler deploy",
+    "leak-check": "bash scripts/leak-check.sh"
+  },
+  "dependencies": {
+    "@headlessui/react": "^2.2.10",
+    "@tanstack/react-router": "^1.170.38",
+    "@tanstack/react-start": "^1.168.56",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.13.8",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.14",
+    "@cloudflare/vite-plugin": "^1.56.0",
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
+    "@cloudflare/workers-types": "^5.20260918.1",
+    "@commitlint/cli": "^21.2.3",
+    "@commitlint/config-conventional": "^21.2.3",
+    "@tailwindcss/vite": "^4.3.3",
+    "@tanstack/router-generator": "^1.167.38",
+    "@types/node": "^26.6.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "drizzle-kit": "^0.31.10",
+    "happy-dom": "^20.14.5",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.0",
+    "vitest": "^4.0.0",
+    "wrangler": "^4.137.0"
+  }
+}

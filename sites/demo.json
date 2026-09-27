@@ -1,0 +1,164 @@
+{
+  "v": 1,
+  "slug": "demo",
+  "name": "Acme Cloud",
+  "hostnames": [
+    "status.example.com"
+  ],
+  "theme": "a-sys-status",
+  "sources": [
+    {
+      "id": "kuma:watch-1",
+      "kind": "kuma",
+      "expectedIntervalS": 60
+    },
+    {
+      "id": "facts:app-1",
+      "kind": "facts",
+      "expectedIntervalS": 900
+    },
+    {
+      "id": "probe:cf",
+      "kind": "probe",
+      "expectedIntervalS": 60
+    }
+  ],
+  "probes": [
+    {
+      "id": "api-health",
+      "name": "API health (edge)",
+      "url": "https://example.com/api/healthz",
+      "method": "GET",
+      "expectStatus": {
+        "min": 200,
+        "max": 399
+      },
+      "timeoutS": 10,
+      "intervalS": 60
+    },
+    {
+      "id": "web-app",
+      "name": "Web app (edge)",
+      "url": "https://example.com/",
+      "method": "GET",
+      "expectStatus": {
+        "min": 200,
+        "max": 399
+      },
+      "timeoutS": 10,
+      "intervalS": 60
+    }
+  ],
+  "sections": [
+    {
+      "id": "web",
+      "title": "Web",
+      "services": [
+        "kuma:1",
+        "kuma:2",
+        "probe:api-health",
+        "probe:web-app"
+      ]
+    },
+    {
+      "id": "database",
+      "title": "Database",
+      "services": [
+        "kuma:3",
+        "kuma:5"
+      ]
+    },
+    {
+      "id": "access",
+      "title": "Access",
+      "services": [
+        "kuma:4",
+        "kuma:6"
+      ]
+    },
+    {
+      "id": "workers",
+      "title": "Workers",
+      "services": [
+        "kuma:8",
+        "kuma:9"
+      ]
+    }
+  ],
+  "displayNames": {},
+  "hostAliases": {},
+  "topology": {
+    "nodes": [
+      {
+        "id": "app-1",
+        "label": "app-1",
+        "roles": [
+          "primary"
+        ],
+        "location": "Frankfurt"
+      },
+      {
+        "id": "app-2",
+        "label": "app-2",
+        "roles": [
+          "standby"
+        ],
+        "location": "Virginia"
+      },
+      {
+        "id": "watch-1",
+        "label": "watch-1",
+        "roles": [
+          "watchdog",
+          "runner"
+        ],
+        "location": "Office LAN"
+      },
+      {
+        "id": "runner-1",
+        "label": "runner-1",
+        "roles": [
+          "runner"
+        ],
+        "location": "Office LAN"
+      }
+    ],
+    "edges": [
+      {
+        "from": "app-1",
+        "to": "app-2",
+        "kind": "replication"
+      },
+      {
+        "from": "watch-1",
+        "to": "app-1",
+        "kind": "watches"
+      }
+    ]
+  },
+  "health": {
+    "uptime": 0.6,
+    "latency": 0.25,
+    "cert": 0.15
+  },
+  "thresholds": {
+    "certWarnDays": 14,
+    "certCritDays": 7,
+    "lagWarnS": 5,
+    "lagCritS": 60,
+    "backupMaxAgeH": 26
+  },
+  "links": [],
+  "branding": {
+    "title": "Acme Cloud",
+    "tokens": {}
+  },
+  "public": {
+    "enabled": false,
+    "fields": []
+  },
+  "notify": {
+    "discord": false,
+    "webhooks": []
+  }
+}

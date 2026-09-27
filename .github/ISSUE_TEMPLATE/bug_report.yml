@@ -1,0 +1,63 @@
+name: Bug report
+description: Something in Uptellis does not work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. For a security problem, do not open an issue: follow [SECURITY.md](https://github.com/borderlesstech/uptellis/blob/main/SECURITY.md).
+        Remove keys, hostnames and anything private from logs and screenshots before you paste them.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start `bun run dev`
+        2. Open `/admin` and ...
+        3. See ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Release tag or commit (`/api/health` reports the commit).
+      placeholder: v0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: runtime
+    attributes:
+      label: Where it runs
+      options:
+        - Cloudflare Workers
+        - Local dev (`bun run dev`)
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      multiple: true
+      options:
+        - Status page or themes
+        - Admin
+        - Ingest or sources
+        - Collector
+        - Incidents or alerts
+        - Docs
+        - Other
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Worker logs, browser console, collector output.
+      render: text

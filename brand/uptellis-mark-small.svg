@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 550 550" width="550" height="550">
+  <defs>
+    <linearGradient id="g" gradientUnits="userSpaceOnUse" x1="45" y1="0" x2="506" y2="0">
+      <stop offset="0" stop-color="#13f23a"/>
+      <stop offset="0.25" stop-color="#0ff960"/>
+      <stop offset="0.5" stop-color="#08f8aa"/>
+      <stop offset="0.75" stop-color="#03fbf2"/>
+      <stop offset="1" stop-color="#00e5ff"/>
+    </linearGradient>
+  </defs>
+  <g fill="none" stroke="url(#g)" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M107.5 194 V364 A60 60 0 0 0 167.5 424 H381.5 A60 60 0 0 0 441.5 364 V194" stroke-width="62"/>
+    <polyline points="107.5,298.5 228,298.5 270,191 305,357 337,298.5 441.5,298.5" stroke-width="40"/>
+  </g>
+  <g fill="url(#g)">
+    <rect x="45" y="89" width="133" height="125" rx="18"/>
+    <rect x="372" y="88" width="134" height="125" rx="18"/>
+  </g>
+  <g fill="#0a2621">
+    <rect x="89.5" y="131.5" width="42" height="50" rx="3"/>
+    <rect x="416.5" y="130" width="43" height="50" rx="3"/>
+  </g>
+</svg>

@@ -1,0 +1,19 @@
+# Static assets are served without running the Worker (run_worker_first excludes them), so they get the
+# security headers here; the Worker sets the same set on everything else (src/worker/middleware/security-headers.ts).
+/assets/*
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  Cross-Origin-Opener-Policy: same-origin
+  X-Frame-Options: DENY
+
+/fonts/*
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  Cross-Origin-Opener-Policy: same-origin
+  X-Frame-Options: DENY
+
+/favicon.ico
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  X-Content-Type-Options: nosniff

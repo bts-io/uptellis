@@ -1,0 +1,120 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "files": {
+    "includes": [
+      "src/**",
+      "tests/**",
+      "collector/**",
+      "scripts/**",
+      "*.ts",
+      "!src/client/routeTree.gen.ts",
+      "!worker-configuration.d.ts"
+    ]
+  },
+  "formatter": {
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 110
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "suspicious": {
+        "noExplicitAny": "off",
+        "noArrayIndexKey": "off",
+        "noAssignInExpressions": "off"
+      },
+      "style": {
+        "noNonNullAssertion": "off",
+        "useTemplate": "off",
+        "noParameterAssign": "off",
+        "useNumberNamespace": "off"
+      },
+      "complexity": {
+        "noForEach": "off",
+        "useLiteralKeys": "off",
+        "noBannedTypes": "off"
+      },
+      "correctness": {
+        "useExhaustiveDependencies": "off",
+        "noUnusedImports": "warn",
+        "noUnusedVariables": "warn"
+      },
+      "a11y": {
+        "useKeyWithClickEvents": "off",
+        "noStaticElementInteractions": "off",
+        "noLabelWithoutControl": "off",
+        "useButtonType": "off",
+        "noSvgWithoutTitle": "off",
+        "useSemanticElements": "off",
+        "noNoninteractiveTabindex": "off",
+        "useValidAnchor": "off",
+        "noAutofocus": "off"
+      },
+      "security": {
+        "noDangerouslySetInnerHtml": "off"
+      },
+      "performance": {
+        "noAccumulatingSpread": "off",
+        "noDelete": "off"
+      }
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "semicolons": "always"
+    }
+  },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["src/client/themes/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "@/server": "Themes render SiteView only: import @/client/kit, @/client/effects, @/shared/view, react and the theme's own files.",
+                  "@/shared": "Themes render SiteView only: import @/client/kit, @/client/effects, @/shared/view, react and the theme's own files."
+                },
+                "patterns": [
+                  {
+                    "group": [
+                      "@/client/lib",
+                      "@/client/lib/**",
+                      "@/worker",
+                      "@/worker/**",
+                      "@/shared/model",
+                      "@/shared/model/**",
+                      "@/shared/schemas",
+                      "@/shared/schemas/**",
+                      "**/../lib",
+                      "**/../lib/**",
+                      "**/../worker",
+                      "**/../worker/**",
+                      "**/../shared/model",
+                      "**/../shared/model/**",
+                      "**/../shared/schemas",
+                      "**/../shared/schemas/**",
+                      "**/../server",
+                      "**/../server.ts"
+                    ],
+                    "message": "Themes render SiteView only: import @/client/kit, @/client/effects, @/shared/view, react and the theme's own files."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

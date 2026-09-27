@@ -1,0 +1,24 @@
+{
+  "name": "uptellis-collector",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Uptime Kuma collector for Uptellis: one socket.io session, a signed KumaSnapshot every 60 s",
+  "scripts": {
+    "start": "bun src/main.ts",
+    "dry-run": "bun src/main.ts --dry-run --once",
+    "record": "bun src/main.ts --record ../tests/fixtures/data/kuma-recorded.json",
+    "build": "bun build src/main.ts --target bun --outfile dist/collector.js",
+    "test": "bun test",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "socket.io-client": "^4.8.3",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.6",
+    "socket.io": "^4.8.3",
+    "typescript": "^5.9.3"
+  }
+}

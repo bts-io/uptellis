@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.wrangler/
+.dev.vars
+.env*
+!.dev.vars.example
+*.log
+.DS_Store
+src/client/routeTree.gen.ts
+worker-configuration.d.ts
+.tanstack
+coverage

@@ -1,0 +1,61 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "uptellis",
+  // No account_id: wrangler takes the account from `wrangler login` or CLOUDFLARE_ACCOUNT_ID.
+  "main": "./src/server.ts",
+  // Must not be newer than the workerd bundled with @cloudflare/vitest-pool-workers, or the Workers-pool tests
+  // refuse to start. Move it forward when the pool moves.
+  "compatibility_date": "2026-08-22",
+  "compatibility_flags": ["nodejs_compat"],
+  // Served on workers.dev. To use your own hostname, add a custom domain route, for example
+  // "routes": [{ "pattern": "status.example.com", "custom_domain": true }], and list it in the site config.
+  "workers_dev": true,
+  "preview_urls": false,
+  // Invocation logs are off: they record each request's URL, and the login links carry the viewer and admin
+  // keys in their query string. The Worker's own structured console logs (ids, codes, counts) stay on.
+  "observability": { "enabled": true, "logs": { "invocation_logs": false } },
+  "upload_source_maps": true,
+
+  // Client bundle and fonts come from Workers Static Assets; every page is server-rendered and /api/* is Hono.
+  "assets": {
+    "directory": "./dist/client",
+    "binding": "ASSETS",
+    "run_worker_first": ["/*", "!/assets/*", "!/fonts/*", "!/favicon.ico"]
+  },
+
+  "vars": {
+    // The site a bare "/" renders (sites/<id>.json).
+    "SITE_DEFAULT": "demo"
+  },
+
+  // No database_id: the Deploy to Cloudflare button provisions the database, and wrangler finds it by name.
+  // By hand, run `bunx wrangler d1 create uptellis-db` once before the first `bun run deploy` (which applies
+  // the migrations first); adding the printed "database_id" here is optional.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "uptellis-db",
+      "migrations_dir": "./migrations"
+    }
+  ],
+
+  // latest:<site> snapshots and other short-lived reads. No id: `wrangler deploy` (and the Deploy button)
+  // provisions the namespace. To create it by hand, run `bunx wrangler kv namespace create uptellis-cache`
+  // and add the printed "id" here.
+  "kv_namespaces": [{ "binding": "CACHE" }],
+
+  // Cron (src/worker/cron.ts matches these strings exactly): every 5 min downsample heartbeats and sweep
+  // source staleness; daily at 03:17 UTC prune rows past retention; every minute run the edge probes of
+  // public URLs (source probe:cf).
+  "triggers": { "crons": ["*/5 * * * *", "17 3 * * *", "* * * * *"] },
+
+  // Rate limits (src/worker/middleware/rate-limit.ts). Counted per Cloudflare location, so they are
+  // approximate: a brake on floods and key guessing, not a quota. Ingest is per key id and client IP (the
+  // collector posts every 60 s, the facts pusher every 15 min); the gate counts requests carrying ?key= or
+  // ?admin= and requests that fail the cookie, per client IP; admin writes are per client IP.
+  "ratelimits": [
+    { "name": "INGEST_RATE_LIMIT", "namespace_id": "1001", "simple": { "limit": 60, "period": 60 } },
+    { "name": "GATE_RATE_LIMIT", "namespace_id": "1002", "simple": { "limit": 20, "period": 60 } },
+    { "name": "ADMIN_WRITE_RATE_LIMIT", "namespace_id": "1003", "simple": { "limit": 30, "period": 60 } }
+  ]
+}
