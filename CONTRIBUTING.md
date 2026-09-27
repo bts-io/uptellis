@@ -23,9 +23,9 @@ bun run dev
 | `feat/*`, `fix/*`, `docs/*` | One change each, e.g. `feat/theme-picker`, `fix/stale-sweep`, `docs/install` | Your commits |
 | `hotfix/*` | An urgent fix to the released code, cut from `main` | Your commits |
 
-- Branch from `staging`, open the pull request against `staging`. PRs are squash-merged, so the PR title becomes the commit.
-- A release PR takes `staging` to `main` (merge commit, no squash).
-- A hotfix branches from `main`, is merged into `main` by PR and released, and `main` is then merged back into `staging` so the fix is not lost in the next release.
+- Branch from `staging`, open the pull request against `staging`. Both long-lived branches require signed commits and the server does not sign, so pull requests are merged **fast-forward only**: rebase your branch onto `staging`, keep its commits as meaningful Conventional Commits (squash them yourself if needed), sign them, and the maintainer fast-forwards `staging` to it.
+- A release PR takes `staging` to `main`, also fast-forward (`main` never has commits that `staging` lacks).
+- A hotfix branches from `main`, is fast-forwarded into `main` by PR and released, and the same commit is then cherry-picked into `staging` by a PR so the fix is not lost in the next release.
 
 ```mermaid
 gitGraph
@@ -36,12 +36,12 @@ gitGraph
   checkout feat/theme-picker
   commit id: "feat: theme picker"
   checkout staging
-  merge feat/theme-picker id: "squash feat"
+  merge feat/theme-picker id: "feat (fast-forward)"
   branch fix/stale-sweep
   checkout fix/stale-sweep
   commit id: "fix: stale sweep"
   checkout staging
-  merge fix/stale-sweep id: "squash fix"
+  merge fix/stale-sweep id: "fix (fast-forward)"
   commit id: "v0.2.0-rc.1" tag: "v0.2.0-rc.1"
   checkout main
   merge staging id: "release 0.2.0" tag: "v0.2.0"
@@ -105,7 +105,7 @@ Keep each PR to one change and fill in the template. Before you ask for review:
 
 ## Versioning
 
-Uptellis follows [Semantic Versioning](https://semver.org). The version lives in `package.json` and in `.release-please-manifest.json`, and each release is tagged on `main`:
+Uptellis follows [Semantic Versioning](https://semver.org). The version lives in `package.json`, and each release is a signed tag on `main`:
 
 - `vX.Y.Z` on `main`: a release. Images are tagged `X.Y.Z`, `X.Y`, `X` and `latest`.
 - `vX.Y.Z-rc.N` on `staging`: a release candidate, published as a GitHub pre-release. Its image gets only its full version tag.
@@ -113,14 +113,13 @@ Uptellis follows [Semantic Versioning](https://semver.org). The version lives in
 
 ## How releases are cut
 
-Releases are automated with [release-please](https://github.com/googleapis/release-please). It reads the Conventional Commits since the last tag, so it needs no hand-written notes, and it keeps releases reviewable as ordinary pull requests.
+Releases are cut on Forgejo, the source of truth; the GitHub mirror only publishes them.
 
-1. Open a PR from `staging` to `main` titled like `chore: promote staging to main` and merge it with a merge commit.
-2. On that push, release-please opens (or updates) a PR titled `chore: release X.Y.Z` that bumps `package.json` and `.release-please-manifest.json` and prepends the changes to `CHANGELOG.md`.
-3. A maintainer reviews and merges it. release-please tags `vX.Y.Z` and publishes the GitHub release.
-4. The release workflow builds the multi-arch container image, pushes it to GHCR with an SBOM and provenance attestation, and signs it with cosign (keyless).
-5. Merge `main` back into `staging` so the version bump and changelog are there too.
+1. On a branch from `staging`, bump `version` in `package.json` and add the new section to `CHANGELOG.md` (`## X.Y.Z (YYYY-MM-DD)`, grouped as Features, Bug Fixes, Documentation, from the Conventional Commits since the last tag). Commit it as `chore(release): X.Y.Z`, open a PR against `staging`, and fast-forward it.
+2. Open a PR from `staging` to `main` titled `chore(release): promote X.Y.Z` and fast-forward it.
+3. A maintainer tags the new `main` with a signed tag and pushes it: `git tag -s vX.Y.Z -m "Uptellis X.Y.Z" && git push origin vX.Y.Z`.
+4. The mirror brings the tag to GitHub, where the release workflow publishes the GitHub release with that version's `CHANGELOG.md` section, builds the multi-arch container image, pushes it to GHCR with an SBOM and provenance attestation, and signs it with cosign (keyless).
 
-For a release candidate, a maintainer tags the head of `staging` as `vX.Y.Z-rc.N` and publishes a GitHub pre-release from it; the release workflow builds its image.
+For a release candidate, a maintainer tags the head of `staging` as `vX.Y.Z-rc.N` (signed); it is published as a GitHub pre-release and its image gets only its full version tag.
 
-The project is developed on a Forgejo instance and mirrored to GitHub. Forgejo CI runs verify, commitlint and the leak check on every push and PR to `main` and `staging`; releases and images are cut on the GitHub side, where release-please, GHCR and keyless signing are available.
+The project is developed on a Forgejo instance and mirrored to GitHub. Forgejo CI runs verify, commitlint and the leak check on every push and PR to `main` and `staging`. Forgejo pushes `main`, `staging` and tags to GitHub, where the GitHub release, the GHCR images and keyless signing happen. Pull requests from contributors on GitHub are welcome; a maintainer applies them on Forgejo and they come back through the mirror.

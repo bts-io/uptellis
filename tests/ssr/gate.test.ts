@@ -1,5 +1,6 @@
 import { env, SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
+import pkg from "../../package.json";
 
 // The built Worker (dist/server) with VIEWER_KEY set by vitest.config.ts, so the gate is armed.
 const KEY = "test-viewer-key";
@@ -12,7 +13,7 @@ describe("built worker", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("application/json");
     const body = (await res.json()) as Record<string, unknown>;
-    expect(body).toMatchObject({ ok: true, service: "uptellis", version: "0.1.0" });
+    expect(body).toMatchObject({ ok: true, service: "uptellis", version: pkg.version });
     // A real build id, not the "dev" fallback: Vite's define reached the bundle.
     expect(body.build).toMatch(/^[a-z0-9]+$/);
     expect(body.build).not.toBe("dev");

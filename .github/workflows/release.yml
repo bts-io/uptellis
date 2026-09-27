@@ -1,17 +1,17 @@
-# Releases and container images.
-# - Push to main: release-please opens or updates the release PR (version bump in package.json, CHANGELOG.md).
-#   Merging that PR tags vX.Y.Z and publishes the GitHub release; the image job then builds that version.
-# - A release published by hand (for example a vX.Y.Z-rc.N pre-release from staging) builds that tag.
-# - Push to staging: builds the `staging` image.
+# Releases and container images on the GitHub mirror. Releases are cut on Forgejo (the source of truth):
+# a maintainer bumps the version and CHANGELOG.md in a release PR, fast-forwards staging to main and pushes a
+# signed vX.Y.Z tag; the mirror then brings the tag here.
+# - Tag vX.Y.Z (or vX.Y.Z-rc.N): publish the GitHub release with that version's CHANGELOG.md section, and build
+#   the image for it. A tag with a pre-release suffix is published as a pre-release and never becomes `latest`.
+# - Push to staging: build the `staging` image.
 # Images are multi-arch (amd64, arm64), pushed to GHCR with an SBOM and provenance attestation, and signed
 # with cosign (keyless, GitHub OIDC). The image job is a no-op until the repository has a root Dockerfile.
 name: Release
 
 on:
   push:
-    branches: [main, staging]
-  release:
-    types: [published]
+    branches: [staging]
+    tags: ["v*"]
 
 permissions:
   contents: read
@@ -20,21 +20,29 @@ env:
   IMAGE: ghcr.io/bts-io/uptellis
 
 jobs:
-  release-please:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  github-release:
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pull-requests: write
-    outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
-      - id: release
-        uses: googleapis/release-please-action@v4
-        with:
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
+      - uses: actions/checkout@v4
+      - name: Release notes from CHANGELOG.md
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="${TAG#v}"
+          # The section under "## <version>" up to the next "## " heading.
+          awk -v v="$version" '$0 ~ "^## "v"( |$)" {on=1; next} on && /^## / {exit} on {print}' CHANGELOG.md > notes.md
+          [ -s notes.md ] || { echo "CHANGELOG.md has no section for $version" >&2; exit 1; }
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          pre=""
+          case "$TAG" in *-*) pre="--prerelease" ;; esac
+          gh release create "$TAG" --title "$TAG" --notes-file notes.md --verify-tag $pre
 
   dockerfile:
     runs-on: ubuntu-latest
@@ -46,14 +54,8 @@ jobs:
         run: echo "present=${{ hashFiles('Dockerfile') != '' }}" >> "$GITHUB_OUTPUT"
 
   image:
-    needs: [release-please, dockerfile]
-    # release-please is skipped outside main, so this job decides on its own inputs instead of needing success.
-    if: >-
-      !cancelled() && needs.dockerfile.outputs.present == 'true' && (
-        github.event_name == 'release' ||
-        github.ref == 'refs/heads/staging' ||
-        needs.release-please.outputs.release_created == 'true'
-      )
+    needs: [dockerfile]
+    if: needs.dockerfile.outputs.present == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -63,19 +65,16 @@ jobs:
       - name: Resolve what to build
         id: target
         env:
-          EVENT: ${{ github.event_name }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-          PRERELEASE: ${{ github.event.release.prerelease }}
-          PLEASE_TAG: ${{ needs.release-please.outputs.tag_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
-          if [ "$EVENT" = release ]; then
-            ref="$RELEASE_TAG" version="$RELEASE_TAG" latest=$([ "$PRERELEASE" = true ] && echo false || echo true)
-          elif [ -n "$PLEASE_TAG" ]; then
-            ref="$PLEASE_TAG" version="$PLEASE_TAG" latest=true
+          if [ "$REF_TYPE" = tag ]; then
+            latest=true
+            case "$REF_NAME" in *-*) latest=false ;; esac
+            { echo "ref=$REF_NAME"; echo "version=$REF_NAME"; echo "latest=$latest"; } >> "$GITHUB_OUTPUT"
           else
-            ref="$GITHUB_SHA" version="" latest=false
+            { echo "ref=$GITHUB_SHA"; echo "version="; echo "latest=false"; } >> "$GITHUB_OUTPUT"
           fi
-          { echo "ref=$ref"; echo "version=$version"; echo "latest=$latest"; } >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@v4
         with:
@@ -93,7 +92,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}},value=${{ steps.target.outputs.version }},enable=${{ steps.target.outputs.version != '' }}
             type=semver,pattern={{major}},value=${{ steps.target.outputs.version }},enable=${{ steps.target.outputs.version != '' }}
             type=raw,value=latest,enable=${{ steps.target.outputs.latest == 'true' }}
-            type=raw,value=staging,enable=${{ github.ref == 'refs/heads/staging' && github.event_name == 'push' }}
+            type=raw,value=staging,enable=${{ github.ref == 'refs/heads/staging' }}
 
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3

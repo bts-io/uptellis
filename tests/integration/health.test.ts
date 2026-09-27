@@ -1,5 +1,6 @@
 import { SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
+import pkg from "../../package.json";
 
 describe("api (Hono in workerd)", () => {
   it("reports health", async () => {
@@ -9,7 +10,7 @@ describe("api (Hono in workerd)", () => {
     expect(await res.json()).toEqual({
       ok: true,
       service: "uptellis",
-      version: "0.1.0",
+      version: pkg.version,
       build: "dev",
       commit: "dev",
     });
