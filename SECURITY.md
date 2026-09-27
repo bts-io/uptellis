@@ -13,7 +13,7 @@ Uptellis is before 1.0. Security fixes land on `main` and ship in the next relea
 
 Please do not open a public issue, discussion or pull request for a suspected vulnerability.
 
-Report it privately through GitHub's private vulnerability reporting: open the [Security tab](https://github.com/borderlesstech/uptellis/security) of the repository and choose **Report a vulnerability**. Include:
+Report it privately through GitHub's private vulnerability reporting: open the [Security tab](https://github.com/bts-io/uptellis/security) of the repository and choose **Report a vulnerability**. Include:
 
 - what is affected (endpoint, component, version or commit),
 - how to reproduce it, with a proof of concept if you have one,

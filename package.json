@@ -4,11 +4,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/borderlesstech/uptellis.git"
+    "url": "git+https://github.com/bts-io/uptellis.git"
   },
-  "homepage": "https://github.com/borderlesstech/uptellis#readme",
+  "homepage": "https://github.com/bts-io/uptellis#readme",
   "bugs": {
-    "url": "https://github.com/borderlesstech/uptellis/issues"
+    "url": "https://github.com/bts-io/uptellis/issues"
   },
   "private": true,
   "type": "module",

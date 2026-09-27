@@ -8,10 +8,10 @@
 <p align="center"><strong>Uptime, tell us.</strong> A self-hosted status page and monitor that runs on one Cloudflare Worker.</p>
 
 <p align="center">
-  <a href="https://github.com/borderlesstech/uptellis/actions/workflows/ci.yml"><img src="https://github.com/borderlesstech/uptellis/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/borderlesstech/uptellis" alt="License: MIT"></a>
-  <a href="https://github.com/borderlesstech/uptellis/releases/latest"><img src="https://img.shields.io/github/v/release/borderlesstech/uptellis?sort=semver" alt="Latest release"></a>
-  <a href="https://github.com/borderlesstech/uptellis/pkgs/container/uptellis"><img src="https://img.shields.io/badge/image-ghcr.io-blue?logo=docker&logoColor=white" alt="Container image on GHCR"></a>
+  <a href="https://github.com/bts-io/uptellis/actions/workflows/ci.yml"><img src="https://github.com/bts-io/uptellis/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/bts-io/uptellis" alt="License: MIT"></a>
+  <a href="https://github.com/bts-io/uptellis/releases/latest"><img src="https://img.shields.io/github/v/release/bts-io/uptellis?sort=semver" alt="Latest release"></a>
+  <a href="https://github.com/bts-io/uptellis/pkgs/container/uptellis"><img src="https://img.shields.io/badge/image-ghcr.io-blue?logo=docker&logoColor=white" alt="Container image on GHCR"></a>
 </p>
 
 Uptellis collects health data from the tools you already run, keeps it in one normalized model, and renders it as a fast, server-side rendered status page. Sources sign what they send, the page and its API can be kept private behind a viewer key, and everything is configured from an admin panel with a full revision history.
@@ -61,7 +61,7 @@ One Worker serves everything: Hono owns `/api/*`, TanStack Start (React 19) rend
 Both install paths are **coming in v1.0**.
 
 - **Deploy to Cloudflare** (coming in v1.0): a one-click button that creates the Worker, D1 database and KV namespace in your Cloudflare account.
-- **Docker image** (coming in v1.0): `ghcr.io/borderlesstech/uptellis`, multi-arch, signed with cosign, with an SBOM and provenance attestation.
+- **Docker image** (coming in v1.0): `ghcr.io/bts-io/uptellis`, multi-arch, signed with cosign, with an SBOM and provenance attestation.
 
 Until then, run it from source as described below.
 
