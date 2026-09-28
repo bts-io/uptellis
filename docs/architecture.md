@@ -149,7 +149,7 @@ flowchart LR
 
 ## Admin
 
-`/admin` has five tabs: **Config** (form or raw JSON, validated, with a diff before saving), **Revisions** (history with restore), **Import and export**, **Sources** (ingest sources and their keys) and **Themes** (side-by-side previews). The admin API is typed in `src/shared/schemas/admin.ts` and mounted at `/api/admin`:
+`/admin` has six tabs, each shown only to users whose role has its permission: **Config** (form or raw JSON, validated, with a diff before saving; the form covers visibility and profiles too), **Revisions** (history with restore), **Import and export**, **Sources** (ingest sources with their HMAC keys, and the site's API keys), **Users** (roles, last sign-in, invites, removal) and **Themes** (side-by-side previews). The header carries the signed-in user's menu (account page, sign-out). The admin API is typed in `src/shared/schemas/admin.ts` and mounted at `/api/admin`:
 
 | Route | What it does |
 | --- | --- |
@@ -177,6 +177,30 @@ sequenceDiagram
 ```
 
 Keys can also come from Worker secrets named `INGEST_KEY_<ID>` (bound to a site and source in `src/worker/ingest/keys.ts`); the first rotation of such a key moves it into D1.
+
+### Account pages
+
+Outside admin, four pages handle accounts (`src/client/lib/account`, routes in `src/client/routes`), all on the kit tokens and usable at 390 px:
+
+| Page | Who | What it does |
+| --- | --- | --- |
+| `/setup` | only while no account exists (404 afterwards) | creates the owner, then confirms the site this host serves (name, hostname, visibility, theme) or creates a new one, then opens admin |
+| `/sign-in?next=<path>` | signed out | email and password, plus GitHub and Google when configured; `next` is followed only when it is a path on this origin |
+| `/invite/<token>` | anyone with the link | shows the role and expiry, creates the account (the invite may fix the email) and signs it in; a used or expired link says so |
+| `/account` | signed in | change the display name and the password (other sessions are signed out) |
+
+```mermaid
+flowchart LR
+  visit["page request"] --> setup{"any account?"}
+  setup -->|"no"| s1["/setup: owner account"] --> s2["first site:<br/>confirm or create"] --> admin["/admin"]
+  setup -->|"yes"| who{"signed in?"}
+  who -->|"no, private page or admin"| signin["/sign-in?next=path"] --> back["back to path"]
+  who -->|"yes, allowed"| page["the page"]
+  who -->|"yes, not allowed"| nf["404"]
+  invite["/invite/token"] --> account["account created,<br/>signed in"] --> land["/admin, or / for a viewer"]
+```
+
+A private site's page sends a signed-out visitor to sign-in (the page loader asks `/api/me` when the read API answers 404; a signed-in user without access gets the 404 page, as for an unknown site). The command palette offers **Open admin**, **Account**, **Sign in** and **Sign out** from the same `/api/me` answer. One-time values (an invite link, an API key, an ingest secret) are held only while their dialog is open and are never rendered into a page again.
 
 ## Notifications
 
