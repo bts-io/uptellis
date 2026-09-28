@@ -1,11 +1,11 @@
 <p align="center">
   <picture>
-    <source srcset="brand/uptellis-logo.svg" type="image/svg+xml">
-    <img src="brand/uptellis-logo.png" alt="Uptellis" width="420">
+    <source srcset="docs/assets/uptellis-logo.svg" type="image/svg+xml">
+    <img src="docs/assets/uptellis-logo.png" alt="Uptellis" width="420">
   </picture>
 </p>
 
-<p align="center"><strong>Uptime, tell us.</strong> A self-hosted status page and monitor that runs on one Cloudflare Worker.</p>
+<p align="center"><strong>Uptime, tell us.</strong> A self-hosted status page and monitor, on Cloudflare or in Docker.</p>
 
 <p align="center">
   <a href="https://github.com/bts-io/uptellis/actions/workflows/ci.yml"><img src="https://github.com/bts-io/uptellis/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
