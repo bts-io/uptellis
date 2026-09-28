@@ -69,7 +69,7 @@ echo "first-run setup, then admin save (persists across containers)"
 SETUP="$(curl -fsS -D - -o /dev/null -X POST -H "content-type: application/json" -H "origin: $BASE" \
   --data "{\"name\":\"Smoke\",\"email\":\"$OWNER_EMAIL\",\"password\":\"smoke-owner-password\"}" \
   "$BASE/api/setup")" || fail "setup"
-COOKIE="$(grep -io '^set-cookie: __Secure-uptellis.session_token=[^;]*' <<<"$SETUP" | sed 's/^[^:]*: //')"
+COOKIE="$(grep -ioE '^set-cookie: (__Secure-)?uptellis.session_token=[^;]*' <<<"$SETUP" | sed 's/^[^:]*: //' || true)"
 [ -n "$COOKIE" ] || fail "setup set no session cookie"
 CONFIG="$(curl -fsS -H "cookie: $COOKIE" "$BASE/api/admin/sites/demo/config")"
 BODY="$(bun -e '
