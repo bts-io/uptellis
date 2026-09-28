@@ -1,7 +1,9 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { secureHeaders } from "hono/secure-headers";
+import { createCloudflarePlatform } from "@/platform/cloudflare";
 import pkg from "../../package.json";
+import type { AppEnv } from "./app-env";
 import { buildId, commitId } from "./build";
 import { D1ConfigStore } from "./engine/config-store";
 import { D1Store } from "./engine/d1-store";
@@ -17,7 +19,20 @@ import { readRoutes } from "./routes/read";
  * Phase 1 mounts ingest (`/api/ingest/*`, HMAC-signed, outside the viewer gate) and read (`/api/sites/*`,
  * behind the gate); Phase 3 adds admin (`/api/admin/*`, behind the admin gate); Phase 4 public and embed.
  */
-const app = new Hono<{ Bindings: Env }>();
+const app = new Hono<AppEnv>();
+
+/** The request's platform, for every route and middleware below (`c.var.platform`). */
+app.use("*", async (c, next) => {
+  let ctx: Pick<ExecutionContext, "waitUntil">;
+  try {
+    ctx = c.executionCtx;
+  } catch {
+    // No ExecutionContext (plain app.fetch in tests): background work runs unawaited.
+    ctx = { waitUntil: () => {} };
+  }
+  c.set("platform", createCloudflarePlatform(c.env, ctx));
+  await next();
+});
 
 app.use("*", secureHeaders({ crossOriginEmbedderPolicy: false, contentSecurityPolicy: undefined }));
 
