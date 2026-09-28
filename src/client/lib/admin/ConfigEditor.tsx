@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { VISIBILITIES } from "@/shared/auth";
 import { SiteConfig } from "@/shared/config";
+import { listProfiles } from "@/shared/profiles";
 import type { ConfigDiffEntry, ConfigIssue, ConfigState } from "@/shared/schemas/admin";
 import { registeredThemes } from "../../themes";
 import { type AdminFailure, describeFailure, importConfig, saveConfig } from "./client";
@@ -481,8 +482,9 @@ const FORM_PATH =
 const isFormPath = (path: string) => FORM_PATH.test(path);
 
 /**
- * The site's profiles as a comma separated list of ids, in order (`generic` is always active). Keeps its own
- * text so a trailing comma survives typing; the draft gets the parsed ids.
+ * The site's profiles from the registry, as checkboxes. Checked profiles run in the order they were
+ * checked (the JSON tab reorders them); `generic` is always active. An id the registry does not know stays
+ * listed, so it can be seen and removed.
  */
 function ProfilesField({
   value,
@@ -493,26 +495,60 @@ function ProfilesField({
   issues: ConfigIssue[];
   onChange: (profiles: string[]) => void;
 }) {
-  const [text, setText] = useState(value.join(", "));
+  const known = listProfiles();
+  const unknown = value.filter((id) => !known.some((p) => p.id === id));
+  const rows = [
+    ...known.map((p) => ({ id: p.id, name: p.name, detail: p.description, guide: p.producerGuide })),
+    ...unknown.map((id) => ({
+      id,
+      name: id,
+      detail: "Not registered in this build: it has no effect.",
+      guide: undefined,
+    })),
+  ];
   return (
     <fieldset>
       <legend className="mb-2 text-sm font-semibold">Profiles</legend>
-      <Field
-        label="Profile ids, in order"
-        placeholder="forgejo-ha"
-        value={text}
-        issues={issues}
-        onChange={(e) => {
-          setText(e.target.value);
-          onChange(
-            e.target.value
-              .split(",")
-              .map((p) => p.trim())
-              .filter(Boolean),
+      <ul className="flex flex-col gap-2">
+        {rows.map((p) => {
+          const always = p.id === GENERIC_PROFILE;
+          const at = value.indexOf(p.id);
+          return (
+            <li key={p.id}>
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={always || at >= 0}
+                  disabled={always}
+                  onChange={(e) =>
+                    onChange(e.target.checked ? [...value, p.id] : value.filter((x) => x !== p.id))
+                  }
+                />
+                <span className="min-w-0">
+                  {p.name} <span className="font-mono text-xs text-faint">{p.id}</span>
+                  {always && <span className="text-xs text-muted"> (always active)</span>}
+                  {at >= 0 && (
+                    <span className="text-xs text-muted">
+                      {" "}
+                      (runs {at + 1} of {value.length})
+                    </span>
+                  )}
+                  <span className="block text-xs text-muted">{p.detail}</span>
+                  {p.guide && (
+                    <span className="block text-xs text-faint">
+                      Producer install guide: <span className="font-mono">{p.guide}</span>
+                    </span>
+                  )}
+                </span>
+              </label>
+            </li>
           );
-        }}
-      />
-      <p className="mt-1 text-xs text-muted">The generic profile is always active and need not be listed.</p>
+        })}
+      </ul>
+      <IssueText issues={issues} />
     </fieldset>
   );
 }
+
+const GENERIC_PROFILE = "generic";

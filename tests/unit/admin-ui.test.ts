@@ -151,7 +151,7 @@ describe("config editor", () => {
     expect(onReload).toHaveBeenCalledTimes(1);
   });
 
-  it("edits the visibility and the profile list, and reviews them as config changes", async () => {
+  it("edits the visibility and the profiles from the registry, and reviews them as config changes", async () => {
     editor();
     const visibility = field("Visibility") as unknown as HTMLSelectElement;
     expect(visibility.value).toBe("public");
@@ -161,17 +161,40 @@ describe("config editor", () => {
       visibility.dispatchEvent(new Event("change", { bubbles: true }));
     });
     expect(body()).toContain("Only signed-in users see the page");
-    const profiles = field("Profile ids, in order") as HTMLInputElement;
-    expect(profiles.value).toBe("forgejo-ha");
-    type(profiles, "forgejo-ha, ");
-    expect(profiles.value).toBe("forgejo-ha, ");
-    type(profiles, "forgejo-ha, Not A Profile");
-    expect(profiles.getAttribute("aria-invalid")).toBe("true");
-    type(profiles, "forgejo-ha, my-db");
+    const box = (id: string) =>
+      [...document.querySelectorAll("label")]
+        .find((l) => l.querySelector(".font-mono")?.textContent === id)!
+        .querySelector("input") as HTMLInputElement;
+    expect(box("generic").checked).toBe(true);
+    expect(box("generic").disabled).toBe(true);
+    expect(box("forgejo-ha").checked).toBe(true);
+    expect(body()).toContain("Producer install guide");
+    act(() => box("uptime-kuma").click());
+    expect(body()).toContain("(runs 2 of 2)");
+    act(() => box("forgejo-ha").click());
+    expect(box("forgejo-ha").checked).toBe(false);
+    act(() => box("forgejo-ha").click());
     replies.push({ status: 200, body: { valid: true, issues: [], diff: [], version: null } });
     act(() => button("Review changes").click());
     await settle();
-    expect(calls[0]!.body).toMatchObject({ visibility: "private", profiles: ["forgejo-ha", "my-db"] });
+    expect(calls[0]!.body).toMatchObject({ visibility: "private", profiles: ["uptime-kuma", "forgejo-ha"] });
+  });
+
+  it("keeps a profile id the registry does not know visible and removable", () => {
+    mount(
+      createElement(ConfigEditor, {
+        site: "demo",
+        state: { ...state, config: { ...config, profiles: ["forgejo-ha", "gone-profile"] } },
+        services,
+        onReload: vi.fn(),
+      }),
+    );
+    expect(body()).toContain("Not registered in this build");
+    const gone = [...document.querySelectorAll("label")]
+      .find((l) => l.querySelector(".font-mono")?.textContent === "gone-profile")!
+      .querySelector("input") as HTMLInputElement;
+    act(() => gone.click());
+    expect(body()).not.toContain("gone-profile");
   });
 
   it("edits the raw JSON with parse and schema errors, and back in the form", () => {
