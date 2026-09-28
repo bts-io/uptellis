@@ -129,6 +129,31 @@ describe("messages and summaries", () => {
     expect(AlertMessage.safeParse(leaked).success).toBe(false);
   });
 
+  it("carries up to six detail lines, defaulting to none, and refuses an address in one", () => {
+    const msg = {
+      v: 1,
+      event: "stale",
+      severity: "warning",
+      incidentId: "kuma:watch-1:2026-09-28T12:00:00Z",
+      site: { slug: "acme", name: "Acme" },
+      subject: { kind: "source", id: "kuma:watch-1", reporter: "Kuma collector on watch-1" },
+      title: "kuma:watch-1 went silent",
+      reason: null,
+      startedAt: "2026-09-28T12:00:00Z",
+      endedAt: null,
+      durationS: null,
+      pageUrl: null,
+      test: false,
+      sentAt: "2026-09-28T12:00:05Z",
+    };
+    expect(AlertMessage.parse(msg).details).toEqual([]);
+    const line = { label: "Expected interval", value: "every 60 s" };
+    expect(AlertMessage.parse({ ...msg, details: [line] }).details).toEqual([line]);
+    expect(AlertMessage.safeParse({ ...msg, details: Array(7).fill(line) }).success).toBe(false);
+    const leaked = { label: "Last report", value: ["from", [10, 0, 0, 7].join(".")].join(" ") };
+    expect(AlertMessage.safeParse({ ...msg, details: [leaked] }).success).toBe(false);
+  });
+
   it("keeps parts that are not shared absent", () => {
     const s = PublicSummary.parse({ v: 1, site: { slug: "acme", name: "Acme" } });
     expect(Object.keys(s)).toEqual(["v", "site"]);

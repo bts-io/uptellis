@@ -49,6 +49,14 @@ export const AlertMessage = z.object({
   endedAt: IsoTimestamp.nullable(),
   /** Outage or silence length in seconds, set on `up` and `recovered`. */
   durationS: z.number().int().nonnegative().nullable(),
+  /**
+   * Extra fact lines per event, filled by the dispatcher: stale: last report, expected interval, still
+   * reporting; recovered: beats backfilled. Every provider shows them after the reason.
+   */
+  details: z
+    .array(z.object({ label: safeDisplay(40), value: safeDisplay(200) }))
+    .max(6)
+    .default([]),
   /** The status page, when the site has a public URL. */
   pageUrl: z.url().nullable(),
   /** True for messages sent from admin's "send test"; providers label them TEST. */
