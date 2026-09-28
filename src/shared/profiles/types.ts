@@ -40,6 +40,13 @@ export interface FactKeyDef {
   labels?: readonly [string, string];
   /** Folded into another row or only used for topology: kept in `factIndex`, left out of the group's rows. */
   hidden?: boolean;
+  /**
+   * Folded into this sibling key's row while that key is present (e.g. `total` into `online`): hidden
+   * then, shown as its own row when the sibling is missing.
+   */
+  foldedInto?: string;
+  /** Custom text for the value (e.g. `1 of 2` from a sibling); null falls back to `format`. */
+  display?(fact: Fact, ctx: ProfileContext): string | null;
   /** The row's level from its value; null keeps the producer's severity. */
   level?(fact: Fact, ctx: ProfileContext): Level | null;
 }
