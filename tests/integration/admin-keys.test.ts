@@ -6,15 +6,16 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { IssuedKey, SourceKeyList } from "@/shared/schemas/admin";
 import { randomNonce, signRequest } from "@/shared/signing";
-import { createDb, schema } from "@/worker/db";
+import { schema } from "@/worker/db";
 import { resetConfigCache } from "@/worker/engine/config-store";
 import { resetKeyTouches } from "@/worker/engine/key-store";
 import { freshFixture } from "../ssr/seed";
 import { factsPayloadFrom, kumaSnapshotFrom } from "../support/fixture-payloads";
+import { testPlatform } from "../support/platform";
 import { admin, adminCookie, adminEnv, handle, json } from "./admin-app";
 
 let api: ReturnType<typeof admin>;
-const db = createDb(adminEnv.DB);
+const { db } = testPlatform();
 const issued: string[] = [];
 
 /** A signed ingest POST (real clock, fresh fixture data) through the gates and the app. */

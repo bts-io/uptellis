@@ -42,7 +42,7 @@ Run `bun run verify`, then `bun run deploy`, ideally from CI on merges to your r
 
 ## Crons
 
-Three Cron Triggers in `wrangler.jsonc`, matched exactly by `src/worker/cron.ts`:
+Three Cron Triggers in `wrangler.jsonc`, exactly the `JOBS` expressions of `src/platform/types.ts`; `src/platform/cloudflare/scheduled.ts` maps each trigger to its job (`src/worker/cron.ts`):
 
 | Trigger | Job |
 | --- | --- |
@@ -52,7 +52,7 @@ Three Cron Triggers in `wrangler.jsonc`, matched exactly by `src/worker/cron.ts`
 
 A newly added or changed cron trigger does not fire right after the deploy. Cloudflare takes several minutes to propagate it (its documentation says up to 15); in practice the first run of a new every-minute trigger can come 5 to 10 minutes after the deploy. Before suspecting the code, check the Worker's cron events in the Cloudflare dashboard or the scheduled invocations in the Workers analytics. Each run logs one JSON line (`evt: "cron"`, the job name and counts), see [Logs](#logs).
 
-The integration tests (`tests/integration`) drive `runCron` with a pinned clock, which is the quickest way to see what a job does.
+The integration tests (`tests/integration`) drive `runJob` with a pinned clock, which is the quickest way to see what a job does.
 
 ## Secrets
 

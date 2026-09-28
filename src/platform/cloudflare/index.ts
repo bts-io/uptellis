@@ -4,15 +4,11 @@
  * cron's `ctx.waitUntil`. Built per request (cheap wrappers only).
  */
 import { drizzle } from "drizzle-orm/d1";
+import type { AppBindings } from "@/worker/app-env";
 import { schema } from "@/worker/db";
-import type { KeyValue, Platform, RateLimiter, RateLimiterName, SecretName, SettingName } from "../types";
-
-/** The Rate Limiting binding behind each limiter (`ratelimits` in wrangler.jsonc). */
-export const RATE_LIMIT_BINDINGS = {
-  ingest: "INGEST_RATE_LIMIT",
-  gate: "GATE_RATE_LIMIT",
-  adminWrite: "ADMIN_WRITE_RATE_LIMIT",
-} as const satisfies Record<RateLimiterName, keyof Env>;
+import { envIngestKeys } from "@/worker/ingest/keys";
+import type { KeyValue, Platform, RateLimiter, SecretName, SettingName } from "../types";
+import { RATE_LIMIT_BINDINGS } from "./bindings";
 
 /** Drizzle over a D1 binding, with the app's schema and column casing. */
 export function createD1Db(d1: D1Database) {
@@ -63,4 +59,9 @@ export function createCloudflarePlatform(env: Env, ctx: Pick<ExecutionContext, "
     waitUntil: (work) => ctx.waitUntil(work),
     now: () => Date.now(),
   };
+}
+
+/** What the API receives per request on Cloudflare: the platform and the Worker's `INGEST_KEY_*` secrets. */
+export function cloudflareBindings(env: Env, ctx: Pick<ExecutionContext, "waitUntil">): AppBindings {
+  return { platform: createCloudflarePlatform(env, ctx), envIngestKeys: envIngestKeys(env) };
 }

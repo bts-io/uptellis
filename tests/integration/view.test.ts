@@ -2,22 +2,23 @@
  * `GET /api/sites/:site/view` over the real write path: signed kuma and facts payloads through the ingest
  * routes into D1 (`D1Store`) and KV, then the view built from the model and the `heartbeat_5m` history.
  */
-import { env } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { SiteView } from "@/shared/view";
 import { BUCKET_MS, downsample } from "@/worker/cron";
-import { createDb, schema } from "@/worker/db";
+import { schema } from "@/worker/db";
 import { ROLLUP_BUCKET_MS } from "@/worker/db/history";
 import { D1Store } from "@/worker/engine/d1-store";
 import { resetSiteSourceSync } from "@/worker/engine/sites";
 import { type ViewerEnv, viewerGate } from "@/worker/middleware/viewer-key";
 import { loadFixture } from "../fixtures";
 import { factsPayloadFrom, kumaSnapshotFrom } from "../support/fixture-payloads";
+import { testPlatform } from "../support/platform";
 import { json, pipeline, workerEnv } from "../support/worker-pipeline";
 
 const NOW = new Date("2026-09-27T23:58:00Z");
 const { signed, send, get } = pipeline(NOW);
-const db = createDb(workerEnv.DB);
+const platform = testPlatform();
+const db = platform.db;
 const DAY = 86_400_000;
 const at = (iso: string) => Date.parse(iso);
 
@@ -84,7 +85,7 @@ describe("GET /api/sites/:site/view", () => {
     expect(await json(res)).toEqual({ error: "not_found", message: "Unknown site" });
     const gated = await viewerGate(
       new Request("https://example.com/api/sites/demo/view"),
-      env as unknown as ViewerEnv,
+      workerEnv as unknown as ViewerEnv,
     );
     expect(gated?.status).toBe(404);
   });
@@ -144,7 +145,7 @@ describe("GET /api/sites/:site/view", () => {
     expect(
       (await send(await signed("kuma", "collector-1", kumaSnapshotFrom(loadFixture("incident"))))).status,
     ).toBe(202);
-    const store = new D1Store(db);
+    const store = new D1Store(platform);
     const before = await store.loadHistory("demo", NOW.toISOString());
     await downsample(db, NOW.getTime());
     const after = await store.loadHistory("demo", NOW.toISOString());

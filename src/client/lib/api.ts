@@ -12,7 +12,7 @@ export class ApiError extends Error {
 
 /**
  * On the server (SSR loaders) requests go straight into the Hono app in-process via the bridge
- * installed by src/server.ts; in the browser they are ordinary same-origin fetches.
+ * installed by src/worker/serve.ts; in the browser they are ordinary same-origin fetches.
  */
 type Bridge = (path: string, init?: RequestInit) => Promise<Response>;
 const transport = (path: string, init: RequestInit): Promise<Response> => {

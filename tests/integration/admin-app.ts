@@ -1,13 +1,13 @@
 /**
- * The Worker as src/server.ts serves `/api/*` in production: admin gate, then viewer gate, then the Hono
- * app from src/worker/index.ts, over the migrated D1 and KV. The env adds an admin key and a master key
+ * The Worker as src/worker/serve.ts serves `/api/*` in production: admin gate, then viewer gate, then the
+ * Hono app from src/worker/index.ts, over the Cloudflare platform (migrated D1 and KV). The env adds an admin key and a master key
  * (random per run) to the test bindings of vitest.config.ts.
  */
-import { env } from "cloudflare:test";
 import { toBase64Url } from "@/worker/engine/seal";
 import app from "@/worker/index";
 import { adminGate } from "@/worker/middleware/admin-key";
 import { viewerGate } from "@/worker/middleware/viewer-key";
+import { fetchWith, workerEnv } from "../support/platform";
 
 export const ORIGIN = "https://worker.example.net";
 export const ADMIN_KEY = "test-admin-key";
@@ -15,7 +15,7 @@ export const ADMIN_KEY = "test-admin-key";
 const masterKey = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))));
 
 export const adminEnv = {
-  ...(env as unknown as Env),
+  ...workerEnv,
   ADMIN_KEY,
   SOURCE_MASTER_KEY: masterKey,
 } as Env;
@@ -23,7 +23,7 @@ export const adminEnv = {
 /** One request through both gates and the app. */
 export async function handle(path: string, init: RequestInit = {}, e: Env = adminEnv): Promise<Response> {
   const req = new Request(`${ORIGIN}${path}`, { redirect: "manual", ...init });
-  return (await adminGate(req, e)) ?? (await viewerGate(req, e)) ?? app.fetch(req, e);
+  return (await adminGate(req, e)) ?? (await viewerGate(req, e)) ?? fetchWith(app, req, e);
 }
 
 /** The admin cookie (`name=value`) from `?admin=`. */

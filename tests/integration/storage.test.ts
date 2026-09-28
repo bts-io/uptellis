@@ -1,15 +1,16 @@
-import { env } from "cloudflare:test";
 import { and, count, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { Fact, Heartbeat, Incident, Service, Source } from "@/shared/model";
-import { createDb, schema } from "@/worker/db";
+import { schema } from "@/worker/db";
 import { D1Store } from "@/worker/engine/d1-store";
 import { KvModelCache, latestKey } from "@/worker/engine/kv-cache";
 import { RECENT_BEATS, type SiteModel } from "@/worker/engine/store";
+import { testPlatform, workerEnv } from "../support/platform";
 import { beat, delta, deltaOf, fixtureFor, service } from "./storage-helpers";
 
-const db = createDb(env.DB);
-const store = new D1Store(env.DB);
+const platform = testPlatform();
+const db = platform.db;
+const store = new D1Store(platform);
 
 async function rows(table: "services" | "heartbeats" | "facts" | "factSamples" | "incidents", site: string) {
   const t = schema[table];
@@ -302,16 +303,16 @@ describe("KvModelCache", () => {
   });
 
   it("stores latest:<site> and never overwrites it with an older model", async () => {
-    const cache = new KvModelCache(env.CACHE);
+    const cache = new KvModelCache(platform.kv);
     expect(await cache.get("t-kv")).toBeNull();
     await cache.put(model("2026-09-27T10:00:00Z"));
     await cache.put(model("2026-09-27T09:59:00Z"));
     expect((await cache.get("t-kv"))?.generatedAt).toBe("2026-09-27T10:00:00Z");
-    expect(await env.CACHE.get(latestKey("t-kv"), "json")).toMatchObject({
+    expect(await workerEnv.CACHE.get(latestKey("t-kv"), "json")).toMatchObject({
       generatedAt: "2026-09-27T10:00:00Z",
     });
     await cache.put(model("2026-09-27T10:01:00Z"));
-    expect((await env.CACHE.get<SiteModel>(latestKey("t-kv"), "json"))?.generatedAt).toBe(
+    expect((await workerEnv.CACHE.get<SiteModel>(latestKey("t-kv"), "json"))?.generatedAt).toBe(
       "2026-09-27T10:01:00Z",
     );
   });

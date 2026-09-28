@@ -1,6 +1,6 @@
 /**
  * Admin API, mounted at `/api/admin` (contract: src/shared/schemas/admin.ts). The admin gate in
- * src/server.ts runs first (cookie, and same-origin for PUT/POST), so nothing here re-checks it.
+ * src/worker/serve.ts runs first (cookie, and same-origin for PUT/POST), so nothing here re-checks it.
  *
  * Config routes read D1 directly (never a cache) so the editor always sees the stored version. Errors use
  * `ConfigErrorResponse`: 400 `invalid` with flattened `issues`, 404 `not_found`, 409 `conflict` with
@@ -27,14 +27,14 @@ import {
   type SaveConfigResponse,
   type SourceKeyList,
 } from "@/shared/schemas/admin";
+import type { AppEnv } from "@/worker/app-env";
 import { readCapped, TooLarge } from "@/worker/read-capped";
-import { createDb } from "../db";
 import { D1ConfigStore, type SaveOutcome } from "../engine/config-store";
 import { KeyStore } from "../engine/key-store";
 import { MasterKeyMissing } from "../engine/seal";
 import { sendTestCard } from "../notify";
 
-type Ctx = Context<{ Bindings: Env }>;
+type Ctx = Context<AppEnv>;
 
 /** Largest accepted config or import body. */
 export const MAX_CONFIG_BYTES = 256 * 1024;
@@ -99,9 +99,9 @@ async function readText(c: Ctx): Promise<string | null> {
 }
 
 export function adminRoutes() {
-  const app = new Hono<{ Bindings: Env }>();
-  const configs = (env: Env) => new D1ConfigStore(env.DB, env.CACHE);
-  const keys = (env: Env) => new KeyStore(env.DB, env);
+  const app = new Hono<AppEnv>();
+  const configs = (c: Ctx) => new D1ConfigStore(c.var.platform);
+  const keys = (c: Ctx) => new KeyStore(c.var.platform, c.var.envIngestKeys);
 
   app.use("*", async (c, next) => {
     await next();
@@ -109,7 +109,7 @@ export function adminRoutes() {
   });
 
   app.get("/sites/:site/config", async (c) => {
-    const state = await configs(c.env).load(c.req.param("site"));
+    const state = await configs(c).load(c.req.param("site"));
     return state ? c.json(state) : notFound(c);
   });
 
@@ -119,7 +119,7 @@ export function adminRoutes() {
     if (!read.ok) return fail(c, 400, "invalid", read.message);
     const req = SaveConfigRequest.safeParse(read.body);
     if (!req.success) return fail(c, 400, "invalid", "Malformed request", { issues: flatten(req.error) });
-    const store = configs(c.env);
+    const store = configs(c);
     if (!(await store.load(slug))) return notFound(c);
     const checked = check(slug, req.data.config);
     if (!checked.ok) return fail(c, 400, "invalid", "Config is invalid", { issues: checked.issues });
@@ -134,7 +134,7 @@ export function adminRoutes() {
   });
 
   app.get("/sites/:site/config/export", async (c) => {
-    const state = await configs(c.env).load(c.req.param("site"));
+    const state = await configs(c).load(c.req.param("site"));
     if (!state) return notFound(c);
     return c.body(exportSiteConfig(state.config), 200, {
       "content-type": "application/json; charset=utf-8",
@@ -145,7 +145,7 @@ export function adminRoutes() {
   app.post("/sites/:site/config/import", async (c) => {
     const slug = c.req.param("site");
     const dryRun = c.req.query("dryRun") === "1";
-    const store = configs(c.env);
+    const store = configs(c);
     const current = await store.load(slug);
     if (!current) return notFound(c);
     const text = await readText(c);
@@ -170,14 +170,14 @@ export function adminRoutes() {
   });
 
   app.get("/sites/:site/config/revisions", async (c) => {
-    const list = await configs(c.env).revisions(c.req.param("site"));
+    const list = await configs(c).revisions(c.req.param("site"));
     return list ? c.json(list) : notFound(c);
   });
 
   app.post("/sites/:site/config/revisions/:version/restore", async (c) => {
     const slug = c.req.param("site");
     const version = Number(c.req.param("version"));
-    const store = configs(c.env);
+    const store = configs(c);
     const current = await store.load(slug);
     if (!current) return notFound(c);
     const config = Number.isSafeInteger(version) ? await store.revision(slug, version) : null;
@@ -194,13 +194,13 @@ export function adminRoutes() {
 
   app.get("/sites/:site/sources", async (c) => {
     const slug = c.req.param("site");
-    if (!(await configs(c.env).load(slug))) return notFound(c);
-    return c.json({ keys: await keys(c.env).list(slug, Date.now()) } satisfies SourceKeyList);
+    if (!(await configs(c).load(slug))) return notFound(c);
+    return c.json({ keys: await keys(c).list(slug, Date.now()) } satisfies SourceKeyList);
   });
 
   app.post("/sites/:site/sources", async (c) => {
     const slug = c.req.param("site");
-    const store = configs(c.env);
+    const store = configs(c);
     const current = await store.load(slug);
     if (!current) return notFound(c);
     const read = await readJson(c);
@@ -213,7 +213,7 @@ export function adminRoutes() {
         issues: [{ path: "source", message: "Source id prefix must match its kind" }],
       });
     }
-    const ks = keys(c.env);
+    const ks = keys(c);
     if (await ks.exists(keyId)) return fail(c, 409, "conflict", "Key id is taken");
     if ((await ks.list(slug, Date.now())).some((k) => k.source === source)) {
       return fail(c, 409, "conflict", "Source already has a key; rotate it instead");
@@ -246,12 +246,12 @@ export function adminRoutes() {
 
   app.post("/sites/:site/sources/:keyId/rotate", async (c) => {
     const slug = c.req.param("site");
-    if (!(await configs(c.env).load(slug))) return notFound(c);
+    if (!(await configs(c).load(slug))) return notFound(c);
     const keyId = KeyId.safeParse(c.req.param("keyId"));
     if (!keyId.success) return fail(c, 404, "not_found", "Unknown key");
     let issued: IssuedKey | null;
     try {
-      issued = await keys(c.env).rotate(slug, keyId.data, Date.now());
+      issued = await keys(c).rotate(slug, keyId.data, Date.now());
     } catch (err) {
       return keyFailure(c, err);
     }
@@ -265,14 +265,16 @@ export function adminRoutes() {
         issues: [{ path: "kind", message: "Must be stale or recovered" }],
       });
     }
-    const site = c.req.query("site") ?? c.env.SITE_DEFAULT;
-    const store = configs(c.env);
+    const { platform } = c.var;
+    const site = c.req.query("site") ?? platform.setting("SITE_DEFAULT") ?? "";
+    const store = configs(c);
     if (!(await store.load(site))) return notFound(c);
-    if (!c.env.DISCORD_WEBHOOK_URL) {
+    const webhookUrl = platform.secret("DISCORD_WEBHOOK_URL");
+    if (!webhookUrl) {
       return c.json({ error: "unavailable", message: "DISCORD_WEBHOOK_URL is not set", issues: [] }, 503);
     }
     const out = await sendTestCard(
-      { db: createDb(c.env.DB), configs: store, webhookUrl: c.env.DISCORD_WEBHOOK_URL },
+      { db: platform.db, configs: store, webhookUrl },
       site,
       kind,
       c.req.query("source"),
