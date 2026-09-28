@@ -62,4 +62,67 @@ describe("security headers", () => {
     expect(copy.headers.get("x-frame-options")).toBe("DENY");
     expect(await copy.json()).toEqual({ ok: true });
   });
+
+  it("let any origin frame the widget page, and only it", () => {
+    for (const p of ["/embed/demo", "/embed/nope"]) {
+      const h = securityHeaders(p);
+      expect(h["x-frame-options"], p).toBeUndefined();
+      expect(csp(p)["frame-ancestors"], p).toBe("*");
+      // Everything else is exactly as strict as on any other path.
+      const { "frame-ancestors": _a, ...rest } = csp(p);
+      const { "frame-ancestors": _b, ...strict } = csp("/admin");
+      expect(rest, p).toEqual(strict);
+      expect(h["cross-origin-opener-policy"], p).toBe("same-origin");
+    }
+    for (const p of [
+      "/embed.js",
+      "/embed",
+      "/embed/demo/x",
+      "/badge/demo.svg",
+      "/api/public/demo/summary.json",
+    ]) {
+      expect(securityHeaders(p)["x-frame-options"], p).toBe("DENY");
+      expect(csp(p)["frame-ancestors"], p).toBe("'none'");
+    }
+  });
+
+  it("allow cross-origin loading of the public endpoints only", () => {
+    for (const p of [
+      "/embed.js",
+      "/embed/demo",
+      "/badge/demo.svg",
+      "/badge/demo/kuma:1.svg",
+      "/api/public/demo/summary.json",
+    ]) {
+      expect(securityHeaders(p)["cross-origin-resource-policy"], p).toBe("cross-origin");
+    }
+    for (const p of [
+      "/",
+      "/admin",
+      "/api/sites/demo/view",
+      "/api/publicx",
+      "/embedx",
+      "/embed.json",
+      "/badges/x",
+    ]) {
+      expect(securityHeaders(p)["cross-origin-resource-policy"], p).toBeUndefined();
+    }
+  });
+
+  it("drop an inner X-Frame-Options on the widget page", () => {
+    const inner = new Response("<p>x</p>", {
+      headers: { "x-frame-options": "SAMEORIGIN", "cross-origin-resource-policy": "same-origin" },
+    });
+    const out = withSecurityHeaders(inner, "/embed/demo");
+    expect(out.headers.get("x-frame-options")).toBeNull();
+    expect(out.headers.get("cross-origin-resource-policy")).toBe("cross-origin");
+    expect(out.headers.get("content-security-policy")).toContain("frame-ancestors *");
+
+    const api = withSecurityHeaders(
+      new Response("{}", { headers: { "cross-origin-resource-policy": "same-origin" } }),
+      "/api/x",
+    );
+    expect(api.headers.get("x-frame-options")).toBe("DENY");
+    expect(api.headers.get("cross-origin-resource-policy")).toBe("same-origin");
+  });
 });

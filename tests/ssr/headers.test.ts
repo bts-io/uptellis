@@ -73,6 +73,35 @@ describe("security headers on the built Worker", () => {
   });
 });
 
+describe("security headers on the public endpoints", () => {
+  it("let any origin frame the widget page only, and load the public endpoints cross-origin", async () => {
+    // The demo site is not published: the widget page is a 404, but its headers are the widget page's.
+    const embed = await send("/embed/demo");
+    expect(embed.status).toBe(404);
+    expect(embed.headers.get("x-frame-options")).toBeNull();
+    expect(embed.headers.get("content-security-policy")).toContain("frame-ancestors *");
+    expect(embed.headers.get("content-security-policy")).toContain("default-src 'self'");
+    expect(embed.headers.get("cross-origin-resource-policy")).toBe("cross-origin");
+
+    const script = await send("/embed.js");
+    expect(script.status).toBe(200);
+    expect(script.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
+    expectSecure(script, "DENY", "/embed.js");
+    expect(script.headers.get("cross-origin-resource-policy")).toBe("cross-origin");
+
+    for (const path of ["/badge/demo.svg", "/api/public/demo/summary.json"]) {
+      const res = await send(path);
+      expect(res.status, path).toBe(404);
+      expectSecure(res, "DENY", path);
+      expect(res.headers.get("cross-origin-resource-policy"), path).toBe("cross-origin");
+    }
+
+    const view = await send("/api/sites/demo/view");
+    expectSecure(view, "DENY", "/api/sites/demo/view");
+    expect(view.headers.get("cross-origin-resource-policy")).toBe("same-origin");
+  });
+});
+
 describe("rate limits on the built Worker", () => {
   it("answer 429 with retry-after and the security headers", async () => {
     const gate = refusing();

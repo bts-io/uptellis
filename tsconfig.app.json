@@ -12,6 +12,7 @@
     "tests/unit/kit",
     "tests/unit/theme-*.test.ts",
     "tests/unit/client-*.test.ts",
-    "tests/unit/admin-ui*.test.ts"
+    "tests/unit/admin-ui*.test.ts",
+    "tests/unit/public-embed.test.ts"
   ]
 }

@@ -5,11 +5,13 @@
     "types": ["node"]
   },
   "include": ["src/shared/**/*.ts", "tests/unit/**/*.ts", "tests/fixtures/**/*.ts", "sites/**/*.json"],
-  // Kit, theme, shell and admin UI tests render React components, so they typecheck with the app config (DOM, JSX).
+  // Kit, theme, shell and admin UI tests render React components, and the embed script test runs in a DOM,
+  // so they typecheck with the app config (DOM, JSX).
   "exclude": [
     "tests/unit/kit",
     "tests/unit/theme-*.test.ts",
     "tests/unit/client-*.test.ts",
-    "tests/unit/admin-ui*.test.ts"
+    "tests/unit/admin-ui*.test.ts",
+    "tests/unit/public-embed.test.ts"
   ]
 }
