@@ -1,0 +1,3 @@
+# Local builds and runs (the release attaches the binaries; data is a local UPTELLIS_DATA_DIR).
+dist/
+data/

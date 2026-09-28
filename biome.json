@@ -5,6 +5,7 @@
       "src/**",
       "tests/**",
       "collector/**",
+      "agent/**",
       "scripts/**",
       "*.ts",
       "!src/client/routeTree.gen.ts",

@@ -1,0 +1,23 @@
+{
+  "name": "uptellis-agent",
+  "version": "0.2.1",
+  "private": true,
+  "type": "module",
+  "description": "Uptellis agent: runs a site's monitors inside a private network and posts buffered results",
+  "scripts": {
+    "start": "bun src/main.ts",
+    "once": "bun src/main.ts --once",
+    "build": "bun run build:amd64 && bun run build:arm64",
+    "build:amd64": "bun build src/main.ts --compile --minify --sourcemap --target=bun-linux-x64 --outfile dist/uptellis-agent-linux-amd64",
+    "build:arm64": "bun build src/main.ts --compile --minify --sourcemap --target=bun-linux-arm64 --outfile dist/uptellis-agent-linux-arm64",
+    "test": "bun test",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.6",
+    "typescript": "^5.9.3"
+  }
+}
