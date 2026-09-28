@@ -3,5 +3,5 @@
   "compilerOptions": { "lib": ["ES2023", "DOM", "DOM.Iterable"], "types": ["bun"] },
   // The Docker adapter and server (Bun), the check library with its Bun transport, and their tests; the app
   // code they import is checked here too, against Bun's types.
-  "include": ["src/platform/docker", "src/checks", "src/globals.d.ts", "tests/docker", "tests/checks"]
+  "include": ["src/platform/docker", "src/checks", "src/globals.d.ts", "tests/docker", "tests/checks", "tests/channels"]
 }

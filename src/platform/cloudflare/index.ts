@@ -1,7 +1,8 @@
 /**
  * The Cloudflare adapter: a `Platform` over the Worker's bindings. D1 through Drizzle, the KV namespace
- * `CACHE`, the three Workers Rate Limiting bindings, secrets and settings from env, and the request's or
- * cron's `ctx.waitUntil`. Built per request (cheap wrappers only).
+ * `CACHE`, the three Workers Rate Limiting bindings, secrets and settings from env, the optional Email
+ * Service binding `EMAIL` as the email sender, and the request's or cron's `ctx.waitUntil`. Built per
+ * request (cheap wrappers only).
  */
 import { drizzle } from "drizzle-orm/d1";
 import { ChannelSecretName } from "@/shared/notify/schema";
@@ -11,6 +12,7 @@ import { envIngestKeys } from "@/worker/ingest/keys";
 import type { KeyValue, Platform, RateLimiter, SecretName, SettingName } from "../types";
 import { RATE_LIMIT_BINDINGS } from "./bindings";
 import { createCloudflareCheckTransport } from "./check-transport";
+import { cloudflareEmailSender } from "./email";
 
 /** Drizzle over a D1 binding, with the app's schema and column casing. */
 export function createD1Db(d1: D1Database) {
@@ -60,8 +62,7 @@ export function createCloudflarePlatform(env: Env, ctx: Pick<ExecutionContext, "
     setting: (name: SettingName) => envString(env, name),
     notifySecret: (name: string) =>
       ChannelSecretName.safeParse(name).success ? envString(env, name) : undefined,
-    // TODO(p6b-channels): the Email Service `send_email` binding when the Worker has one.
-    email: null,
+    email: cloudflareEmailSender(env),
     waitUntil: (work) => ctx.waitUntil(work),
     now: () => Date.now(),
     checkTransport: createCloudflareCheckTransport(),

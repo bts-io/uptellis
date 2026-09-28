@@ -44,6 +44,12 @@
   // and add the printed "id" here.
   "kv_namespaces": [{ "binding": "CACHE" }],
 
+  // Email channels (src/worker/notify/providers/email.ts) send through the Cloudflare Email Service. Onboard
+  // the sending domain first (Email Service in the dashboard), then uncomment this binding and set the
+  // EMAIL_FROM var (or a per-channel "from") to an address on that domain. Without it, email channels fail
+  // with "email_unavailable" and every other channel works as before.
+  // "send_email": [{ "name": "EMAIL" }],
+
   // The three scheduled jobs (JOBS in src/platform/types.ts; a unit test checks these match): every 5 min
   // downsample heartbeats and sweep source staleness; daily at 03:17 UTC prune rows past retention; every
   // minute run the probes of public URLs.
