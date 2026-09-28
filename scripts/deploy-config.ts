@@ -8,6 +8,8 @@
  *   DEPLOY_KV_ID        KV namespace id
  *   DEPLOY_PUBLIC_URL   vars.PUBLIC_URL (the base URL for sign-in and cookies)
  *   DEPLOY_SITE_DEFAULT vars.SITE_DEFAULT
+ *   DEPLOY_EMAIL_FROM   turns email channels on: the Email Service `send_email` binding `EMAIL` and
+ *                       vars.EMAIL_FROM (an address on a domain onboarded to Cloudflare Email Service)
  */
 const path = new URL("../wrangler.jsonc", import.meta.url).pathname;
 const config = Bun.JSONC.parse(await Bun.file(path).text()) as {
@@ -15,6 +17,7 @@ const config = Bun.JSONC.parse(await Bun.file(path).text()) as {
   vars?: Record<string, string>;
   d1_databases: { binding: string; database_name: string; database_id?: string }[];
   kv_namespaces: { binding: string; id?: string }[];
+  send_email?: { name: string }[];
 };
 const env = process.env;
 const db = config.d1_databases.find((d) => d.binding === "DB");
@@ -27,7 +30,12 @@ if (env.DEPLOY_KV_ID) kv.id = env.DEPLOY_KV_ID;
 config.vars ??= {};
 if (env.DEPLOY_PUBLIC_URL) config.vars.PUBLIC_URL = env.DEPLOY_PUBLIC_URL;
 if (env.DEPLOY_SITE_DEFAULT) config.vars.SITE_DEFAULT = env.DEPLOY_SITE_DEFAULT;
+if (env.DEPLOY_EMAIL_FROM) {
+  config.vars.EMAIL_FROM = env.DEPLOY_EMAIL_FROM;
+  if (!config.send_email?.some((b) => b.name === "EMAIL"))
+    config.send_email = [...(config.send_email ?? []), { name: "EMAIL" }];
+}
 await Bun.write(path, `${JSON.stringify(config, null, 2)}\n`);
 console.log(
-  `wrangler.jsonc prepared for "${config.name}" (d1 ${db.database_id ? "id set" : "by name"}, kv ${kv.id ? "id set" : "provisioned"})`,
+  `wrangler.jsonc prepared for "${config.name}" (d1 ${db.database_id ? "id set" : "by name"}, kv ${kv.id ? "id set" : "provisioned"}, email ${config.send_email?.length ? "on" : "off"})`,
 );

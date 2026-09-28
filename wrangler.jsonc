@@ -46,7 +46,8 @@
 
   // Email channels (src/worker/notify/providers/email.ts) send through the Cloudflare Email Service. Onboard
   // the sending domain first (Email Service in the dashboard), then uncomment this binding and set the
-  // EMAIL_FROM var (or a per-channel "from") to an address on that domain. Without it, email channels fail
+  // EMAIL_FROM var (or a per-channel "from") to an address on that domain; `DEPLOY_EMAIL_FROM=<address>
+  // bun run deploy:config` does both. Without it, email channels fail
   // with "email_unavailable" and every other channel works as before.
   // "send_email": [{ "name": "EMAIL" }],
 
