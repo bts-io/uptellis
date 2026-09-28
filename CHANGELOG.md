@@ -2,6 +2,16 @@
 
 All notable changes to Uptellis are recorded here. The format follows [Conventional Commits](https://www.conventionalcommits.org) and the project uses [Semantic Versioning](https://semver.org). Each release adds its section in the release PR, from the Conventional Commits since the previous tag.
 
+## 0.2.1 (2026-09-28)
+
+### Bug Fixes
+
+* A flaky API key test: the key's secret can contain underscores, so the test now takes everything after the prefix.
+
+### Chores
+
+* Brand assets (marks, icons, brand guide) moved out of the repository; the README keeps its logo, now in `docs/assets/`.
+
 ## 0.2.0 (2026-09-28)
 
 ### Features
