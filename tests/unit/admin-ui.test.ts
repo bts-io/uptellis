@@ -151,6 +151,52 @@ describe("config editor", () => {
     expect(onReload).toHaveBeenCalledTimes(1);
   });
 
+  it("edits the visibility and the profiles from the registry, and reviews them as config changes", async () => {
+    editor();
+    const visibility = field("Visibility") as unknown as HTMLSelectElement;
+    expect(visibility.value).toBe("public");
+    expect(body()).toContain("Anyone can open the page");
+    act(() => {
+      visibility.value = "private";
+      visibility.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(body()).toContain("Only signed-in users see the page");
+    const box = (id: string) =>
+      [...document.querySelectorAll("label")]
+        .find((l) => l.querySelector(".font-mono")?.textContent === id)!
+        .querySelector("input") as HTMLInputElement;
+    expect(box("generic").checked).toBe(true);
+    expect(box("generic").disabled).toBe(true);
+    expect(box("forgejo-ha").checked).toBe(true);
+    expect(body()).toContain("Producer install guide");
+    act(() => box("uptime-kuma").click());
+    expect(body()).toContain("(runs 2 of 2)");
+    act(() => box("forgejo-ha").click());
+    expect(box("forgejo-ha").checked).toBe(false);
+    act(() => box("forgejo-ha").click());
+    replies.push({ status: 200, body: { valid: true, issues: [], diff: [], version: null } });
+    act(() => button("Review changes").click());
+    await settle();
+    expect(calls[0]!.body).toMatchObject({ visibility: "private", profiles: ["uptime-kuma", "forgejo-ha"] });
+  });
+
+  it("keeps a profile id the registry does not know visible and removable", () => {
+    mount(
+      createElement(ConfigEditor, {
+        site: "demo",
+        state: { ...state, config: { ...config, profiles: ["forgejo-ha", "gone-profile"] } },
+        services,
+        onReload: vi.fn(),
+      }),
+    );
+    expect(body()).toContain("Not registered in this build");
+    const gone = [...document.querySelectorAll("label")]
+      .find((l) => l.querySelector(".font-mono")?.textContent === "gone-profile")!
+      .querySelector("input") as HTMLInputElement;
+    act(() => gone.click());
+    expect(body()).not.toContain("gone-profile");
+  });
+
   it("edits the raw JSON with parse and schema errors, and back in the form", () => {
     editor();
     act(() => button("JSON").click());
@@ -202,7 +248,7 @@ describe("sources and the one-time secret", () => {
     });
     const dialog = document.querySelector('[role="dialog"]')!;
     expect(dialog.textContent).toContain("This secret is shown once");
-    expect((document.getElementById("issued-secret") as HTMLInputElement).value).toBe(SECRET);
+    expect((field("Secret") as HTMLInputElement).value).toBe(SECRET);
 
     act(() => button("Copy secret").click());
     await settle();
@@ -235,6 +281,6 @@ describe("sources and the one-time secret", () => {
       path: "/api/admin/sites/demo/sources",
       body: { keyId: "edge-2", source: "kuma:edge-2", kind: "kuma", expectedIntervalS: 60 },
     });
-    expect((document.getElementById("issued-secret") as HTMLInputElement).value).toBe(SECRET);
+    expect((field("Secret") as HTMLInputElement).value).toBe(SECRET);
   });
 });

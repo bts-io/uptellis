@@ -3,9 +3,9 @@
  * owner can never be demoted or removed: both checks run inside the one UPDATE or DELETE statement, so two
  * admins acting at once cannot leave the instance without an owner.
  */
-import { and, asc, eq, ne, or, sql } from "drizzle-orm";
+import { and, asc, eq, max, ne, or, sql } from "drizzle-orm";
 import type { Role } from "@/shared/auth";
-import type { UserSummary } from "@/shared/schemas/auth";
+import type { UserListEntry, UserSummary } from "@/shared/schemas/auth";
 import { accounts, sessions, users } from "../db/schema";
 import type { AuthPlatform } from "./instance";
 
@@ -20,9 +20,15 @@ export const userSummary = (r: Row): UserSummary => ({
   createdAt: r.createdAt.toISOString(),
 });
 
-export async function listUsers(p: AuthPlatform): Promise<UserSummary[]> {
-  const rows = await p.db.select().from(users).orderBy(asc(users.createdAt));
-  return rows.map(userSummary);
+/** Every user, oldest first, with the start of their newest session as the last sign-in. */
+export async function listUsers(p: AuthPlatform): Promise<UserListEntry[]> {
+  const rows = await p.db
+    .select({ user: users, lastSignIn: max(sessions.createdAt) })
+    .from(users)
+    .leftJoin(sessions, eq(sessions.userId, users.id))
+    .groupBy(users.id)
+    .orderBy(asc(users.createdAt));
+  return rows.map((r) => ({ ...userSummary(r.user), lastSignInAt: r.lastSignIn?.toISOString() ?? null }));
 }
 
 export async function getUser(p: AuthPlatform, id: string): Promise<Row | null> {

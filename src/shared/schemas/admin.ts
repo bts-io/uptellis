@@ -5,6 +5,7 @@
  * `secret` of a created or rotated ingest key.
  *
  * Routes (all JSON unless noted; `:site` is a site slug):
+ * - `POST   /api/admin/sites`                               CreateSiteRequest -> 201 SaveConfigResponse (`instance.manage`; 409 when the slug exists)
  * - `GET    /api/admin/sites/:site/config`                  -> ConfigState
  * - `PUT    /api/admin/sites/:site/config`                  SaveConfigRequest -> SaveConfigResponse (409 on a stale `baseVersion`, 400 with `issues`)
  * - `GET    /api/admin/sites/:site/config/export`           -> the `sites/<slug>.json` text (`exportSiteConfig`), `content-disposition: attachment`
@@ -55,6 +56,10 @@ export const SaveConfigRequest = z.object({
   note: z.string().max(200).optional(),
 });
 export type SaveConfigRequest = z.infer<typeof SaveConfigRequest>;
+
+/** `POST /api/admin/sites`: a new site with `config` as its version 1 (201 `SaveConfigResponse`, 409 when taken). */
+export const CreateSiteRequest = z.object({ config: SiteConfig });
+export type CreateSiteRequest = z.infer<typeof CreateSiteRequest>;
 
 export const SaveConfigResponse = z.object({
   version: z.number().int().positive(),

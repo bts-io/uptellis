@@ -1,6 +1,6 @@
 /** Plain admin building blocks on the kit's semantic tokens (no theme components), usable at 390px wide. */
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from "@headlessui/react";
-import { type ComponentProps, type ReactNode, useId } from "react";
+import { type ComponentProps, type ReactNode, useId, useState } from "react";
 import type { ConfigDiffEntry, ConfigIssue } from "@/shared/schemas/admin";
 import { cx } from "../../kit/cx";
 
@@ -227,3 +227,42 @@ export function ConfirmDialog({
 /** `2026-09-27 14:05 UTC` from an ISO time. */
 export const when = (iso: string | null | undefined) =>
   iso ? `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC` : "never";
+
+/**
+ * A read-only value with a copy button and a polite result line (a one-time secret, an invite link). The
+ * text is selected on focus so it can still be copied by hand where the clipboard is unavailable.
+ */
+export function CopyField({ label, value, copyLabel }: { label: string; value: string; copyLabel: string }) {
+  const id = useId();
+  const [copied, setCopied] = useState<boolean | null>(null);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  };
+  return (
+    <div className="flex flex-col gap-2">
+      <label htmlFor={id} className="text-xs text-muted">
+        {label}
+      </label>
+      <input
+        id={id}
+        readOnly
+        value={value}
+        onFocus={(e) => e.target.select()}
+        className="w-full border border-line bg-base px-2 py-1.5 font-mono text-xs text-ink"
+      />
+      <div className="flex flex-wrap items-center gap-2">
+        <Button tone="primary" onClick={() => void copy()}>
+          {copyLabel}
+        </Button>
+        <span role="status" className="text-xs text-muted">
+          {copied === true ? "Copied." : copied === false ? "Copy failed: select the text and copy it." : ""}
+        </span>
+      </div>
+    </div>
+  );
+}

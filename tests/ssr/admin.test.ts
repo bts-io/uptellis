@@ -35,6 +35,8 @@ describe("/admin pages", () => {
     for (const label of [
       "Name",
       "Theme",
+      "Visibility",
+      "Profiles",
       "Branding title",
       "Tagline",
       "Sections",

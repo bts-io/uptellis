@@ -39,5 +39,7 @@ export async function api<T = unknown>(
     const err = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
     throw new ApiError(res.status, err.error ?? "http_error", err.message ?? res.statusText, err);
   }
+  // 204 and other empty answers (a DELETE) have no JSON to parse.
+  if (res.status === 204 || res.headers.get("content-length") === "0") return undefined as T;
   return (await res.json()) as T;
 }

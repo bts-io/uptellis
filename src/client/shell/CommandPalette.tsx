@@ -16,6 +16,7 @@ const GROUP_LABEL: Record<PaletteItem["group"], string> = {
   copy: "copy",
   theme: "theme",
   admin: "admin",
+  account: "you",
 };
 
 export interface CommandPaletteProps {
@@ -51,7 +52,7 @@ export function CommandPalette({ open, onClose, items, onRun }: CommandPalettePr
             <ComboboxInput
               autoFocus
               aria-label="Search services, themes and actions"
-              placeholder="Jump to a service, preview a theme, copy beats"
+              placeholder="Jump to a service, preview a theme, copy beats, sign in or out"
               className="w-full border-b border-line bg-transparent px-4 py-3 text-sm text-ink outline-none placeholder:text-muted"
               onChange={(e) => setQuery(e.target.value)}
             />

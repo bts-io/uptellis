@@ -2,8 +2,10 @@ import { useNavigate } from "@tanstack/react-router";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "@/client/effects";
 import type { ThemeId } from "@/shared/config";
+import type { Me } from "@/shared/schemas/auth";
 import type { SiteView } from "@/shared/view";
-import { ApiError, api } from "../lib/api";
+import { signOutAndLeave } from "../lib/account/AccountMenu";
+import { getMe } from "../lib/account/client";
 import { registeredThemes, themeFor } from "../themes";
 import { runAction } from "./actions";
 import { CommandPalette } from "./CommandPalette";
@@ -15,19 +17,18 @@ import { PreviewBar } from "./PreviewBar";
 const TOAST_MS = 2500;
 
 /**
- * Admin is offered only where the admin API answers for this site (no admin cookie: it 404s). Asked once,
- * the first time the palette opens; any other failure still offers the entry, the admin page explains.
+ * Who is looking, for the palette's admin and account entries: `/api/me`, asked once, the first time the
+ * palette opens. A failed answer offers neither (the status page itself still works).
  */
-function useAdminCheck(slug: string, ask: boolean): boolean {
-  const [admin, setAdmin] = useState<boolean | null>(null);
+function useMe(ask: boolean): Me | null {
+  const [me, setMe] = useState<Me | null>(null);
+  const [asked, setAsked] = useState(false);
   useEffect(() => {
-    if (!ask || admin !== null) return;
-    api(`/api/admin/sites/${encodeURIComponent(slug)}/config`).then(
-      () => setAdmin(true),
-      (err: unknown) => setAdmin(err instanceof ApiError && err.status !== 404),
-    );
-  }, [ask, admin, slug]);
-  return admin === true;
+    if (!ask || asked) return;
+    setAsked(true);
+    getMe().then(setMe, () => setMe(null));
+  }, [ask, asked]);
+  return me;
 }
 
 export interface ShellProps {
@@ -48,7 +49,7 @@ export function Shell({ view, siteTheme, children }: ShellProps) {
   const [asked, setAsked] = useState(false);
   const [toast, setToast] = useState("");
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const admin = useAdminCheck(view.site.slug, asked);
+  const me = useMe(asked);
 
   const show = useCallback((what: "palette" | "keys") => {
     if (what === "palette") setAsked(true);
@@ -66,7 +67,9 @@ export function Shell({ view, siteTheme, children }: ShellProps) {
   // Explicitly unset (not dropped) so the route's retainSearchParams lets the preview go.
   const preview = (theme: ThemeId | null) =>
     void navigate({ to: ".", search: ((prev: object) => ({ ...prev, theme: theme ?? undefined })) as never });
-  const run = ({ action }: PaletteItem) => runAction(action, { go, preview, say, reducedMotion: reduced });
+  const signOut = () => void signOutAndLeave().catch(() => say("Sign-out failed"));
+  const run = ({ action }: PaletteItem) =>
+    runAction(action, { go, preview, say, reducedMotion: reduced, signOut });
 
   const themes = registeredThemes();
   return (
@@ -83,7 +86,7 @@ export function Shell({ view, siteTheme, children }: ShellProps) {
       <CommandPalette
         open={open === "palette"}
         onClose={() => setOpen(null)}
-        items={paletteItems({ view, themes, siteTheme, admin })}
+        items={paletteItems({ view, themes, siteTheme, me })}
         onRun={run}
       />
       <KeyMap
