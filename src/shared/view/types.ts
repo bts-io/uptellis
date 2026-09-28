@@ -55,6 +55,8 @@ export interface SiteView {
    * order, only those with a current fact. Empty when no active profile declares any.
    */
   highlights: HighlightView[];
+  /** A sentence about the system from the first active profile that has one (`Profile.headline`), else null. */
+  headline: string | null;
   /** Newest first, at most 40: status transitions, incidents opened and resolved, sources going stale. */
   activity: ActivityItem[];
   incidents: { open: IncidentView[]; recent: IncidentView[] };
@@ -182,6 +184,8 @@ export interface TopologyView {
     state: DisplayState;
     /** e.g. "serving", "standby", "watchdog". */
     note: string | null;
+    /** Rows for the node's card from the profiles (e.g. forgejo serving, postgres primary); empty when none. */
+    details: { label: string; value: string; state: DisplayState | null }[];
   }[];
   edges: {
     from: string;
@@ -208,6 +212,8 @@ export interface FactGroupView {
   title: string;
   /** Kit icon name from the profile (`FactGroupDef.icon`); null for groups no profile declares. */
   icon: string | null;
+  /** One line that sums the group up (`FactGroupDef.summary`), for compact rows; null when none. */
+  summary: string | null;
   /** Worst row severity (`info` rows do not raise it). */
   level: Level;
   observedAt: string;

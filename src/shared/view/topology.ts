@@ -89,7 +89,7 @@ export function buildTopology({
     );
 
   const nodes: Node[] = topology.nodes.map((n) => {
-    const base = { id: n.id, label: n.label, roles: n.roles, location: n.location ?? null };
+    const base = { id: n.id, label: n.label, roles: n.roles, location: n.location ?? null, details: [] };
     if (n.id === serving) return { ...base, state: servingState(), note: "serving" };
     if (n.id === standby) return { ...base, state: standbyState(), note: "standby" };
     if (n.id === primary) return { ...base, state: from("replication.role", "up"), note: "primary" };

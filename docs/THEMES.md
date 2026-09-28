@@ -29,9 +29,10 @@ Renaming or removing anything in these files breaks every theme, so it needs a m
 
 Themes never name a fact group or key: what the site's facts mean comes from its active profiles (see [profiles.md](profiles.md)). A theme reads three generic things:
 
-- `factGroups`: every group with its `title`, `icon` (a kit icon name, or null), `level` and rows (label, display, level, percent), in the profiles' order.
+- `factGroups`: every group with its `title`, `icon` (a kit icon name, or null), `summary` (one line for a compact row, or null), `level` and rows (label, display, level, percent), in the profiles' order.
 - `highlights`: `{ label, row }` pairs the active profiles ask a theme to place in its summary (for example the collector's version and host). Empty when no active profile declares any; a theme shows its summary without them.
-- `topology`: nodes, edges and the fence stamp, already refined by the profiles.
+- `headline`: one sentence about the system (for example "Forgejo serving from app-1, replication streaming"), or null.
+- `topology`: nodes (with `details`, the rows of a node's card), edges and the fence stamp, already refined by the profiles.
 
 `factIndex` keeps every current fact by `group.key`, for tests and tools; themes do not look facts up by key.
 

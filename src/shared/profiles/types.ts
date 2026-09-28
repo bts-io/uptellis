@@ -59,6 +59,8 @@ export interface FactGroupDef {
   /** Display order among all active profiles' groups (lower first). */
   order: number;
   keys: readonly FactKeyDef[];
+  /** One line that sums the group up for a theme's compact row, e.g. "streaming lag 0 s · primary". */
+  summary?(ctx: ProfileContext): string | null;
 }
 
 /** A fact a theme may place in its summary box, with a short label. */
@@ -73,6 +75,8 @@ export interface Profile {
   description: string;
   groups: readonly FactGroupDef[];
   highlights?: readonly Highlight[];
+  /** One sentence about the system for a theme's summary, e.g. "Forgejo serving from app-1". */
+  headline?(ctx: ProfileContext): string | null;
   /**
    * Refines the topology built from the site config (node states, notes, edge liveness and details, the
    * fence stamp) from this profile's facts. Profiles run in the order the site lists them.
