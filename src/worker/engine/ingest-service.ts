@@ -13,6 +13,7 @@
  * reopen incidents out of order), but services, facts and `latest:<site>` are left alone.
  */
 import type { z } from "zod";
+import type { Runtime } from "@/platform/types";
 import type { Service } from "@/shared/model";
 import { EventsPayload, FactsPayload, KumaSnapshot, ModelDelta } from "@/shared/schemas";
 import { isoSeconds } from "../adapters/common";
@@ -35,6 +36,8 @@ export interface IngestBackend {
   keys?: KeyStore;
   /** Discord cards for `stale` transitions (a silent source reporting again); none when absent. */
   notifier?: Pick<StaleNotifier, "notify">;
+  /** Where the instance runs: decides the builtin runner's implied source (`syncSiteSources`). */
+  runtime?: Runtime;
 }
 
 /** `generatedAt` may run at most this far ahead of the Worker clock. */
@@ -108,8 +111,8 @@ export async function ingestPayload(
   options: IngestOptions = {},
 ): Promise<IngestOutcome> {
   const { store } = backend;
-  await syncSiteSources(store, backend.configs ?? seedConfigs, binding.site).catch((err: unknown) =>
-    warn("sync_sources", err),
+  await syncSiteSources(store, backend.configs ?? seedConfigs, binding.site, backend.runtime).catch(
+    (err: unknown) => warn("sync_sources", err),
   );
 
   const raw = await adapt(route, body, binding, now, async () =>
