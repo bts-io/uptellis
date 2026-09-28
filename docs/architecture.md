@@ -51,10 +51,13 @@ flowchart LR
     kuma["Uptime Kuma"] -->|"socket.io, one session"| col["Kuma collector<br/>every 60 s, 60 min buffer"]
     push["facts pusher<br/>(a profile, systemd timer)"]
     hook["any producer<br/>signed webhooks"]
+    agent["uptellis-agent<br/>checks, disk buffer"]
   end
   subgraph worker ["Uptellis (Worker or Docker)"]
     ing["/api/ingest/kuma, facts, events<br/>size cap, HMAC, nonce, Zod"]
-    probes["probes<br/>every-minute job"]
+    probes["builtin runner<br/>every-minute job"]
+    agentapi["/api/agent/v1/*<br/>API key, agent scope"]
+    apply["applyResults<br/>runner state, confirmation"]
     adapt["adapters<br/>payload to ModelDelta"]
     store["store: apply delta,<br/>derive incidents"]
     d1[("D1 or SQLite")]
@@ -67,12 +70,15 @@ flowchart LR
   col -->|"signed POST"| ing
   push -->|"signed POST"| ing
   hook -->|"signed POST"| ing
+  agent -->|"monitors, results"| agentapi
   ing --> adapt
-  probes --> adapt
+  probes --> apply
+  agentapi --> apply
+  apply --> store
   adapt --> store
   store --> d1
   store --> kv
-  store -->|"stale transitions"| notify
+  store -->|"down and stale transitions"| notify
   kv --> read
   d1 --> read
   read --> build
@@ -86,9 +92,9 @@ Every producer reports as one **source**. There are four source kinds, each with
 | `kuma` | the Kuma collector (`collector/`), a Bun service next to Uptime Kuma | `POST /api/ingest/kuma` | a `KumaSnapshot`: monitors, their heartbeats since the last send, uptime, certificates, Kuma metadata as facts |
 | `facts` | a facts pusher, usually a shell script on a timer (see [profiles](../profiles/forgejo-ha/README.md)) | `POST /api/ingest/facts` | a `FactsPayload`: typed facts in named groups |
 | `webhook` | anything that can sign a request | `POST /api/ingest/events` | an `EventsPayload`: services it declares, their heartbeats, optional facts |
-| `probe` | the Worker itself (source `probe:cf`) | none: the every-minute cron | one heartbeat per configured HTTP check |
+| `probe` | the monitor runners: `builtin` (source `probe:cf` on Cloudflare, `probe:server` in Docker) and agents (`probe:<agent id>`) | none for `builtin` (the every-minute job); `POST /api/agent/v1/results` for agents | check results, confirmed into one status per monitor ([monitors.md](monitors.md)) |
 
-A signed request goes through the checks in [SECURITY.md](SECURITY.md#ingest) (body size, signature, key binding, nonce, schema). The adapter turns the payload into a `ModelDelta`; the store writes it to D1 in one batch, derives incidents, assembles the site model and puts it in KV. The probe cron builds the same kind of delta and goes through the same path (`applyIngestDelta` in `src/worker/engine/ingest-service.ts`), so probe results move heartbeats, incidents and freshness exactly as a Kuma snapshot does.
+A signed request goes through the checks in [SECURITY.md](SECURITY.md#ingest) (body size, signature, key binding, nonce, schema). The adapter turns the payload into a `ModelDelta`; the store writes it to D1 in one batch, derives incidents, assembles the site model and puts it in KV. Monitor results go through `applyResults` (`src/worker/monitors/apply.ts`): runner state, retries and quorum (`confirmMonitor`), then the same kind of delta through the same path (`applyIngestDelta` in `src/worker/engine/ingest-service.ts`), so monitor results move heartbeats, incidents and freshness exactly as a Kuma snapshot does.
 
 Two details keep the history exact:
 

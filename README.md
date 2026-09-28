@@ -19,12 +19,14 @@ Uptellis collects health data from the tools you already run, keeps it in one no
 ## Features
 
 - **Status page with three themes**: sys.status, Control Room and Session, all sharing a command palette (`/` or Ctrl/Cmd+K) and keyboard shortcuts. Preview another theme with `?theme=<id>` without saving it.
-- **Monitors from the tools you run**: today through an Uptime Kuma collector, infrastructure facts pushed by a script on your hosts, and edge probes the Worker runs itself every minute. Native monitors built into Uptellis are on the roadmap.
+- **Native monitors**: HTTP(S) with status and keyword checks, TCP, ping and TLS certificate expiry. They run from the instance itself (Cloudflare's edge or the Docker server) and from `uptellis-agent` inside private networks, with a disk buffer so no result is lost offline. Failures are confirmed (retries, and a quorum across runners) before an incident opens ([monitors.md](docs/monitors.md)).
+- **Other sources**: an Uptime Kuma collector, infrastructure facts pushed by a script on your hosts, and signed webhooks.
+- **Maintenance windows**: one-off or weekly, in any time zone; covered services show maintenance, open no incident and page nobody.
 - **Incidents**: a service going down opens an incident and recovery resolves it; a source that stops reporting is flagged stale. The page shows 90 days of history.
-- **Discord alerts**: one card when a source goes silent and one when it recovers, sent at most once however often a check runs.
+- **Discord alerts**: a card when a service goes down and when it comes back, and when a source goes silent and recovers; each sent once, never inside a maintenance window.
 - **Admin with revisions**: edit the site as a form or raw JSON, see a diff before saving, restore any earlier revision, import and export the site config.
 - **Accounts and roles**: sign-in with email and password, optionally GitHub or Google (Better Auth); owner, admin and viewer roles; the first account becomes the owner and everyone else joins by a one-time invite. Each site is public or private.
-- **API keys and JWTs**: site-scoped API keys (`ingest`, `read`) for pushers and agents, shown once and revocable; short-lived JWTs for the signed-in user, verifiable by other services through the JWKS at `/api/auth/jwks`.
+- **API keys and JWTs**: site-scoped API keys (`ingest`, `read`, `agent`) for pushers and agents, shown once and revocable; short-lived JWTs for the signed-in user, verifiable by other services through the JWKS at `/api/auth/jwks`.
 - **Key rotation**: ingest keys are created and rotated in admin, stored sealed with AES-GCM, and a rotation switches over when the producer first signs with the new secret.
 - **Rate limits and hardening**: signed ingest (HMAC-SHA256 with replay protection), per-client rate limits on ingest, sign-in attempts and admin writes, body size caps and strict security headers.
 
@@ -39,10 +41,12 @@ flowchart LR
   subgraph hosts ["Your infrastructure"]
     kuma["Uptime Kuma"] -->|"socket.io"| col["Uptellis collector<br/>container"]
     facts["facts script<br/>timer on a host"]
+    agent["uptellis-agent<br/>private checks, buffered"]
   end
   subgraph worker ["Cloudflare Worker"]
     ingest["/api/ingest/*<br/>HMAC, nonce, Zod"] --> engine["adapters<br/>incidents"]
-    cron["crons: edge probes,<br/>downsampling, staleness, retention"] --> engine
+    agentapi["/api/agent/v1/*<br/>API key, agent scope"] --> engine
+    cron["crons: builtin monitors,<br/>downsampling, staleness, retention"] --> engine
     engine --> d1[("D1")]
     engine --> kv[("KV cache")]
     api["Hono /api/*"] --> kv
@@ -51,8 +55,9 @@ flowchart LR
   end
   col -->|"signed POST"| ingest
   facts -->|"signed POST"| ingest
-  cron -->|"https checks"| sites["your public URLs"]
-  engine -->|"stale, down and up cards"| discord["Discord webhook"]
+  agent -->|"monitors, results"| agentapi
+  cron -->|"http and tcp checks"| sites["your public services"]
+  engine -->|"down, up and stale cards"| discord["Discord webhook"]
   visitor["Visitors"] --> ssr
 ```
 

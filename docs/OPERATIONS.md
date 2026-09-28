@@ -87,7 +87,7 @@ Three Cron Triggers in `wrangler.jsonc`, exactly the `JOBS` expressions of `src/
 
 | Trigger | Job |
 | --- | --- |
-| `* * * * *` | edge probes of the configured public URLs |
+| `* * * * *` | the builtin runner: due monitors (and legacy probes) from the edge ([monitors.md](monitors.md)) |
 | `*/5 * * * *` | downsample heartbeats, source staleness sweep, stale incidents and their cards |
 | `17 3 * * *` (03:17 UTC) | retention pruning |
 
