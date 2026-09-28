@@ -2,6 +2,30 @@
 
 All notable changes to Uptellis are recorded here. The format follows [Conventional Commits](https://www.conventionalcommits.org) and the project uses [Semantic Versioning](https://semver.org). Each release adds its section in the release PR, from the Conventional Commits since the previous tag.
 
+## 0.3.0 (2026-09-28)
+
+### Features
+
+* Native monitors ([docs/monitors.md](docs/monitors.md)): `http` (status range, keyword, never following redirects), `tcp`, `ping` and `tls` (days left, degraded under a threshold), defined per site in `monitors` and edited in admin. The legacy `probes` run as `http` monitors with the same service ids, so their history carries over.
+* Runners: `builtin` runs on the instance itself (Cloudflare's edge: `http` and `tcp`; the Docker server: all four), and agents run inside private networks. Each runner reports as its own source, so a silent agent raises a stale incident.
+* `uptellis-agent`: a small Bun program that fetches its monitors (`GET /api/agent/v1/monitors`, ETag), runs them aligned to the minute and posts results (`POST /api/agent/v1/results`). Results are buffered on disk and delivered in order after an outage. Ships as single binaries for linux amd64 and arm64 on the GitHub release, an image (`ghcr.io/bts-io/uptellis-agent`), and a hardened systemd unit ([agent/README.md](agent/README.md)).
+* Confirmation: retries per runner and a quorum across runners before a service is down. Too few agreeing runners show degraded, and a failing but unconfirmed runner shows pending.
+* Maintenance windows: one-off and weekly, in any time zone (daylight saving and midnight crossing handled). They apply to any service of the site; covered services show maintenance, open no incident and send no card.
+* Down and up cards for services in the existing Discord card style, once per incident, with the outage duration on recovery. They are sent when the site's `notify.discord` is on.
+* API keys gain the `agent` scope; sites gain `agents`. A service kind `tls` is added.
+* The admin editor covers monitors, agents and maintenance windows, with per-field validation and hints on what the edge cannot run.
+* The Docker image ships `ping`, and `compose.yaml` enables unprivileged ICMP.
+
+### Bug Fixes
+
+* Two runners of one monitor that report in the same second no longer leave the status one interval behind: each request confirms again after saving its runner state.
+* Confirmation uses the site's maintenance windows, so a window never opens an incident.
+
+### Notes
+
+* On Cloudflare, `tcp` from the edge cannot reach hosts behind Cloudflare itself (a Workers socket limit). Use an `http` monitor or an agent for those.
+* Probes no longer need a listed `probe:cf` source; runner sources are implied by the monitors.
+
 ## 0.2.1 (2026-09-28)
 
 ### Bug Fixes
