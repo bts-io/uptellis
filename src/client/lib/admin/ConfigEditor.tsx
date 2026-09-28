@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { VISIBILITIES } from "@/shared/auth";
 import { SiteConfig } from "@/shared/config";
+import { monitorServiceId, monitorsOf } from "@/shared/monitors";
 import { listProfiles } from "@/shared/profiles";
 import type { ConfigDiffEntry, ConfigIssue, ConfigState } from "@/shared/schemas/admin";
 import { registeredThemes } from "../../themes";
 import { type AdminFailure, describeFailure, importConfig, saveConfig } from "./client";
+import { AgentsField, AlertsField, MaintenanceField, MonitorsField } from "./MonitorsEditor";
 import { Button, Card, DiffTable, Field, IssueText, inputClass, issuesAt, Notice, SelectField } from "./ui";
 
 export interface KnownService {
@@ -125,6 +127,14 @@ export function ConfigEditor({ site, state, services, onReload }: ConfigEditorPr
   const known = new Map(services.map((s) => [s.id, s.name]));
   for (const id of draft.sections.flatMap((s) => s.services)) if (!known.has(id)) known.set(id, id);
   const themes = registeredThemes();
+  // A maintenance window can cover any service: the known ones plus every monitor's, saved or not.
+  const coverable = new Map(known);
+  for (const m of monitorsOf(draft)) {
+    const id = monitorServiceId(m.id);
+    if (!coverable.has(id)) coverable.set(id, m.name);
+  }
+  for (const id of draft.maintenance.flatMap((w) => w.services))
+    if (!coverable.has(id)) coverable.set(id, id);
 
   return (
     <Card
@@ -423,6 +433,30 @@ export function ConfigEditor({ site, state, services, onReload }: ConfigEditorPr
             </Button>
           </fieldset>
 
+          <MonitorsField
+            monitors={draft.monitors}
+            agents={draft.agents}
+            legacyProbes={draft.probes.filter((p) => !draft.monitors.some((m) => m.id === p.id)).length}
+            at={at}
+            onChange={(monitors) => set("monitors", monitors)}
+          />
+
+          <AgentsField
+            agents={draft.agents}
+            monitors={draft.monitors}
+            at={at}
+            onChange={(agents) => set("agents", agents)}
+          />
+
+          <MaintenanceField
+            windows={draft.maintenance}
+            services={[...coverable]}
+            at={at}
+            onChange={(maintenance) => set("maintenance", maintenance)}
+          />
+
+          <AlertsField notify={draft.notify} onChange={(notify) => set("notify", notify)} />
+
           {local.length > 0 && (
             <Notice tone="error">
               {local.length === 1 ? "1 field needs attention" : `${local.length} fields need attention`}
@@ -478,7 +512,7 @@ export function ConfigEditor({ site, state, services, onReload }: ConfigEditorPr
 
 /** Paths the form has an input for; issues elsewhere are listed for the JSON tab. */
 const FORM_PATH =
-  /^(name|theme|visibility|profiles(\.|$)|branding\.(title|tagline)|sections\.\d+(\.|$)|displayNames\.|thresholds\.|links(\.|$))/;
+  /^(name|theme|visibility|profiles(\.|$)|branding\.(title|tagline)|sections\.\d+(\.|$)|displayNames\.|thresholds\.|links(\.|$)|monitors(\.|$)|agents(\.|$)|maintenance(\.|$)|notify\.discord)/;
 const isFormPath = (path: string) => FORM_PATH.test(path);
 
 /**
