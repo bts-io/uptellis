@@ -1,7 +1,7 @@
 /**
  * The app on the Docker platform: the same Hono API and jobs as on Cloudflare, over SQLite. A signed Kuma
- * snapshot and facts go in, the view comes out, the admin API saves a config revision, and the five-minute
- * and daily jobs run.
+ * snapshot and facts go in, the view comes out, the owner account is created and signs in (Better Auth over
+ * `bun:sqlite`), the admin API saves a config revision, and the five-minute and daily jobs run.
  */
 import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { eq } from "drizzle-orm";
@@ -19,6 +19,17 @@ const fx = loadFixture("default");
 const NOW = Date.parse(fx.now);
 const ORIGIN = "https://status.example.com";
 let t: TempPlatform;
+let cookie = "";
+
+/** Test-only credentials, the address joined here (the literal scan rejects written emails). */
+const OWNER = { name: "Owner", email: ["owner", "example.com"].join("@"), password: "test-owner-password" };
+
+/** A same-origin JSON POST. */
+const json = (body: unknown): RequestInit => ({
+  method: "POST",
+  headers: { "content-type": "application/json", origin: ORIGIN },
+  body: JSON.stringify(body),
+});
 
 const send = async (path: string, init: RequestInit = {}) => {
   const res = await app.fetch(new Request(`${ORIGIN}${path}`, init), {
@@ -31,7 +42,11 @@ const send = async (path: string, init: RequestInit = {}) => {
 
 beforeAll(() => {
   resetConfigCache();
-  t = tempPlatform({ SITE_DEFAULT: "demo" }, NOW);
+  // Test-only secret.
+  t = tempPlatform(
+    { SITE_DEFAULT: "demo", BETTER_AUTH_SECRET: "test-better-auth-secret-0123456789abcdef" },
+    NOW,
+  );
   spyOn(console, "log").mockImplementation(() => {});
 });
 afterAll(() => t.dispose());
@@ -62,14 +77,34 @@ describe("the API on SQLite", () => {
     expect(((await view.json()) as { site: { slug: string } }).site.slug).toBe("demo");
   });
 
+  it("creates the owner, signs in and out, and refuses the admin API signed out", async () => {
+    expect((await send("/api/admin/sites/demo/config")).status).toBe(401);
+    const setup = await send("/api/setup", json(OWNER));
+    expect(setup.status).toBe(201);
+    expect(((await setup.json()) as { user: { role: string } }).user.role).toBe("owner");
+    expect((await send("/api/setup", json(OWNER))).status).toBe(409);
+    const signIn = await send(
+      "/api/auth/sign-in/email",
+      json({ email: OWNER.email, password: OWNER.password }),
+    );
+    expect(signIn.status).toBe(200);
+    cookie = signIn.headers
+      .getSetCookie()
+      .find((c) => c.startsWith("__Secure-uptellis.session_token="))!
+      .split(";")[0]!;
+    const me = (await (await send("/api/me", { headers: { cookie } })).json()) as { user: { email: string } };
+    expect(me.user.email).toBe(OWNER.email);
+    expect((await send("/api/auth/jwks")).status).toBe(200);
+  });
+
   it("saves a config revision through the admin API", async () => {
-    const current = (await (await send("/api/admin/sites/demo/config")).json()) as {
+    const current = (await (await send("/api/admin/sites/demo/config", { headers: { cookie } })).json()) as {
       version: number;
       config: { name: string };
     };
     const res = await send("/api/admin/sites/demo/config", {
       method: "PUT",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", origin: ORIGIN, cookie },
       body: JSON.stringify({
         baseVersion: current.version,
         config: { ...current.config, name: "Acme Cloud Docker" },

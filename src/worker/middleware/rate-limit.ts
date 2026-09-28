@@ -1,20 +1,21 @@
 /**
  * Rate limits on the platform's limiters (`RATE_LIMITERS` in src/platform/types.ts: the Workers Rate
  * Limiting bindings on Cloudflare, in-memory fixed windows in Docker). src/worker/serve.ts calls
- * `limitBeforeGates` before the admin and viewer gates and `limitGateRejection` when a gate answered 404.
+ * `limitBeforeGates` before anything else and `limitGateRejection` on every answer that turned a request
+ * away (401, 403 or 404).
  *
  * - Ingest (`POST /api/ingest/*`): per claimed key id and client IP, before the HMAC check. The IP keeps a
  *   request that only names a producer's key id from spending that producer's budget.
- * - Gate: per client IP, for requests carrying `?key=` or `?admin=` (counted before the key is compared, so
- *   guessing is slowed) and for requests the gates turned away (no valid cookie).
+ * - Gate: per client IP, for sign-in attempts (`POST /api/auth/sign-in/*`, first-run setup, accepting an
+ *   invite; counted before the password is checked, so guessing is slowed) and for requests turned away.
  * - Admin writes (any method but GET, HEAD, OPTIONS on an admin path): per client IP.
  *
- * Valid cookie page views, `/api/health` and everything else are never counted. A limiter the platform does
- * not have (a Worker built without the bindings) makes its limit a no-op.
+ * Allowed page views, `/api/health` and everything else are never counted. A limiter the platform does not
+ * have (a Worker built without the bindings) makes its limit a no-op.
  */
 import { type Platform, RATE_LIMITERS, type RateLimiterName } from "@/platform/types";
 import { INGEST_HEADERS, KEY_ID_RE } from "@/shared/signing";
-import { isAdminPath } from "./admin-key";
+import { isAdminPath } from "./auth-gate";
 
 /** The part of the platform the limits use, so unit tests can pass a fake. */
 export type Limiters = Pick<Platform, "rateLimiter">;
@@ -24,6 +25,10 @@ export const RETRY_AFTER_S = Math.max(...Object.values(RATE_LIMITERS).map((l) =>
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const INGEST_PATH = /^\/api\/ingest\//;
+/** Requests that try a credential: signing in, creating the owner, accepting an invite. */
+const SIGN_IN_PATH = /^\/api\/(auth\/sign-in\/|setup$|invites\/[^/]+\/accept$)/;
+const isSignInAttempt = (request: Request, pathname: string) =>
+  request.method === "POST" && SIGN_IN_PATH.test(pathname);
 
 /**
  * The client address Cloudflare saw; the Docker server sets the same header from the socket (or a trusted
@@ -48,8 +53,8 @@ async function allowed(limits: Limiters, name: RateLimiterName, key: string): Pr
 }
 
 /**
- * The 429 for a request over one of its limits, or null. Runs before the gates, so a key in the query is
- * counted before it is compared.
+ * The 429 for a request over one of its limits, or null. Runs first, so a sign-in attempt is counted before
+ * its credential is checked.
  */
 export async function limitBeforeGates(request: Request, limits: Limiters): Promise<Response | null> {
   const url = new URL(request.url);
@@ -62,7 +67,7 @@ export async function limitBeforeGates(request: Request, limits: Limiters): Prom
     return (await allowed(limits, "ingest", `${keyId}|${ip}`)) ? null : tooManyRequests(url.pathname);
   }
 
-  if (url.searchParams.has("key") || url.searchParams.has("admin")) {
+  if (isSignInAttempt(request, url.pathname)) {
     if (!(await allowed(limits, "gate", ip))) return tooManyRequests(url.pathname);
   }
 
@@ -73,8 +78,8 @@ export async function limitBeforeGates(request: Request, limits: Limiters): Prom
 }
 
 /**
- * Counts a request a gate turned away with 404 (no valid cookie) and answers 429 once the client IP is over
- * its limit; otherwise the gate's own response stands. A request with a key in the query was counted
+ * Counts a request that was turned away (401, 403 or 404) and answers 429 once the client IP is over its
+ * limit; otherwise the response stands. Ingest keeps its own limit, and a sign-in attempt was counted
  * already by `limitBeforeGates`.
  */
 export async function limitGateRejection(
@@ -82,8 +87,8 @@ export async function limitGateRejection(
   limits: Limiters,
   gated: Response,
 ): Promise<Response> {
-  if (gated.status !== 404) return gated;
+  if (gated.status !== 401 && gated.status !== 403 && gated.status !== 404) return gated;
   const url = new URL(request.url);
-  if (url.searchParams.has("key") || url.searchParams.has("admin")) return gated;
+  if (INGEST_PATH.test(url.pathname) || isSignInAttempt(request, url.pathname)) return gated;
   return (await allowed(limits, "gate", clientIp(request))) ? gated : tooManyRequests(url.pathname);
 }

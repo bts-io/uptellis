@@ -17,7 +17,7 @@ Make Uptellis a product anyone can run and share, not only a private dashboard.
 
 - **Profiles.** A profile is a set of fact groups plus a producer for a specific system, with the presentation that goes with it. Today the one example lives in [`profiles/forgejo-ha`](../profiles/forgejo-ha/README.md); Phase 5 makes profiles first class: a profile declares its groups, keys, labels and thresholds, a site enables it in its config, and the admin panel shows how to install its producer.
 - **Docker runtime.** The same app on any host: one container with Bun, SQLite in place of D1 and an in-process cache in place of KV, a built-in scheduler in place of Cron Triggers. Cloudflare stays a first-class target; both runtimes share the engine, the model and the themes.
-- **Accounts with Better Auth.** Real sign-in instead of shared keys: users with roles (for example admin and viewer), sessions, JWTs for the API and API keys for producers and automation. The viewer and admin key gates stay as an option for small setups.
+- **Accounts with Better Auth.** Real sign-in instead of shared keys: users with roles (owner, admin, viewer), sessions, invites, JWTs for other services and API keys for producers and automation. The viewer and admin key gates are removed.
 - **Public or private pages.** Each site chooses: private behind sign-in, or public with an allow-list of what is shown (the public field list already exists in the site config), plus embeddable status badges and widgets.
 
 ## Phase 6: native monitors

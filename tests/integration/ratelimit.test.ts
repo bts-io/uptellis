@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { RATE_LIMITERS } from "@/platform/types";
 import { INGEST_HEADERS } from "@/shared/signing";
+import { notFound } from "@/worker/middleware/auth-gate";
 import { limitBeforeGates, limitGateRejection, RETRY_AFTER_S } from "@/worker/middleware/rate-limit";
-import { notFound } from "@/worker/middleware/viewer-key";
 import { testPlatform } from "../support/platform";
 
 const platform = testPlatform();
@@ -44,13 +44,15 @@ describe("rate limit bindings", () => {
     }
   });
 
-  it("stop key guessing after 20 requests a minute from one client", async () => {
-    expect(await firstLimited(() => req("/?key=guess", "gate-client"), 25)).toBe(21);
+  it("stop password guessing after 20 sign-in attempts a minute from one client", async () => {
+    const attempt = (client: string) =>
+      req("/api/auth/sign-in/email", client, { method: "POST", body: "{}" });
+    expect(await firstLimited(() => attempt("gate-client"), 25)).toBe(21);
     // Another client is not affected.
-    expect(await limitBeforeGates(req("/?key=guess", "gate-other"), platform)).toBeNull();
+    expect(await limitBeforeGates(attempt("gate-other"), platform)).toBeNull();
   });
 
-  it("turn repeated gate 404s into 429", async () => {
+  it("turn repeated rejections into 429", async () => {
     await awayFromMinuteBoundary();
     const statuses: number[] = [];
     for (let i = 0; i < 21; i++) {

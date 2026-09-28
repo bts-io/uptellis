@@ -6,12 +6,15 @@
  * - `GET /:site/view`    the `SiteView` themes render: the model plus 90 days of history, built at request time
  * - `GET /?host=<name>`  `{ site }`: the site whose config lists that hostname, or null (the page's host lookup)
  *
- * Unknown sites answer 404. Every response is `Cache-Control: no-store`. The viewer gate in src/worker/serve.ts
- * runs before this (these paths are not in `GATE_OPEN_PATHS`), so nothing here re-checks the cookie.
+ * Unknown sites answer 404, and so do private sites the principal may not view (`page.view`,
+ * src/shared/auth.ts: a signed-in user, or an API key of that site with the `read` scope), so a private
+ * site is indistinguishable from none. Public sites are open. Every response is `Cache-Control: no-store`.
  */
 import { type Context, Hono } from "hono";
 import type { Platform } from "@/platform/types";
+import { can } from "@/shared/auth";
 import type { AppEnv } from "@/worker/app-env";
+import { principalOf } from "../auth/context";
 import { buildSourcesReport, type ReadDeps, readSiteModel, readSiteView } from "../engine/read-service";
 import { getSiteConfig, seedConfigs } from "../engine/sites";
 
@@ -37,11 +40,11 @@ export function readRoutes(resolve: ReadDepsResolver, opts: ReadRoutesOptions = 
   /** Keeps a cache warm-up alive after the response. */
   const defer = (c: Context<AppEnv>, p: Promise<void>) => c.var.platform.waitUntil(p);
 
-  /** The request's deps and the config of its `:site`, or null for an unknown site. */
+  /** The request's deps and the config of its `:site`, or null for an unknown or hidden site. */
   const siteOf = async (c: Context<AppEnv>) => {
     const deps = resolve(c.var.platform);
     const config = await getSiteConfig(deps.configs ?? seedConfigs, c.req.param("site") ?? "");
-    return config ? { deps, config } : null;
+    return config && can(principalOf(c), "page.view", config) ? { deps, config } : null;
   };
 
   app.get("/", async (c) => {

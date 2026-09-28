@@ -1,15 +1,9 @@
-import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
+import { baseEnv, ORIGIN, ownerCookie, send } from "./built";
 import { seed } from "./seed";
 
 // Security headers and rate limits on the built Worker entry (dist/server), called directly so the env can
-// carry an admin key and fake rate limit bindings.
-const ORIGIN = "https://status.example.com";
-const builtPath = "../../dist/server/index.js";
-type Entry = { fetch: (r: Request, e: Env, c: ExecutionContext) => Promise<Response> };
-const built = ((await import(/* @vite-ignore */ builtPath)) as { default: Entry }).default;
-const baseEnv = { ...(env as unknown as Env), ADMIN_KEY: "test-admin-key" } as Env;
-
+// carry fake rate limit bindings.
 /** A binding that refuses everything, and counts what it was asked. */
 const refusing = () => {
   const asked: string[] = [];
@@ -22,23 +16,11 @@ const refusing = () => {
   } as unknown as RateLimit & { asked: string[] };
 };
 
-async function send(path: string, init: RequestInit = {}, e: Env = baseEnv): Promise<Response> {
-  const ctx = createExecutionContext();
-  const res = await built.fetch(new Request(`${ORIGIN}${path}`, { redirect: "manual", ...init }), e, ctx);
-  await waitOnExecutionContext(ctx);
-  return res;
-}
-
-const cookieFrom = (res: Response) => (res.headers.get("set-cookie") ?? "").split(";")[0]!;
-let viewer = "";
 let admin = "";
 
 beforeAll(async () => {
   await seed("default");
-  viewer = cookieFrom(await send("/?key=test-viewer-key"));
-  admin = cookieFrom(await send("/admin?admin=test-admin-key"));
-  expect(viewer).toMatch(/^uptellis_view=/);
-  expect(admin).toMatch(/^uptellis_admin=/);
+  admin = await ownerCookie();
 });
 
 function expectSecure(res: Response, frame: "DENY" | "SAMEORIGIN", what: string) {
@@ -56,7 +38,7 @@ function expectSecure(res: Response, frame: "DENY" | "SAMEORIGIN", what: string)
 
 describe("security headers on the built Worker", () => {
   it("are on pages, with / frameable by this origin only", async () => {
-    const home = await send("/?theme=b-control-room", { headers: { cookie: viewer } });
+    const home = await send("/?theme=b-control-room");
     expect(home.status).toBe(200);
     expectSecure(home, "SAMEORIGIN", "/");
     // The page does carry inline scripts (Start's hydration data): the CSP must allow them.
@@ -66,19 +48,19 @@ describe("security headers on the built Worker", () => {
     expect(adminPage.status).toBe(200);
     expectSecure(adminPage, "DENY", "/admin");
 
-    const missing = await send("/no-such-page", { headers: { cookie: viewer } });
+    const missing = await send("/no-such-page");
     expect(missing.status).toBe(404);
     expectSecure(missing, "DENY", "Start 404");
   });
 
-  it("are on the API, health, gate redirects and gate 404s", async () => {
+  it("are on the API, health, gate redirects and refusals", async () => {
     const cases: [string, RequestInit, number][] = [
       ["/api/health", {}, 200],
-      ["/api/sites/demo/view", { headers: { cookie: viewer } }, 200],
-      ["/api/sites/demo/nope", { headers: { cookie: viewer } }, 404],
-      ["/?key=test-viewer-key", {}, 302],
-      ["/", {}, 404],
-      ["/api/sites/demo/view", {}, 404],
+      ["/api/sites/demo/view", {}, 200],
+      ["/api/sites/demo/nope", {}, 404],
+      ["/admin", {}, 302],
+      ["/api/sites/nope/view", {}, 404],
+      ["/api/admin/sites/demo/config", {}, 401],
       ["/api/admin/sites/demo/config", { method: "PUT", headers: { cookie: admin } }, 403],
       ["/api/ingest/kuma", { method: "POST", body: "{}" }, 401],
     ];
@@ -95,11 +77,15 @@ describe("rate limits on the built Worker", () => {
   it("answer 429 with retry-after and the security headers", async () => {
     const gate = refusing();
     const e = { ...baseEnv, GATE_RATE_LIMIT: gate } as Env;
-    const guess = await send("/?key=guess", { headers: { "cf-connecting-ip": "client-a" } }, e);
+    const guess = await send(
+      "/api/auth/sign-in/email",
+      { method: "POST", body: "{}", headers: { "cf-connecting-ip": "client-a" } },
+      e,
+    );
     expect(guess.status).toBe(429);
     expect(guess.headers.get("retry-after")).toBe("60");
-    expectSecure(guess, "SAMEORIGIN", "429");
-    expect((await send("/api/sites/demo/view", {}, e)).status).toBe(429);
+    expectSecure(guess, "DENY", "429");
+    expect((await send("/api/sites/nope/view", {}, e)).status).toBe(429);
     expect(gate.asked).toEqual(["client-a", "unknown"]);
 
     const ingest = refusing();
@@ -125,7 +111,7 @@ describe("rate limits on the built Worker", () => {
     expect(put.status).toBe(429);
   });
 
-  it("never apply to valid cookie page views, the API with a cookie or /api/health", async () => {
+  it("never apply to allowed page views, API reads or /api/health", async () => {
     const all = refusing();
     const e = {
       ...baseEnv,
@@ -134,8 +120,8 @@ describe("rate limits on the built Worker", () => {
       ADMIN_WRITE_RATE_LIMIT: all,
     } as Env;
     expect((await send("/api/health", {}, e)).status).toBe(200);
-    expect((await send("/", { headers: { cookie: viewer } }, e)).status).toBe(200);
-    expect((await send("/api/sites/demo/view", { headers: { cookie: viewer } }, e)).status).toBe(200);
+    expect((await send("/", {}, e)).status).toBe(200);
+    expect((await send("/api/sites/demo/view", {}, e)).status).toBe(200);
     expect((await send("/admin", { headers: { cookie: admin } }, e)).status).toBe(200);
     expect(all.asked).toEqual([]);
   });

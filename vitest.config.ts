@@ -5,8 +5,7 @@ import { defineConfig } from "vitest/config";
 // Test-only secrets, never real values.
 const bindings = async () => ({
   TEST_MIGRATIONS: await readD1Migrations("./migrations"),
-  VIEWER_KEY: "test-viewer-key",
-  VIEWER_COOKIE_SECRET: "test-viewer-cookie-secret",
+  BETTER_AUTH_SECRET: "test-better-auth-secret-0123456789abcdef",
   // Same strings as TEST_KEYS in tests/support/signing.ts.
   INGEST_KEY_COLLECTOR_1: "test-ingest-secret-collector-1",
   INGEST_KEY_FACTS_1: "test-ingest-secret-facts-1",

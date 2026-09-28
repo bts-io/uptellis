@@ -29,6 +29,13 @@
       "when": 1790554625722,
       "tag": "0003_kv",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1790556004249,
+      "tag": "0004_accounts",
+      "breakpoints": true
     }
   ]
 }

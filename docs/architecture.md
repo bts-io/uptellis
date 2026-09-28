@@ -6,8 +6,8 @@ Uptellis ("uptime, tell us") is a self-hostable status page and monitor. Produce
 
 One app, two runtimes. On **Cloudflare** a single Worker (`src/server.ts`) serves everything, with D1, KV, Workers Static Assets, Rate Limiting and Cron Triggers. In **Docker** a single Bun process (`src/platform/docker/entry.ts`) serves the same app over one SQLite file and runs the jobs itself. Everything between the two entry points is shared:
 
-- **Hono** owns `/api/*` and `/embed/*` (`src/worker/index.ts`): ingest, the read API, the admin API and `/api/health`.
-- **TanStack Start** (React 19) server-renders every other path: the status page, `/admin` and, under `vite dev` only, `/_preview`.
+- **Hono** owns `/api/*` and `/embed/*` (`src/worker/index.ts`): ingest, the read API, the admin API, accounts (Better Auth at `/api/auth/*`, setup, invites) and `/api/health`.
+- **TanStack Start** (React 19) server-renders every other path: the status page, `/admin`, the account pages (`/setup`, `/sign-in`, `/invite/<token>`, `/account`) and, under `vite dev` only, `/_preview`.
 - SSR loaders call the Hono app **in-process** through an API bridge (`src/client/lib/api.ts`): same app, same platform, no network hop.
 - The **SQL database** (D1 or SQLite, through Drizzle, `src/worker/db/schema`, migrations in `migrations/`) is the source of truth. A **key-value cache** (KV, or the SQLite `kv` table) holds the assembled model (`latest:<site>`) and the current config (`config:<site>`).
 - **Zod 4** schemas in `src/shared` validate every payload, config and API body, in the app and in the producers.
@@ -178,7 +178,7 @@ flowchart LR
 
 ## Admin
 
-`/admin` has five tabs: **Config** (form or raw JSON, validated, with a diff before saving), **Revisions** (history with restore), **Import and export**, **Sources** (ingest sources and their keys) and **Themes** (side-by-side previews). The admin API is typed in `src/shared/schemas/admin.ts` and mounted at `/api/admin`:
+`/admin` has five tabs: **Config** (form or raw JSON, validated, with a diff before saving), **Revisions** (history with restore), **Import and export**, **Sources** (ingest sources and their keys) and **Themes** (side-by-side previews). The admin API is typed in `src/shared/schemas/admin.ts` (and `src/shared/schemas/auth.ts` for users, invites and API keys) and mounted at `/api/admin`; each route needs a permission of the signed-in user ([Accounts and access](#accounts-and-access)):
 
 | Route | What it does |
 | --- | --- |
@@ -187,6 +187,9 @@ flowchart LR
 | `GET .../revisions`, `POST .../revisions/:version/restore` | list revisions, restore one |
 | `GET`, `POST /sites/:site/sources` | list sources and keys, add a source with a new key |
 | `POST /sites/:site/sources/:keyId/rotate` | issue a new secret for a key |
+| `GET`, `POST /sites/:site/api-keys`, `DELETE .../api-keys/:id` | list, create (secret shown once) and revoke API keys |
+| `GET /users`, `PATCH`, `DELETE /users/:id` | list users, change a role, remove a user |
+| `GET`, `POST /invites`, `DELETE /invites/:id` | list, create (one-time link) and delete invites |
 | `POST /notify/test?kind=stale\|recovered` | send a test notification card |
 
 Ingest keys created in admin are stored in D1 sealed with AES-256-GCM under a key derived (HKDF-SHA256) from the `SOURCE_MASTER_KEY` secret; a secret is shown exactly once. Rotation keeps the old secret working until the producer's first request signed with the new one, which promotes it:
@@ -227,16 +230,31 @@ When `DISCORD_WEBHOOK_URL` is set, the notifier (`src/worker/notify`) posts exac
 
 Probes check public `https` URLs only (no address literals, credentials or private-only names), never follow redirects, never read the body, and retry a failure once after 2 seconds before counting it as `down`.
 
-## Security gates
+## Accounts and access
 
-Every request passes the same steps in `src/worker/serve.ts`, on both runtimes: rate limits, the admin gate, the viewer gate, then Hono or TanStack Start, and every response leaves with the security headers.
+Every request passes the same steps in `src/worker/serve.ts`, on both runtimes: rate limits, then Hono or the page gate and TanStack Start, and every response leaves with the security headers.
 
-- **Viewer gate.** With `VIEWER_KEY` set, pages and the read API answer 404 without a signed `uptellis_view` or `uptellis_admin` cookie. Opening any page with `?key=<VIEWER_KEY>` sets the cookie and redirects to the same URL without the key.
-- **Admin gate.** `/admin` and `/api/admin/*` need the `uptellis_admin` cookie, set by `?admin=<ADMIN_KEY>`; admin writes must be same-origin.
-- **Always open.** `GET /api/health` and the signed ingest routes.
-- **Rate limits** on ingest, gate attempts and admin writes; a 256 KB body cap before any hashing; CSP and the usual headers on everything.
+- **Principal.** Hono resolves who is asking for every `/api/*` request (`src/worker/auth`): a Better Auth session cookie, an API key (`Authorization: Bearer`), or anonymous. `can()` in `src/shared/auth.ts` decides from the role (`owner`, `admin`, `viewer`) or the key's site and scopes.
+- **Sites.** A public site's page and read API are open; a private one answers 404 to anyone without `page.view`, exactly like an unknown site. Page loaders call the API through the bridge as the page's principal.
+- **Admin.** Each admin route needs its permission (401 signed out, 403 without it); writes must be same-origin. `/admin` pages send a signed-out visitor to `/sign-in`.
+- **Accounts.** The first account is the owner (`/api/setup`, closed afterwards); everyone else joins through a one-time invite that carries the role. The last owner can never be demoted or removed.
+- **Always open.** `GET /api/health`, ingest (HMAC-signed or an API key with the `ingest` scope), Better Auth, `/api/me`, setup and invites.
+- **Rate limits** on ingest, sign-in attempts, refusals and admin writes; a 256 KB body cap before any hashing; CSP and the usual headers on everything.
 
-The full model, with the cookie construction, the ingest checks, the limits and the headers, is in [SECURITY.md](SECURITY.md).
+```mermaid
+flowchart LR
+  req["request"] --> who{"credential"}
+  who -->|"session cookie"| user["user<br/>owner, admin or viewer"]
+  who -->|"API key header"| key["API key<br/>one site, ingest and read"]
+  who -->|"none or invalid"| anon["anonymous"]
+  user --> can{"can(principal,<br/>permission, site)"}
+  key --> can
+  anon --> can
+  can -->|"yes"| ok["route runs"]
+  can -->|"no"| deny["404 for sites and pages,<br/>401 or 403 for the admin API"]
+```
+
+The full model, with the roles, invites, session cookies, API keys, JWTs, the ingest checks, the limits and the headers, is in [SECURITY.md](SECURITY.md).
 
 ## Source layout
 
@@ -244,7 +262,7 @@ The full model, with the cookie construction, the ingest checks, the limits and 
 | --- | --- |
 | `src/server.ts` | the Cloudflare Worker entry: `fetch` and `scheduled` |
 | `src/platform/` | the `Platform` contract (`types.ts`) and its adapters: `cloudflare/` (bindings, Cron Triggers) and `docker/` (SQLite, kv, limiters, env, scheduler, Bun server, entry) |
-| `src/worker/` | the shared request path (`serve.ts`), Hono app, ingest, adapters, engine (store, incidents, configs, keys), probes, notify, jobs, middleware, database schema |
+| `src/worker/` | the shared request path (`serve.ts`), Hono app, ingest, adapters, engine (store, incidents, configs, keys), accounts (`auth/`: Better Auth, principal, users, invites, API keys), probes, notify, jobs, middleware, database schema |
 | `src/shared/` | model, config, payload schemas, signing, the pure view builder |
 | `src/client/` | routes, themes, the kit, effects, the shell (command palette, key map), the admin UI |
 | `collector/` | the Kuma collector (Bun), its Dockerfile and compose file |

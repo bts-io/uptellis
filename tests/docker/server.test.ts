@@ -35,7 +35,7 @@ const url = (s: typeof direct, path: string) => new URL(path, s.server.url).toSt
 
 beforeAll(async () => {
   spyOn(console, "log").mockImplementation(() => {});
-  direct = await start({ VIEWER_KEY: "view", INGEST_KEY_COLLECTOR_1: "k1", SITE_DEFAULT: "demo" });
+  direct = await start({ INGEST_KEY_COLLECTOR_1: "k1", SITE_DEFAULT: "demo" });
   proxied = await start({ TRUST_PROXY: "1" });
 });
 afterAll(async () => {
@@ -59,13 +59,12 @@ describe("docker server", () => {
     }
   });
 
-  it("passes the platform, the env ingest keys and the gate keys to the app", async () => {
+  it("passes the platform and the env ingest keys to the app", async () => {
     await fetch(url(direct, "/"));
     const { deps } = seen.at(-1)!;
     expect(deps.bindings.platform.runtime).toBe("docker");
     expect(deps.bindings.platform.setting("SITE_DEFAULT")).toBe("demo");
     expect(deps.bindings.envIngestKeys).toEqual({ INGEST_KEY_COLLECTOR_1: "k1" });
-    expect(deps.gates.VIEWER_KEY).toBe("view");
   });
 
   it("sets the client address from the socket, replacing a client's own header", async () => {

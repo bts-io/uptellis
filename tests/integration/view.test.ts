@@ -9,11 +9,10 @@ import { schema } from "@/worker/db";
 import { ROLLUP_BUCKET_MS } from "@/worker/db/history";
 import { D1Store } from "@/worker/engine/d1-store";
 import { resetSiteSourceSync } from "@/worker/engine/sites";
-import { type ViewerEnv, viewerGate } from "@/worker/middleware/viewer-key";
 import { loadFixture } from "../fixtures";
 import { factsPayloadFrom, kumaSnapshotFrom } from "../support/fixture-payloads";
 import { testPlatform } from "../support/platform";
-import { json, pipeline, workerEnv } from "../support/worker-pipeline";
+import { json, pipeline } from "../support/worker-pipeline";
 
 const NOW = new Date("2026-09-27T23:58:00Z");
 const { signed, send, get } = pipeline(NOW);
@@ -78,16 +77,11 @@ describe("GET /api/sites/:site/view", () => {
     expect(ROLLUP_BUCKET_MS).toBe(BUCKET_MS);
   });
 
-  it("answers 404 for unknown sites and sits behind the viewer gate", async () => {
+  it("answers 404 for unknown sites", async () => {
     const res = await get("/api/sites/nope/view");
     expect(res.status).toBe(404);
     expect(res.headers.get("cache-control")).toBe("no-store");
     expect(await json(res)).toEqual({ error: "not_found", message: "Unknown site" });
-    const gated = await viewerGate(
-      new Request("https://example.com/api/sites/demo/view"),
-      workerEnv as unknown as ViewerEnv,
-    );
-    expect(gated?.status).toBe(404);
   });
 
   it("serves an empty view before anything was ingested", async () => {

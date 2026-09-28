@@ -7,14 +7,13 @@
  *
  * Env: `PORT`, `DATABASE_PATH` (default `./data/uptellis.db`; the image sets `/data/uptellis.db`),
  * `TRUST_PROXY` (`1` behind a reverse proxy: the client address is the last `X-Forwarded-For` hop), the
- * platform's secrets and settings, the gates' `VIEWER_KEY`, `VIEWER_COOKIE_SECRET` and `ADMIN_KEY`, and
- * `INGEST_KEY_*`; each may be given as `<NAME>_FILE` (./env.ts).
+ * platform's secrets and settings, and `INGEST_KEY_*`; each may be given as `<NAME>_FILE` (./env.ts).
  */
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { JOBS } from "@/platform/types";
+import { warnLegacyKeys } from "@/worker/auth/legacy";
 import { envIngestKeys } from "@/worker/ingest/keys";
-import type { ViewerEnv } from "@/worker/middleware/viewer-key";
 import { runScheduledJob } from "@/worker/scheduled";
 import type { RequestDeps } from "@/worker/serve";
 import { type EnvSource, readEnv, readEnvMatching } from "./env";
@@ -53,14 +52,9 @@ export async function startServer(opts: ServerOptions) {
   const databasePath = readEnv(env, "DATABASE_PATH") ?? DEFAULT_DATABASE_PATH;
   if (databasePath !== ":memory:") mkdirSync(dirname(databasePath), { recursive: true });
   const platform = createDockerPlatform({ databasePath, migrationsFolder: opts.migrationsFolder, env });
-  const gates: ViewerEnv = {
-    VIEWER_KEY: readEnv(env, "VIEWER_KEY"),
-    VIEWER_COOKIE_SECRET: readEnv(env, "VIEWER_COOKIE_SECRET"),
-    ADMIN_KEY: readEnv(env, "ADMIN_KEY"),
-  };
+  warnLegacyKeys((name) => readEnv(env, name));
   const deps: RequestDeps = {
     bindings: { platform, envIngestKeys: envIngestKeys(readEnvMatching(env, /^INGEST_KEY_[A-Z0-9_]+$/)) },
-    gates,
   };
   const trustProxy = readEnv(env, "TRUST_PROXY") === "1";
   const port = Number(readEnv(env, "PORT") ?? DEFAULT_PORT);

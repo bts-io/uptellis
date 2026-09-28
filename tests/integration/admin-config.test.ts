@@ -29,8 +29,8 @@ beforeAll(async () => {
 afterAll(() => resetConfigCache());
 
 describe("admin config API", () => {
-  it("answers 404 without the admin cookie and 403 cross-site", async () => {
-    expect((await handle("/api/admin/sites/demo/config")).status).toBe(404);
+  it("answers 401 signed out and 403 cross-site", async () => {
+    expect((await handle("/api/admin/sites/demo/config")).status).toBe(401);
     const put = await handle("/api/admin/sites/demo/config", {
       method: "PUT",
       headers: { cookie, origin: "https://evil.example" },

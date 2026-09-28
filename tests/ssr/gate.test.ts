@@ -1,11 +1,17 @@
 import { env, SELF } from "cloudflare:test";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import pkg from "../../package.json";
+import { ownerCookie, send, sessionCookie, testEmail, write } from "./built";
 
-// The built Worker (dist/server) with VIEWER_KEY set by vitest.config.ts, so the gate is armed.
-const KEY = "test-viewer-key";
+// The built Worker (dist/server): the page gate, the read API's visibility check through the API bridge,
+// and the open paths. The committed demo site is public; one case makes it private through the admin API.
 const get = (path: string, init?: RequestInit) =>
   SELF.fetch(`https://example.com${path}`, { redirect: "manual", ...init });
+
+let owner = "";
+beforeAll(async () => {
+  owner = await ownerCookie();
+});
 
 describe("built worker", () => {
   it("serves /api/health without a cookie", async () => {
@@ -19,22 +25,8 @@ describe("built worker", () => {
     expect(body.build).not.toBe("dev");
   });
 
-  it("answers 404 to a page and to the API without the viewer cookie", async () => {
+  it("renders a public site page for anyone, through the API bridge", async () => {
     const page = await get("/");
-    expect(page.status).toBe(404);
-    expect(await page.text()).not.toContain("uptellis");
-    expect((await get("/api/sites/demo/view")).status).toBe(404);
-    expect((await get("/?key=wrong")).status).toBe(404);
-  });
-
-  it("trades the key for a cookie, then renders the site page through the API bridge", async () => {
-    const redirect = await get(`/?key=${KEY}`);
-    expect(redirect.status).toBe(302);
-    expect(redirect.headers.get("location")).toBe("https://example.com/");
-    const cookie = (redirect.headers.get("set-cookie") ?? "").split(";")[0]!;
-    expect(cookie).toMatch(/^uptellis_view=/);
-
-    const page = await get("/", { headers: { cookie } });
     expect(page.status).toBe(200);
     expect(page.headers.get("content-type")).toContain("text/html");
     expect(page.headers.get("cache-control")).toBe("no-store");
@@ -46,11 +38,8 @@ describe("built worker", () => {
     expect(html).toContain('href="/fonts/Geist-Variable.woff2"');
   });
 
-  it("links a stylesheet that resolves to a real CSS asset, while pages stay gated", async () => {
-    expect((await get("/")).status).toBe(404);
-
-    const cookie = ((await get(`/?key=${KEY}`)).headers.get("set-cookie") ?? "").split(";")[0]!;
-    const html = await (await get("/", { headers: { cookie } })).text();
+  it("links a stylesheet that resolves to a real CSS asset", async () => {
+    const html = await (await get("/")).text();
     const hrefs = [...html.matchAll(/<link[^>]*rel="stylesheet"[^>]*>/g)].map(
       ([tag]) => /href="([^"]+)"/.exec(tag)?.[1],
     );
@@ -59,7 +48,7 @@ describe("built worker", () => {
       expect(href).toMatch(/^\/assets\/[^/]+\.css$/);
       // SELF goes straight to the Worker and skips the asset router, so fetch through the ASSETS binding,
       // which serves dist/client exactly as production does for a path excluded from run_worker_first.
-      const css = await env.ASSETS.fetch(`https://example.com${href}`, { headers: { cookie } });
+      const css = await env.ASSETS.fetch(`https://example.com${href}`);
       expect(css.status).toBe(200);
       expect(css.headers.get("content-type")).toContain("text/css");
       expect((await css.text()).length).toBeGreaterThan(0);
@@ -81,24 +70,77 @@ describe("built worker", () => {
     ]);
   });
 
-  it("leaves /api/ingest/* and /api/health open and gates every other API path", async () => {
-    // No cookie: ingest reaches its own HMAC check (401), not the gate's 404.
+  it("leaves /api/ingest/* and /api/health open", async () => {
+    // Ingest reaches its own HMAC check (401).
     const ingest = await get("/api/ingest/kuma", { method: "POST", body: "{}" });
     expect(ingest.status).toBe(401);
     expect(await ingest.json()).toMatchObject({ error: "unauthorized", reason: "missing_headers" });
     expect((await get("/api/health")).status).toBe(200);
-
-    for (const path of ["/api/sites/demo/model", "/api/sites/demo/sources", "/api/ingest", "/api/healthz"]) {
+    for (const path of ["/api/ingest", "/api/healthz"]) {
       const res = await get(path);
       expect(res.status, path).toBe(404);
       expect(await res.json(), path).toEqual({ error: "not_found", message: "Not found" });
     }
+  });
 
-    const cookie = ((await get(`/?key=${KEY}`)).headers.get("set-cookie") ?? "").split(";")[0]!;
-    const model = await get("/api/sites/demo/model", { headers: { cookie } });
-    expect(model.status).toBe(200);
-    expect(await model.json()).toMatchObject({ site: "demo" });
-    const sources = await get("/api/sites/demo/sources", { headers: { cookie } });
-    expect(sources.status).toBe(200);
+  it("sends a signed-out visitor of the admin UI to sign in, and hides it from a viewer", async () => {
+    for (const path of ["/admin", "/admin/sources?x=1"]) {
+      const res = await get(path);
+      expect(res.status, path).toBe(302);
+      expect(res.headers.get("location"), path).toBe(`/sign-in?next=${encodeURIComponent(path)}`);
+    }
+    expect((await send("/admin", { headers: { cookie: owner } })).status).toBe(200);
+
+    // A viewer, invited and signed in: the admin UI is a 404 page, the admin API a 403.
+    const invite = await write("/api/admin/invites", { role: "viewer" }, { cookie: owner });
+    expect(invite.status).toBe(201);
+    const token = ((await invite.json()) as { url: string }).url.split("/").pop()!;
+    const accepted = await write(`/api/invites/${token}/accept`, {
+      name: "Viewer",
+      email: testEmail("viewer"),
+      password: "test-viewer-password",
+    });
+    expect(accepted.status).toBe(201);
+    const viewer = sessionCookie(accepted)!;
+    const page = await send("/admin", { headers: { cookie: viewer } });
+    expect(page.status).toBe(404);
+    expect(await page.text()).not.toContain("admin");
+    expect((await send("/api/admin/sites/demo/config", { headers: { cookie: viewer } })).status).toBe(403);
+    expect((await send("/", { headers: { cookie: viewer } })).status).toBe(200);
+  });
+
+  it("answers 404 for a private site's page and read API unless signed in", async () => {
+    const state = (await (
+      await send("/api/admin/sites/demo/config", { headers: { cookie: owner } })
+    ).json()) as {
+      config: Record<string, unknown>;
+      version: number;
+    };
+    const saved = await write(
+      "/api/admin/sites/demo/config",
+      { config: { ...state.config, visibility: "private" }, baseVersion: state.version },
+      { cookie: owner },
+      "PUT",
+    );
+    expect(saved.status).toBe(200);
+
+    const page = await send("/");
+    expect(page.status).toBe(404);
+    expect(await page.text()).not.toContain("DEMO");
+    for (const path of ["/api/sites/demo/view", "/api/sites/demo/model", "/api/sites/demo/sources"]) {
+      const res = await send(path);
+      expect(res.status, path).toBe(404);
+      expect(await res.json(), path).toEqual({ error: "not_found", message: "Unknown site" });
+    }
+    // The same answer as a site that does not exist.
+    expect(await (await send("/api/sites/nope/view")).json()).toEqual({
+      error: "not_found",
+      message: "Unknown site",
+    });
+
+    const signedIn = await send("/", { headers: { cookie: owner } });
+    expect(signedIn.status).toBe(200);
+    expect(await signedIn.text()).toMatch(/<title>([^<]+ \| )?DEMO status<\/title>/);
+    expect((await send("/api/sites/demo/view", { headers: { cookie: owner } })).status).toBe(200);
   });
 });

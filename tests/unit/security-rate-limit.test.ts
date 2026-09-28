@@ -4,13 +4,13 @@ import { describe, expect, it } from "vitest";
 import { RATE_LIMIT_BINDINGS } from "@/platform/cloudflare/bindings";
 import { RATE_LIMITERS, type RateLimiter, type RateLimiterName } from "@/platform/types";
 import { INGEST_HEADERS } from "@/shared/signing";
+import { notFound } from "@/worker/middleware/auth-gate";
 import {
   type Limiters,
   limitBeforeGates,
   limitGateRejection,
   RETRY_AFTER_S,
 } from "@/worker/middleware/rate-limit";
-import { notFound } from "@/worker/middleware/viewer-key";
 
 /** A fake limiter: allows `limit` requests per key, records every key it was asked about. */
 function fakeLimiter(limit: number): RateLimiter & { keys: string[] } {
@@ -54,7 +54,11 @@ async function statuses(env: Limiters, make: () => Request, n: number): Promise<
 
 describe("rate limits before the gates", () => {
   it("are a no-op without limiters", async () => {
-    for (const r of [ingest("collector-1"), req("/?key=guess"), req("/api/admin/x", { method: "PUT" })]) {
+    for (const r of [
+      ingest("collector-1"),
+      req("/api/auth/sign-in/email", { method: "POST" }),
+      req("/api/admin/x", { method: "PUT" }),
+    ]) {
       expect(await limitBeforeGates(r, none)).toBeNull();
     }
   });
@@ -86,17 +90,24 @@ describe("rate limits before the gates", () => {
     expect(env.ingest.keys).toEqual(["-|client-a", "-|client-a"]);
   });
 
-  it("limit ?key= and ?admin= per client IP on any path, before the key is compared", async () => {
-    const env = fakes(2);
+  it("limit sign-in attempts per client IP, before the credential is checked", async () => {
+    const env = fakes(3);
     const out: (number | null)[] = [];
-    for (const path of ["/?key=a", "/admin?admin=b", "/api/sites/demo/view?key=c"]) {
-      out.push((await limitBeforeGates(req(path), env))?.status ?? null);
+    for (const path of [
+      "/api/auth/sign-in/email",
+      "/api/setup",
+      "/api/invites/abc/accept",
+      "/api/auth/sign-in/social",
+    ]) {
+      out.push((await limitBeforeGates(req(path, { method: "POST" }), env))?.status ?? null);
     }
-    expect(out).toEqual([null, null, 429]);
-    expect(await limitBeforeGates(req("/?key=a", {}, "client-b"), env)).toBeNull();
-    const page = (await limitBeforeGates(req("/?key=a"), env))!;
-    expect(page.headers.get("content-type")).toBe("text/plain");
-    expect(await page.text()).toBe("Too many requests");
+    expect(out).toEqual([null, null, null, 429]);
+    expect(await limitBeforeGates(req("/api/setup", { method: "POST" }, "client-b"), env)).toBeNull();
+    // Reading the setup state, an invite or the session is not an attempt.
+    for (const path of ["/api/setup", "/api/invites/abc", "/api/auth/get-session", "/api/me"]) {
+      expect(await limitBeforeGates(req(path), env), path).toBeNull();
+    }
+    expect(await limitBeforeGates(req("/api/auth/sign-out", { method: "POST" }), env)).toBeNull();
   });
 
   it("limit admin writes per client IP, never admin reads", async () => {
@@ -107,13 +118,10 @@ describe("rate limits before the gates", () => {
     expect(await limitBeforeGates(req("/admin/x", { method: "POST" }, "client-b"), env)).toBeNull();
   });
 
-  it("never count page views, the API with a cookie or /api/health", async () => {
+  it("never count page views, API reads or /api/health", async () => {
     const env = fakes(0);
     for (const path of ["/", "/admin", "/api/health", "/api/sites/demo/view", "/?theme=b-control-room"]) {
-      expect(
-        await limitBeforeGates(req(path, { headers: { cookie: "uptellis_view=1.x" } }), env),
-        path,
-      ).toBeNull();
+      expect(await limitBeforeGates(req(path), env), path).toBeNull();
     }
     expect(await limitBeforeGates(req("/api/ingest/kuma"), env)).toBeNull();
     expect(env.gate.keys).toEqual([]);
@@ -123,25 +131,32 @@ describe("rate limits before the gates", () => {
 });
 
 describe("rate limit on gate rejections", () => {
-  it("counts 404s per client IP and turns them into 429 past the limit", async () => {
-    const env = fakes(2);
+  it("counts 401, 403 and 404 per client IP and turns them into 429 past the limit", async () => {
+    const env = fakes(3);
     const out: number[] = [];
-    for (let i = 0; i < 3; i++) out.push((await limitGateRejection(req("/"), env, notFound("/"))).status);
-    expect(out).toEqual([404, 404, 429]);
+    const denied = (status: number) => Response.json({ error: "x" }, { status });
+    out.push((await limitGateRejection(req("/"), env, notFound("/"))).status);
+    out.push((await limitGateRejection(req("/api/admin/users"), env, denied(401))).status);
+    out.push((await limitGateRejection(req("/api/admin/users"), env, denied(403))).status);
+    out.push((await limitGateRejection(req("/"), env, notFound("/"))).status);
+    expect(out).toEqual([404, 401, 403, 429]);
     expect((await limitGateRejection(req("/", {}, "client-b"), env, notFound("/"))).status).toBe(404);
     const api = await limitGateRejection(req("/api/sites/demo/view"), env, notFound("/api/sites/demo/view"));
     expect(api.status).toBe(429);
     expect(await api.json()).toMatchObject({ error: "rate_limited" });
   });
 
-  it("leaves other gate responses alone and does not count a key request twice", async () => {
+  it("leaves other responses alone, and does not count ingest or a sign-in attempt twice", async () => {
     const env = fakes(0);
     const redirect = new Response(null, { status: 302 });
-    expect(await limitGateRejection(req("/?key=a"), env, redirect)).toBe(redirect);
-    const forbidden = new Response(null, { status: 403 });
-    expect(await limitGateRejection(req("/api/admin/x", { method: "PUT" }), env, forbidden)).toBe(forbidden);
-    const wrongKey = notFound("/");
-    expect(await limitGateRejection(req("/?key=wrong"), env, wrongKey)).toBe(wrongKey);
+    expect(await limitGateRejection(req("/admin"), env, redirect)).toBe(redirect);
+    const ok = new Response("ok");
+    expect(await limitGateRejection(req("/"), env, ok)).toBe(ok);
+    const refused = Response.json({ error: "unauthorized" }, { status: 401 });
+    expect(await limitGateRejection(req("/api/auth/sign-in/email", { method: "POST" }), env, refused)).toBe(
+      refused,
+    );
+    expect(await limitGateRejection(req("/api/ingest/kuma", { method: "POST" }), env, refused)).toBe(refused);
     expect(env.gate.keys).toEqual([]);
   });
 
