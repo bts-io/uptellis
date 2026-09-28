@@ -2,6 +2,17 @@
 
 All notable changes to Uptellis are recorded here. The format follows [Conventional Commits](https://www.conventionalcommits.org) and the project uses [Semantic Versioning](https://semver.org). Each release adds its section in the release PR, from the Conventional Commits since the previous tag.
 
+## 0.3.1 (2026-09-28)
+
+### Bug Fixes
+
+* Sources removed from the config (a retired agent, a dropped collector) no longer go stale and page forever. Only the sources a site lists or implies are swept, and an open stale incident of a removed source is resolved with a note and no card.
+* No "Data is stale" banner or verdict while a maintenance window covers the whole site; the maintenance notice shows instead.
+
+### Features
+
+* `POST /api/admin/notify/test` also sends TEST `down` and `up` cards (`kind=down|up`, optional `service=<id>`), so a webhook can be checked for every card kind.
+
 ## 0.3.0 (2026-09-28)
 
 ### Features
