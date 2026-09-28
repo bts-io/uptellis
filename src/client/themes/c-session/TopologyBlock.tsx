@@ -1,7 +1,13 @@
 import { EmptyState, Gauge, StateDot } from "@/client/kit";
-import type { DisplayState, SiteView, TopologyView } from "@/shared/view";
+import {
+  type DisplayState,
+  type FactGroupView,
+  highlightedGroups,
+  type SiteView,
+  type TopologyView,
+} from "@/shared/view";
 import { Block, DataAge } from "./Block";
-import { cx, DASH, fact, factText, LEVEL_TEXT, levelState, probeStale } from "./format";
+import { cx, DASH, LEVEL_TEXT, probeStale } from "./format";
 import { KeyValues } from "./KeyValues";
 
 type Node = TopologyView["nodes"][number];
@@ -26,6 +32,9 @@ export function TopologyBlock({ view }: { view: SiteView }) {
     topo?.fence?.level === "crit" ||
     (pairEdge !== undefined && !pairEdge.live);
   const shown = (state: DisplayState): DisplayState => (stale ? "stale" : state);
+  // The summary block shows the highlighted groups.
+  const inSummary = highlightedGroups(view);
+  const groups = view.factGroups.filter((g) => !inSummary.has(g.id));
 
   return (
     <Block
@@ -45,15 +54,15 @@ export function TopologyBlock({ view }: { view: SiteView }) {
       {pairEdge && pair.length === 2 && (
         <div className="flex flex-col items-stretch min-[981px]:flex-row min-[981px]:items-center">
           <div className="flex flex-col items-stretch md:flex-row md:items-center">
-            <NodeBox view={view} node={pair[0]!} stale={stale} />
-            <EdgeLine edge={pairEdge} stale={stale} replication={factText(view, "replication.state")} />
-            <NodeBox view={view} node={pair[1]!} stale={stale} />
+            <NodeBox node={pair[0]!} stale={stale} />
+            <EdgeLine edge={pairEdge} stale={stale} />
+            <NodeBox node={pair[1]!} stale={stale} />
           </div>
-          {topo?.fence && <FenceStamp view={view} fence={topo.fence} stale={stale} />}
+          {topo?.fence && <FenceStamp fence={topo.fence} stale={stale} />}
         </div>
       )}
-      {topo?.fence && !pairEdge && <FenceStamp view={view} fence={topo.fence} stale={stale} />}
-      {view.factGroups.length > 0 && <InfraFacts view={view} stale={stale} />}
+      {topo?.fence && !pairEdge && <FenceStamp fence={topo.fence} stale={stale} />}
+      {groups.length > 0 && <InfraFacts groups={groups} stale={stale} />}
       {topo && topo.nodes.length > 0 && (
         <ul className="m-0 mt-4 grid list-none grid-cols-2 overflow-hidden rounded-lg border border-hair p-0 md:grid-cols-4">
           {topo.nodes.map((n) => (
@@ -77,25 +86,26 @@ export function TopologyBlock({ view }: { view: SiteView }) {
   );
 }
 
-function NodeBox({ view, node, stale }: { view: SiteView; node: Node; stale: boolean }) {
+function NodeBox({ node, stale }: { node: Node; stale: boolean }) {
   const serving = node.note === "serving";
   const role = node.roles[0] ?? "node";
   const mark = role === "primary" ? "◆" : role === "standby" ? "◇" : "";
-  const healthz = fact(view, "forgejo.healthzCode");
-  const detail = serving ? (
-    <>
-      forgejo {factText(view, "forgejo.version")}{" "}
-      {healthz && (
-        <span className={cx(!stale && healthz.level && LEVEL_TEXT[healthz.level])}>{healthz.display}</span>
-      )}
-    </>
-  ) : node.state === "down" ? (
-    <span className={cx(!stale && "text-down")}>pg unreachable</span>
-  ) : node.state === "degraded" ? (
-    <span className={cx(!stale && "text-degraded")}>pg not streaming</span>
-  ) : (
-    `pg ${node.note === "standby" ? "hot standby" : (node.note ?? DASH)}`
-  );
+  // The profiles' rows for this node, `forgejo serving · postgres primary · disk 16%`; failures in colour.
+  const detail = node.details.length
+    ? node.details.map((d, i) => (
+        <span key={d.label}>
+          {i > 0 && " · "}
+          <span
+            className={cx(
+              !stale && d.state === "down" && "text-down",
+              !stale && d.state === "degraded" && "text-degraded",
+            )}
+          >
+            {d.label} {d.value}
+          </span>
+        </span>
+      ))
+    : (node.note ?? DASH);
   return (
     <div
       data-node={node.id}
@@ -125,12 +135,10 @@ function NodeBox({ view, node, stale }: { view: SiteView; node: Node; stale: boo
 }
 
 /** The replication link: a dashed line that flows while live (never stale, never under reduced motion), else broken. */
-function EdgeLine({ edge, stale, replication }: { edge: Edge; stale: boolean; replication: string }) {
+function EdgeLine({ edge, stale }: { edge: Edge; stale: boolean }) {
   const tone = stale ? "text-faint" : edge.live ? "text-up" : "text-down";
   const label = edge.live
-    ? [edge.label ?? (replication === DASH ? "streaming" : replication), edge.detail]
-        .filter(Boolean)
-        .join(" · ")
+    ? [edge.label ?? "streaming", edge.detail].filter(Boolean).join(" · ")
     : ["stopped", edge.detail].filter(Boolean).join(" · ");
   return (
     <div
@@ -165,17 +173,8 @@ function EdgeLine({ edge, stale, replication }: { edge: Edge; stale: boolean; re
   );
 }
 
-function FenceStamp({
-  view,
-  fence,
-  stale,
-}: {
-  view: SiteView;
-  fence: NonNullable<TopologyView["fence"]>;
-  stale: boolean;
-}) {
-  const t = (key: string) => factText(view, `fence.${key}`);
-  const detail = [fence.reason, `tl ${t("timeline")}/${t("peerTimeline")}`].filter(Boolean).join(" · ");
+function FenceStamp({ fence, stale }: { fence: NonNullable<TopologyView["fence"]>; stale: boolean }) {
+  const detail = fence.reason;
   const tone = stale
     ? "border-muted/45 text-muted"
     : fence.level === "crit"
@@ -199,64 +198,33 @@ function FenceStamp({
   );
 }
 
-function InfraFacts({ view, stale }: { view: SiteView; stale: boolean }) {
-  const t = (key: string) => factText(view, key);
-  const tone = (key: string) => {
-    const l = fact(view, key)?.level;
-    return !stale && l ? LEVEL_TEXT[l] : undefined;
-  };
-  const disk = fact(view, "disk.percent");
-  const diskNode = fact(view, "forgejo.node");
-  const runners = fact(view, "runners.online");
+/** One line per fact group: a gauge when a row is a percentage, then the profile's summary (else its rows). */
+function InfraFacts({ groups, stale }: { groups: FactGroupView[]; stale: boolean }) {
   return (
     <KeyValues
       className="mt-5 border-t border-dashed border-hair pt-4"
-      items={[
-        {
-          label: "backup",
-          value: (
-            <>
-              <span className={tone("backup.lastResult")}>
-                {t("backup.lastResult") === "ok" ? "✓" : t("backup.lastResult")}
-              </span>{" "}
-              {t("backup.snapshot")} · {t("backup.size")} in {t("backup.durationS")} · {t("backup.lastAt")} ·
-              next <span className={tone("backup.nextAt")}>{t("backup.nextAt")}</span>
-            </>
-          ),
-        },
-        {
-          label: "runners",
+      items={groups.map((g) => {
+        const gauge = g.rows.find((r) => r.percent !== null);
+        const tone = !stale && (g.level === "warn" || g.level === "crit") ? LEVEL_TEXT[g.level] : undefined;
+        return {
+          label: g.title.toLowerCase(),
           value: (
             <span className="[&>*]:mr-2 md:inline-flex md:items-center md:gap-2 md:[&>*]:mr-0">
-              <StateDot state={stale ? "stale" : levelState(runners?.level)} />
-              {t("runners.online")} online <span className="text-muted">· {t("runners.list")}</span>
-            </span>
-          ),
-        },
-        {
-          label: diskNode ? `disk ${diskNode.display}` : "disk",
-          value: (
-            <span className="[&>*]:mr-2 md:inline-flex md:items-center md:gap-2 md:[&>*]:mr-0">
-              {disk?.percent != null && (
+              {gauge?.percent != null && (
                 <Gauge
-                  value={disk.percent}
+                  value={gauge.percent}
                   cells={18}
-                  level={stale ? "info" : (disk.level ?? undefined)}
-                  label="disk used"
+                  level={stale ? "info" : (gauge.level ?? undefined)}
+                  label={gauge.label}
                 />
               )}
-              <span className={tone("disk.percent")}>{t("disk.percent")}</span>
-              <span className="text-muted">
-                {t("disk.usedBytes")} / {t("disk.sizeBytes")}
+              <span className={tone}>
+                {g.summary ?? g.rows.map((r) => `${r.label} ${r.display}`).join(" · ")}
               </span>
             </span>
           ),
-        },
-        {
-          label: "watchdog",
-          value: <span className={tone("watchdog.reachable")}>{t("watchdog.reachable")}</span>,
-        },
-      ]}
+        };
+      })}
     />
   );
 }

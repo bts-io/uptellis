@@ -1,7 +1,7 @@
 import { ActivityFeed, EmptyState, Footer, IncidentRail, Panel, StaleBanner, StateDot } from "@/client/kit";
-import type { SiteView } from "@/shared/view";
+import { type SiteView, sourceName } from "@/shared/view";
 import type { ThemePageProps } from "../types";
-import { cx, DASH, factText, isStale } from "./format";
+import { cx, isStale } from "./format";
 import { Header } from "./Header";
 import { HostsPanel } from "./HostsPanel";
 import { InfraPanel } from "./InfraPanel";
@@ -48,7 +48,7 @@ function recentChecks(view: SiteView) {
 export function Page({ view, commit }: ThemePageProps) {
   useCardKeys();
   const stale = isStale(view);
-  const collector = factText(view, "kuma.host");
+  const collector = sourceName(view, "kuma");
   const events = recentEvents(view);
   const checks = recentChecks(view);
 
@@ -111,12 +111,7 @@ export function Page({ view, commit }: ThemePageProps) {
       </Wrap>
 
       <Wrap className="mt-10">
-        <Footer
-          generatedAt={view.generatedAt}
-          collectorHost={collector === DASH ? null : collector}
-          commit={commit}
-          hints={HINTS}
-        />
+        <Footer generatedAt={view.generatedAt} collectorHost={collector} commit={commit} hints={HINTS} />
         <p className="-mt-6 pb-[30px] text-right text-[11.5px] text-faint max-[760px]:mt-0 max-[760px]:text-left">
           beat legend{" "}
           {LEGEND.map((l) => (

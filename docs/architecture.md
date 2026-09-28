@@ -120,7 +120,7 @@ Every string the model stores is **display-safe**: the schemas reject address li
 
 - A service whose source is `stale` or `empty` shows as `stale`, never with its last status, so stale data never keeps a green dot.
 - The **verdict** is, in order of precedence: `empty` (nothing has reported), `outage` (a service is down on current data), `stale` (a source is stale), `degraded`, `operational`. Stale services never count as down, so stale data cannot fake an outage.
-- Each service gets a health score from the config's weights (uptime, latency, certificate), 90 daily beat cells, recent checks and a sparkline; facts are grouped, labelled and levelled against the config's thresholds; the topology, activity feed and incidents are laid out for rendering.
+- Each service gets a health score from the config's weights (uptime, latency, certificate), 90 daily beat cells, recent checks and a sparkline; facts are grouped, labelled, formatted and levelled by the site's active [profiles](profiles.md) (against the config's thresholds), which also refine the topology and pick the summary highlights; the topology, activity feed and incidents are laid out for rendering.
 
 `GET /api/sites/:site/view` returns this view; the page's SSR loader fetches it through the API bridge and hands it to the site's theme. The page refreshes its data every 30 seconds while the tab is visible and ticks ages every second.
 
@@ -130,7 +130,7 @@ A theme is one React page over `SiteView`. Three are registered (`src/client/the
 
 ## Site config and revisions
 
-A site's config (`SiteConfig`, `src/shared/config/site.ts`) holds its name, hostnames, theme, visibility (`public` or `private`), active profiles, sources and their expected intervals, probes, sections (which services appear under which title), display names, host aliases, an optional topology (nodes and replication, watches, depends or network edges), health weights, fact thresholds, links, branding, the public allow-list and notification switches.
+A site's config (`SiteConfig`, `src/shared/config/site.ts`) holds its name, hostnames, theme, visibility (`public` or `private`), sources and their expected intervals, probes, sections (which services appear under which title), display names, host aliases, an optional topology (nodes and replication, watches, depends or network edges), health weights, fact thresholds, the active profiles, links, branding, the public allow-list and notification switches.
 
 ```mermaid
 flowchart LR
@@ -240,10 +240,10 @@ The full model, with the cookie construction, the ingest checks, the limits and 
 | --- | --- |
 | `src/server.ts` | the Worker entry: limits, gates, dispatch, headers, `scheduled` |
 | `src/worker/` | Hono app, ingest, adapters, engine (store, incidents, configs, keys), probes, notify, crons, middleware, D1 schema |
-| `src/shared/` | model, config, payload schemas, signing, the pure view builder |
+| `src/shared/` | model, config, payload schemas, signing, the profiles (`src/shared/profiles`), the pure view builder |
 | `src/client/` | routes, themes, the kit, effects, the shell (command palette, key map), the admin UI |
 | `collector/` | the Kuma collector (Bun), its Dockerfile and compose file |
-| `profiles/` | producers for specific systems (see [profiles/forgejo-ha](../profiles/forgejo-ha/README.md)) |
+| `profiles/` | producers for specific systems (see [profiles.md](profiles.md) and [profiles/forgejo-ha](../profiles/forgejo-ha/README.md)) |
 | `sites/` | committed site configs (the seed of version 1) |
 | `migrations/` | D1 migrations |
 | `tests/` | Vitest projects `unit`, `integration` (Hono in workerd with a migrated D1) and `ssr` (the built Worker), and the fixtures |

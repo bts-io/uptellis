@@ -1,30 +1,28 @@
 import type { ReactNode } from "react";
-import { Age, Gauge, KeyValueGrid, Panel, StateDot } from "@/client/kit";
+import { Age, Gauge, isIconName, KeyValueGrid, Panel, StateDot } from "@/client/kit";
 import type { IconName } from "@/client/kit/props";
-import type { DisplayState, Level, SiteView } from "@/shared/view";
-import { isNewer } from "@/shared/view";
-import {
-  cx,
-  DASH,
-  fact,
-  factText,
-  healthLevel,
-  hhmmss,
-  isStale,
-  LEVEL_TEXT,
-  pct,
-  uptimeLevel,
-} from "./format";
+import { type DisplayState, highlightSlots, type Level, type SiteView } from "@/shared/view";
+import { cx, DASH, healthLevel, hhmmss, isStale, LEVEL_TEXT, pct, uptimeLevel } from "./format";
 
-/** The `[ sys.status ]` key/value box: 3x3 on desktop, one column on phones. */
+/** A group's icon from its profile, else the grid. */
+const groupIcon = (view: SiteView, group: string): IconName => {
+  const icon = view.factGroups.find((g) => g.id === group)?.icon ?? null;
+  return isIconName(icon) ? icon : "grid";
+};
+
+/** Only a warning or a failure colours a summary value. */
+const levelText = (level: Level | null) =>
+  level === "warn" || level === "crit" ? LEVEL_TEXT[level] : undefined;
+
+/**
+ * The `[ sys.status ]` key/value box: the monitor figures, then one cell per highlight slot of the active
+ * profiles; three columns on desktop, one on phones.
+ */
 export function SummaryBox({ view }: { view: SiteView }) {
   const s = view.summary;
   const stale = isStale(view);
   // A legend dot keeps its colour only while the data is live.
   const dot = (state: DisplayState) => <StateDot state={stale ? "stale" : state} />;
-  const latest = fact(view, "kuma.latestVersion");
-  const version = factText(view, "kuma.version");
-  const reachable = fact(view, "watchdog.reachable");
 
   const items: { icon: IconName; label: string; value: ReactNode }[] = [
     {
@@ -68,23 +66,6 @@ export function SummaryBox({ view }: { view: SiteView }) {
       ),
     },
     {
-      icon: "box",
-      label: "kuma",
-      value: (
-        <>
-          <span>{version}</span>
-          {latest &&
-            (!isNewer(latest.display, version) ? (
-              <span className="text-xs text-up">latest</span>
-            ) : (
-              <span className="text-xs text-degraded">{latest.display} available</span>
-            ))}
-          <Sep />
-          <span className="text-muted">db {factText(view, "kuma.dbSize")}</span>
-        </>
-      ),
-    },
-    {
       icon: "heart",
       label: "health",
       value: (
@@ -107,16 +88,6 @@ export function SummaryBox({ view }: { view: SiteView }) {
       value: <UptimeMeter ratio={s.uptime30d} label="uptime 30 days" />,
     },
     {
-      icon: "host",
-      label: "collector",
-      value: (
-        <>
-          <span>{factText(view, "kuma.host")}</span>
-          <span className="text-muted">{factText(view, "kuma.timezone")}</span>
-        </>
-      ),
-    },
-    {
       icon: "camera",
       label: "snapshot",
       value: (
@@ -128,18 +99,21 @@ export function SummaryBox({ view }: { view: SiteView }) {
         </>
       ),
     },
-    {
-      icon: "eye",
-      label: "watchdog",
-      value: reachable ? (
-        <Inline>
-          {dot(reachable.level === "crit" ? "down" : "up")}
-          <span>{reachable.display}</span>
-        </Inline>
-      ) : (
-        <span className="text-muted">{DASH}</span>
+    ...highlightSlots(view.highlights).map((slot) => ({
+      icon: groupIcon(view, slot.rows[0].group),
+      label: slot.label,
+      value: (
+        <>
+          <span className={levelText(slot.rows[0].level)}>{slot.rows[0].display}</span>
+          {slot.note && <span className={cx("text-xs", LEVEL_TEXT[slot.note.level])}>{slot.note.text}</span>}
+          {slot.rows.slice(1).map((r) => (
+            <span key={`${r.group}.${r.key}`} className="text-muted">
+              {r.display}
+            </span>
+          ))}
+        </>
       ),
-    },
+    })),
   ];
 
   return (
