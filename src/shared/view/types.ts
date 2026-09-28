@@ -95,6 +95,11 @@ export interface FreshnessView {
   ageS: number | null;
   stalestSourceId: string | null;
   perSource: SourceView[];
+  /**
+   * True while a maintenance window covers the whole site (no service list): silent sources are expected
+   * then, so the stale banner hides and the verdict does not say "Data is stale". `state` stays truthful.
+   */
+  quietForMaintenance?: boolean;
 }
 
 export interface SourceView {

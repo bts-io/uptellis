@@ -113,6 +113,7 @@ export function buildSiteView(input: ViewInput): SiteView {
   const windows = activeWindows(config, nowMs);
   const inWindow = (id: string) =>
     windows.some(({ window: w }) => w.services.length === 0 || w.services.includes(id));
+  const siteWideWindow = windows.some(({ window: w }) => w.services.length === 0);
 
   const services = new Map<string, ServiceView>();
   for (const s of model.services) {
@@ -170,7 +171,7 @@ export function buildSiteView(input: ViewInput): SiteView {
       ? "empty"
       : down > 0
         ? "outage"
-        : freshState === "stale"
+        : freshState === "stale" && !siteWideWindow
           ? "stale"
           : degraded > 0
             ? "degraded"
@@ -192,6 +193,7 @@ export function buildSiteView(input: ViewInput): SiteView {
       state: freshState,
       ageS: freshState === "fresh" ? newestAge(reported) : (stalest?.ageS ?? null),
       stalestSourceId: stalest?.id ?? null,
+      ...(siteWideWindow ? { quietForMaintenance: true } : {}),
       perSource,
     },
     summary: {

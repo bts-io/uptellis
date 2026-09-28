@@ -56,6 +56,22 @@ describe("maintenance in the view", () => {
     expect(svc(buildSiteView(input), stale!.id).state).toBe("maintenance");
   });
 
+  it("drops the stale verdict while a window covers the whole site, and only then", () => {
+    const window = (services: string[]) =>
+      withWindows("stale", { ...once(services), start: "2026-09-28T00:00:00Z", end: "2026-09-28T02:00:00Z" });
+    const before = buildSiteView(fixtureInput("stale"));
+    expect(before.verdict.state).toBe("stale");
+    expect(before.freshness.quietForMaintenance).toBeUndefined();
+
+    const site = buildSiteView(window([]));
+    expect(site.freshness).toMatchObject({ state: "stale", quietForMaintenance: true });
+    expect(site.verdict.state).not.toBe("stale");
+
+    const one = buildSiteView(window(["kuma:1"]));
+    expect(one.verdict.state).toBe("stale");
+    expect(one.freshness.quietForMaintenance).toBeUndefined();
+  });
+
   it("lists the active windows with the current occurrence", () => {
     const v = buildSiteView(
       withWindows("incident", once(["kuma:5"]), {

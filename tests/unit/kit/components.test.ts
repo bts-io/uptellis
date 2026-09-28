@@ -140,6 +140,14 @@ describe("freshness", () => {
     expect(alert.getAttribute("role")).toBe("alert");
     expect(alert.textContent).toContain("SNAPSHOT STALE");
     expect(alert.textContent).toContain(`showing data from ${stale.generatedAt.slice(11, 19)} UTC`);
+    // Not while a window covers the whole site: silent sources are expected then.
+    expect(
+      render(StaleBanner, {
+        freshness: { ...stale.freshness, quietForMaintenance: true },
+        now: stale.now,
+        generatedAt: stale.generatedAt,
+      }),
+    ).toBe("");
     const empty: FreshnessView = { state: "empty", ageS: null, stalestSourceId: null, perSource: [] };
     expect(render(StaleBanner, { freshness: empty, now: def.now, generatedAt: def.now })).toContain(
       "NO DATA YET",
