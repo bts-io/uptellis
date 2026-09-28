@@ -51,6 +51,18 @@ export interface FactKeyDef {
   level?(fact: Fact, ctx: ProfileContext): Level | null;
 }
 
+/**
+ * One piece of a group's summary line (contract addition). `level` colours it: `ok`, `warn` and
+ * `crit` as their state colours, `info` as secondary (muted) text, null as plain text. `emphasis` sets it
+ * in bold (e.g. a fence decision). Themes render the parts in order with a space between them, so a
+ * separator such as "·" is a part of its own.
+ */
+export interface SummaryPart {
+  text: string;
+  level: Level | null;
+  emphasis?: boolean;
+}
+
 export interface FactGroupDef {
   id: string;
   title: string;
@@ -61,6 +73,12 @@ export interface FactGroupDef {
   keys: readonly FactKeyDef[];
   /** One line that sums the group up for a theme's compact row, e.g. "streaming lag 0 s · primary". */
   summary?(ctx: ProfileContext): string | null;
+  /**
+   * The summary as coloured parts (contract addition), e.g. "16.0.5", "·", "HTTP 200" (ok),
+   * "·", "serving app-1" (info). Without `summary`, the line is the parts' texts joined by spaces;
+   * without this hook, the view makes `summary` one plain part.
+   */
+  summaryParts?(ctx: ProfileContext): SummaryPart[] | null;
 }
 
 /** A fact a theme may place in its summary box, with a short label. */

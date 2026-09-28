@@ -7,7 +7,7 @@
 import type { Fact } from "../model";
 import { formatBytes, formatDuration, formatRelative, toMs } from "../view/format";
 import type { DisplayState, Level, TopologyView } from "../view/types";
-import { bool, current, num, own, str } from "./read";
+import { bool, current, keyLevel, num, own, part, quiet, runs, str } from "./read";
 import type { FactKeyDef, Profile, ProfileContext } from "./types";
 
 /** Seconds from a timestamp fact's value to now (negative when it lies ahead). */
@@ -90,7 +90,8 @@ const ageOf = (ctx: ProfileContext, key: string) => {
 /** Postgres as the dashboards name it: a standby is a replica. */
 const pgRole = (role: string) => (role === "standby" ? "replica" : role);
 
-const join = (parts: (string | null | false)[]) => parts.filter(Boolean).join(" · ") || null;
+/** A key's level as its row shows it (`forgejo.healthzCode` -> ok). */
+const lvl = (ctx: ProfileContext, key: string) => keyLevel(ctx, forgejoHa.groups, key);
 
 export const forgejoHa: Profile = {
   id: "forgejo-ha",
@@ -128,14 +129,16 @@ export const forgejoHa: Profile = {
         { key: "node", label: "Reporting node", format: "text" },
         { key: "serving", label: "Running on reporting node", format: "bool" },
       ],
-      summary: (ctx) => {
+      // 16.0.5 · HTTP 200 · serving app-1
+      summaryParts: (ctx) => {
+        const version = text(ctx, "forgejo.version");
         const code = num(ctx, "forgejo.healthzCode");
         const serving = str(ctx, "forgejo.servingNode");
-        return join([
-          text(ctx, "forgejo.version"),
-          code !== null && httpCode(code),
-          serving !== null && `serving ${serving}`,
-        ]);
+        return runs(
+          [version !== null && part(version)],
+          [code !== null && part(httpCode(code), lvl(ctx, "forgejo.healthzCode"))],
+          [serving !== null && part(`serving ${serving}`, quiet(lvl(ctx, "forgejo.servingNode")))],
+        );
       },
     },
     {
@@ -165,16 +168,32 @@ export const forgejoHa: Profile = {
         flag("peerReachable", "Peer reachable", "warn"),
         flag("standbyConnected", "Standby connected", "warn"),
       ],
-      summary: (ctx) => {
+      // streaming lag 0 s · primary · peer app-2 (reachable yes) · standby connected yes
+      summaryParts: (ctx) => {
         const state = str(ctx, "replication.state");
         const lag = lagDisplay(ctx);
+        const role = str(ctx, "replication.role");
         const peer = str(ctx, "replication.peer");
         const reachable = text(ctx, "replication.peerReachable");
-        return join([
-          [state, lag && `lag ${lag}`].filter(Boolean).join(" ") || null,
-          str(ctx, "replication.role"),
-          peer && `peer ${peer}${reachable ? ` (reachable ${reachable})` : ""}`,
-        ]);
+        const connected = text(ctx, "replication.standbyConnected");
+        return runs(
+          [
+            state !== null && part(state, lvl(ctx, "replication.state"), true),
+            lag !== null && part("lag", "info"),
+            lag !== null && part(lag, lvl(ctx, "replication.lagSeconds")),
+          ],
+          [role !== null && part(role, "info")],
+          [
+            peer !== null && part(`peer ${peer}`, "info"),
+            peer !== null &&
+              reachable !== null &&
+              part(`(reachable ${reachable})`, quiet(lvl(ctx, "replication.peerReachable"))),
+          ],
+          [
+            connected !== null &&
+              part(`standby connected ${connected}`, quiet(lvl(ctx, "replication.standbyConnected"))),
+          ],
+        );
       },
     },
     {
@@ -202,15 +221,24 @@ export const forgejoHa: Profile = {
           },
         },
       ],
-      summary: (ctx) => {
+      // SERVE · timelines 1/1 · peer is a standby · peer standby
+      summaryParts: (ctx) => {
+        const decision = str(ctx, "fence.decision");
         const timeline = text(ctx, "fence.timeline");
+        const reason = str(ctx, "fence.reason");
         const peerRole = str(ctx, "fence.peerRole");
-        return join([
-          str(ctx, "fence.decision")?.toUpperCase() ?? null,
-          timeline && `timelines ${timeline}/${text(ctx, "fence.peerTimeline") ?? "-"}`,
-          str(ctx, "fence.reason"),
-          peerRole && `peer ${peerRole}`,
-        ]);
+        return runs(
+          [decision !== null && part(decision.toUpperCase(), lvl(ctx, "fence.decision"), true)],
+          [
+            timeline !== null &&
+              part(
+                `timelines ${timeline}/${text(ctx, "fence.peerTimeline") ?? "-"}`,
+                quiet(lvl(ctx, "fence.peerTimeline")),
+              ),
+          ],
+          [reason !== null && part(reason, "info")],
+          [peerRole !== null && part(`peer ${peerRole}`, "info")],
+        );
       },
     },
     {
@@ -253,26 +281,39 @@ export const forgejoHa: Profile = {
         { key: "size", label: "Size", format: "bytes" },
         { key: "durationS", label: "Duration", format: "duration" },
       ],
-      summary: (ctx) => {
+      // 5e7d0a42 26 min ago · 73.7 MiB in 18 s · ok · next in 23 h 32 min
+      summaryParts: (ctx) => {
+        const snapshot = str(ctx, "backup.snapshot");
         const result = str(ctx, "backup.lastResult");
         const last = ageOf(ctx, "backup.lastAt");
         const next = ageOf(ctx, "backup.nextAt");
         const size = num(ctx, "backup.size");
         const took = num(ctx, "backup.durationS");
         const failed = str(ctx, "backup.failedStep");
-        return join([
-          str(ctx, "backup.snapshot"),
-          last !== null && formatRelative(Math.max(0, last)),
+        const amount =
           [
             size !== null ? formatBytes(size) : str(ctx, "backup.size"),
             took !== null && `in ${formatDuration(took)}`,
           ]
             .filter(Boolean)
-            .join(" ") || null,
-          result === "none" ? "no backup yet" : result,
-          failed && `failed at ${failed}`,
-          next !== null && `next ${next >= 0 ? "due now" : formatRelative(next)}`,
-        ]);
+            .join(" ") || null;
+        return runs(
+          [
+            snapshot !== null && part(snapshot, lvl(ctx, "backup.lastResult")),
+            last !== null && part(formatRelative(Math.max(0, last)), quiet(lvl(ctx, "backup.lastAt"))),
+          ],
+          [amount !== null && part(amount, "info")],
+          [
+            result !== null &&
+              part(result === "none" ? "no backup yet" : result, quiet(lvl(ctx, "backup.lastResult"))),
+          ],
+          [failed !== null && part(`failed at ${failed}`, "crit")],
+          [
+            next !== null && part("next", "info"),
+            next !== null &&
+              part(next >= 0 ? "due now" : formatRelative(next), quiet(lvl(ctx, "backup.nextAt"))),
+          ],
+        );
       },
     },
     {
@@ -314,16 +355,17 @@ export const forgejoHa: Profile = {
           },
         },
       ],
-      summary: (ctx) => {
+      // 2 of 2 online · offline none · runner-1 (idle), watch-1 (idle)
+      summaryParts: (ctx) => {
         const online = num(ctx, "runners.online");
         const total = num(ctx, "runners.total");
         const offline = str(ctx, "runners.offline");
         const list = str(ctx, "runners.list");
-        return join([
-          online !== null && (total !== null ? `${online} of ${total} online` : `${online} online`),
-          offline !== null && offline !== "none" && `offline ${offline}`,
-          list && runnerList(list),
-        ]);
+        return runs(
+          [online !== null && part(total !== null ? `${online} of ${total} online` : `${online} online`)],
+          [offline !== null && part(`offline ${offline}`, quiet(lvl(ctx, "runners.offline")))],
+          [list !== null && part(runnerList(list), "info")],
+        );
       },
     },
     {
@@ -345,16 +387,17 @@ export const forgejoHa: Profile = {
         { key: "usedBytes", label: "Used", format: "bytes", foldedInto: "display" },
         { key: "sizeBytes", label: "Size", format: "bytes", foldedInto: "display" },
       ],
-      summary: (ctx) => {
+      // 12G / 79G (16%), coloured by the percentage's level
+      summaryParts: (ctx) => {
         const used = num(ctx, "disk.usedBytes");
         const size = num(ctx, "disk.sizeBytes");
         const percent = num(ctx, "disk.percent");
-        return (
-          str(ctx, "disk.display") ??
-          join([
-            used !== null && size !== null && `${formatBytes(used)} / ${formatBytes(size)}`,
-            percent !== null && `${percent}%`,
-          ])
+        const level = lvl(ctx, "disk.percent");
+        const display = str(ctx, "disk.display");
+        if (display !== null) return [part(display, level)];
+        return runs(
+          [used !== null && size !== null && part(`${formatBytes(used)} / ${formatBytes(size)}`, level)],
+          [percent !== null && part(`${percent}%`, level)],
         );
       },
     },
@@ -376,7 +419,11 @@ export const forgejoHa: Profile = {
         },
         { key: "httpCode", label: "HTTP status", format: "number", foldedInto: "reachable" },
       ],
-      summary: watchdogText,
+      // reachable (HTTP 200)
+      summaryParts: (ctx) => {
+        const status = watchdogText(ctx);
+        return status === null ? null : [part(status, lvl(ctx, "watchdog.reachable"))];
+      },
     },
   ],
   highlights: [{ fact: "watchdog.reachable", label: "watchdog" }],

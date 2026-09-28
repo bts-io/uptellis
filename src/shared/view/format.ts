@@ -1,4 +1,14 @@
 /** Small pure formatters shared by the view-model modules (no clock reads: every age is passed in). */
+import type { Level } from "./types";
+
+const LEVEL_RANK: Record<Level, number> = { crit: 0, warn: 1, ok: 2, info: 3 };
+
+/** The worse of two levels; `info` loses to any other level, null to anything. */
+export function worse(a: Level | null, b: Level | null): Level | null {
+  if (a === null) return b;
+  if (b === null) return a;
+  return LEVEL_RANK[a] <= LEVEL_RANK[b] ? a : b;
+}
 
 export const toMs = (t: Date | number | string) =>
   t instanceof Date ? t.getTime() : typeof t === "number" ? t : Date.parse(t);

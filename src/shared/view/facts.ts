@@ -17,17 +17,9 @@ import {
   humanize,
   iso,
   toMs,
+  worse,
 } from "./format";
-import type { FactGroupView, FactRowView, HighlightView, Level } from "./types";
-
-const LEVEL_RANK: Record<Level, number> = { crit: 0, warn: 1, ok: 2, info: 3 };
-
-/** The worse of two levels; `info` loses to any other level, null to anything. */
-export function worse(a: Level | null, b: Level | null): Level | null {
-  if (a === null) return b;
-  if (b === null) return a;
-  return LEVEL_RANK[a] <= LEVEL_RANK[b] ? a : b;
-}
+import type { FactGroupView, FactRowView, HighlightView, Level, SummaryPartView } from "./types";
 
 /** Display order of the built-in profiles' groups (`FactGroupDef.order`); undeclared groups follow alphabetically. */
 export const FACT_GROUP_ORDER = listProfiles()
@@ -190,6 +182,22 @@ function declarations(profiles: readonly Profile[]): Map<string, GroupDecl> {
   return out;
 }
 
+/** A group's summary line and its parts: each derived from the other when the profile gives only one. */
+function summaryOf(
+  def: FactGroupDef | undefined,
+  ctx: ProfileContext,
+): Pick<FactGroupView, "summary" | "summaryParts"> {
+  const given = def?.summaryParts?.(ctx);
+  const text = def?.summary?.(ctx) ?? null;
+  if (given?.length) {
+    const summaryParts = given.map(
+      (p): SummaryPartView => ({ text: p.text, level: p.level, emphasis: p.emphasis ?? false }),
+    );
+    return { summary: text ?? summaryParts.map((p) => p.text).join(" "), summaryParts };
+  }
+  return { summary: text, summaryParts: text === null ? [] : [{ text, level: null, emphasis: false }] };
+}
+
 /** Groups, rows, highlights and the headline for facts that are already one per `group.key` (see `latestFacts`). */
 export function buildFactViews(facts: Iterable<Fact>, ctx: FactViewContext): FactViews {
   const profiles = ctx.profiles ?? listProfiles();
@@ -230,7 +238,7 @@ export function buildFactViews(facts: Iterable<Fact>, ctx: FactViewContext): Fac
         id,
         title: decl?.def.title ?? humanize(id),
         icon: decl?.def.icon ?? null,
-        summary: decl?.def.summary?.(pctx) ?? null,
+        ...summaryOf(decl?.def, pctx),
         level: rows.reduce<Level>(
           (w, r) => (r.level === null || r.level === "info" ? w : (worse(w, r.level) ?? w)),
           "ok",

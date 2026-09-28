@@ -1,5 +1,5 @@
 import { isNewer } from "../view/version";
-import { own, str } from "./read";
+import { bool, own, part, runs, str } from "./read";
 import type { Profile } from "./types";
 
 /** What the Kuma collector reports about the Uptime Kuma instance it reads (group `kuma`). */
@@ -26,10 +26,16 @@ export const uptimeKuma: Profile = {
         { key: "timezone", label: "Timezone", format: "text" },
         { key: "dbSize", label: "Database size", format: "number" },
       ],
-      summary: (ctx) => {
+      // 2.5.5 on watch-1, "unreachable" in red while the collector cannot reach it
+      summaryParts: (ctx) => {
         const version = str(ctx, "kuma.version");
         const host = str(ctx, "kuma.host");
-        return [version, host && `on ${host}`].filter(Boolean).join(" ") || null;
+        const reachable = bool(ctx, "kuma.reachable");
+        return runs([
+          version !== null && part(version),
+          host !== null && part(`on ${host}`, "info"),
+          reachable === false && part("unreachable", "crit"),
+        ]);
       },
     },
   ],

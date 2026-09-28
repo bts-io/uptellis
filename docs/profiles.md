@@ -3,7 +3,7 @@
 A **profile** teaches Uptellis about one kind of system. Producers push typed facts in named groups (`forgejo.version`, `replication.lagSeconds`); the Worker stores them without knowing what they mean. A profile says what they mean:
 
 - which **groups and keys** its producer sends, with a label, a format, a unit and a level for each key;
-- how to **fold** keys into others (`runners.total` into `runners.online` as "2 of 2") and a one-line **summary** per group;
+- how to **fold** keys into others (`runners.total` into `runners.online` as "2 of 2") and a one-line **summary** per group, as a string or as coloured **summary parts**;
 - which facts deserve a place in a theme's summary (**highlights**, with an optional badge), and one **headline** sentence;
 - how facts **shape the topology**: node states, notes and card rows, edge liveness and detail, the fence stamp;
 - where its **producer's install guide** lives.
@@ -55,6 +55,21 @@ The order matters: the first profile that declares a group sets its title, icon,
 
 A format that does not fit the value's type (for example `bytes` on the string "1.2 GiB") falls back to the inferred one. A key's `display` hook overrides the text; its `level` hook gives the row's level, and the row shows the worse of that and the producer's own severity.
 
+## Summary parts
+
+A group's summary is one line for a compact row. `summary` gives it as a string; `summaryParts` (contract addition) gives it as parts that a theme colours: `{ text, level, emphasis? }`, where `ok`, `warn` and `crit` take their state colours, `info` is secondary text, a null level is plain and `emphasis` is bold. Themes put a space between parts, so a separator is a part of its own. With only parts, the summary string is their texts joined by spaces; with only a string, the view makes it one plain part.
+
+`src/shared/profiles/read.ts` has helpers: `part(text, level, emphasis)`, `runs(...)` (joins runs of parts with a secondary "·" and drops missing parts), `keyLevel(ctx, groups, "group.key")` (a fact's level as its row shows it) and `quiet(level)` (secondary text unless the level warns or fails). `forgejo-ha` builds its lines this way:
+
+```ts
+summaryParts: (ctx) =>
+  runs(
+    [part(version)],                                          // 16.0.5, plain
+    [part("HTTP 200", keyLevel(ctx, groups, "forgejo.healthzCode"))], // green, red when failing
+    [part("serving app-1", "info")],                          // secondary
+  ), // 16.0.5 · HTTP 200 · serving app-1
+```
+
 ## Writing a profile
 
 1. Write the producer: anything that signs and POSTs a `FactsPayload` to `/api/ingest/facts` (see [profiles/forgejo-ha/push-facts.sh](../profiles/forgejo-ha/push-facts.sh) for a complete one). Keep group and key names stable: they are the contract between the producer and the profile.
@@ -99,4 +114,4 @@ export const acmeQueue: Profile = {
 
 ## How themes use it
 
-Themes read the result, never the profile: `factGroups` (title, icon, summary, level and rows), `highlights` (label, row and note; highlights sharing a label form one summary slot), `headline`, and `topology` (node notes and `details`, edge `live` and `detail`, the fence). See [THEMES.md](THEMES.md#facts-highlights-and-topology).
+Themes read the result, never the profile: `factGroups` (title, icon, summary and its parts, level and rows), `highlights` (label, row and note; highlights sharing a label form one summary slot), `headline`, and `topology` (node notes and `details`, edge `live` and `detail`, the fence). See [THEMES.md](THEMES.md#facts-highlights-and-topology).

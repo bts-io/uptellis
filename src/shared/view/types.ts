@@ -216,12 +216,25 @@ export interface FactGroupView {
   icon: string | null;
   /** One line that sums the group up (`FactGroupDef.summary`), for compact rows; null when none. */
   summary: string | null;
+  /**
+   * The same line as parts coloured by level (contract addition), from `FactGroupDef.summaryParts`,
+   * else `summary` as one plain part; empty when the group has no summary. Render them in order with a
+   * space between: a non-null `level` colours a part (`info` is secondary text), `emphasis` sets it bold.
+   */
+  summaryParts: SummaryPartView[];
   /** Worst row severity (`info` rows do not raise it). */
   level: Level;
   observedAt: string;
   /** False once the newest row is older than its `freshForS`. */
   fresh: boolean;
   rows: FactRowView[];
+}
+
+/** One piece of a group's summary line (see `FactGroupView.summaryParts`). */
+export interface SummaryPartView {
+  text: string;
+  level: Level | null;
+  emphasis: boolean;
 }
 
 export interface FactRowView {
