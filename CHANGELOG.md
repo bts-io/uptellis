@@ -2,6 +2,23 @@
 
 All notable changes to Uptellis are recorded here. The format follows [Conventional Commits](https://www.conventionalcommits.org) and the project uses [Semantic Versioning](https://semver.org). Each release adds its section in the release PR, from the Conventional Commits since the previous tag.
 
+## 0.4.0 (2026-09-29)
+
+### Features
+
+* Notification channels ([docs/monitors.md](docs/monitors.md#cards)): `notify.channels` per site, of type `discord`, `slack`, `webhook` (signed with HMAC-SHA256 as `X-Uptellis-Signature: t=...,v1=...`), `ntfy`, `telegram` or `email`, each with the events it wants (`down`, `up`, `stale`, `recovered`) and an optional service filter. Channels name their secrets (`NOTIFY_*`); values never enter the config.
+* One alert message for every channel, sent once per channel and incident transition (the delivery log in the `notifications` table). Retryable failures are retried with backoff and then by the five-minute job for up to an hour, and a failing channel never blocks the others.
+* Email through Cloudflare Email Service: the `send_email` binding on Cloudflare (`DEPLOY_EMAIL_FROM` in `bun run deploy:config` turns it on), and the Email Service REST API or SMTP in Docker.
+* Public status ([docs/public.md](docs/public.md)): `GET /api/public/:site/summary.json` with only the parts `public.fields` allows, shields-style SVG badges for the site and each service (status or 90-day uptime), and an embeddable widget (`/embed/:site` for an iframe, `/embed.js` for a script). Only for public sites with `public.enabled`; private sites are always 404.
+* Admin: a channel editor with "send test" per channel, the delivery log, and public settings with the badge and embed snippets.
+* `POST /api/admin/notify/test` takes `channel=<id>`.
+
+### Compatibility
+
+* A site without `notify.channels` behaves as before: stale and recovered Discord cards on `DISCORD_WEBHOOK_URL`, and down and up cards when `notify.discord` is on.
+* Migration 0006 adds the channel and retry columns to `notifications`; existing rows belong to the historical Discord channel.
+* `notify.webhooks` was never read and is now documented as unused; use `channels`.
+
 ## 0.3.1 (2026-09-28)
 
 ### Bug Fixes
