@@ -536,6 +536,7 @@ function refineTopology(ctx: ProfileContext, topology: TopologyView): TopologyVi
   });
 
   const decision = str(ctx, "fence.decision");
+  const timeline = text(ctx, "fence.timeline");
   return {
     nodes,
     edges: topology.edges.map((e) =>
@@ -544,6 +545,11 @@ function refineTopology(ctx: ProfileContext, topology: TopologyView): TopologyVi
     fence:
       decision === null
         ? topology.fence
-        : { decision, reason: str(ctx, "fence.reason"), level: decision === "serve" ? "ok" : "crit" },
+        : {
+            decision,
+            reason: str(ctx, "fence.reason"),
+            level: decision === "serve" ? "ok" : "crit",
+            detail: timeline === null ? null : `tl ${timeline}/${text(ctx, "fence.peerTimeline") ?? "-"}`,
+          },
   };
 }

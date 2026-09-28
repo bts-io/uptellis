@@ -199,7 +199,12 @@ describe("fixtures", () => {
       live: false,
       detail: "no standby streaming",
     });
-    expect(t.fence).toEqual({ decision: "serve", reason: "peer is a standby", level: "ok" });
+    expect(t.fence).toEqual({
+      decision: "serve",
+      reason: "peer is a standby",
+      level: "ok",
+      detail: "tl 1/-",
+    });
     expect(inc.factGroups.find((g) => g.id === "replication")!.level).toBe("warn");
   });
 

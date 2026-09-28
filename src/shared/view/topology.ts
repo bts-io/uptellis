@@ -59,6 +59,7 @@ export function buildTopology({
   const stateOf = new Map(refined.nodes.map((n) => [n.id, n.state]));
   return {
     ...refined,
+    fence: refined.fence && { ...refined.fence, detail: refined.fence.detail ?? null },
     edges: refined.edges.map((e) =>
       edges.includes(e) ? { ...e, live: stateOf.get(e.from) === "up" && stateOf.get(e.to) === "up" } : e,
     ),

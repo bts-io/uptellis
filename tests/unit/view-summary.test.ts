@@ -124,3 +124,24 @@ describe("highlight prefixes", () => {
     expect(kuma.texts).toEqual(["2.5.5", "db 41.2 MB"]);
   });
 });
+
+describe("fence detail", () => {
+  it("stamps the timelines the fence compared", () => {
+    expect(view("default").topology!.fence).toMatchObject({ decision: "serve", detail: "tl 1/1" });
+    expect(view("incident").topology!.fence!.detail).toBe("tl 1/-");
+  });
+
+  it("is null when no profile gives one", () => {
+    registerProfile({
+      id: "bare-fence",
+      name: "Bare fence",
+      description: "A fence without a detail.",
+      groups: [],
+      topology: (_ctx, t) => ({ ...t, fence: { decision: "hold", reason: null, level: "warn" } }),
+    });
+    const v = view("default", (i) => {
+      i.config = { ...i.config, profiles: ["bare-fence"] };
+    });
+    expect(v.topology!.fence).toEqual({ decision: "hold", reason: null, level: "warn", detail: null });
+  });
+});

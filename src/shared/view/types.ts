@@ -199,7 +199,17 @@ export interface TopologyView {
     detail: string | null;
   }[];
   /** From the `fence` fact group; null when the site has no fence facts. */
-  fence: { decision: string; reason: string | null; level: Level } | null;
+  fence: {
+    decision: string;
+    reason: string | null;
+    level: Level;
+    /**
+     * A short stamp detail from the profile (contract addition), e.g. "tl 1/1" for the timelines the fence
+     * compared. The view-model always sets it (null when no profile gives one); it is optional only so
+     * topology hooks written before it still type-check.
+     */
+    detail?: string | null;
+  } | null;
 }
 
 export interface HighlightView {

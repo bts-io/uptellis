@@ -5,7 +5,7 @@ A **profile** teaches Uptellis about one kind of system. Producers push typed fa
 - which **groups and keys** its producer sends, with a label, a format, a unit and a level for each key;
 - how to **fold** keys into others (`runners.total` into `runners.online` as "2 of 2") and a one-line **summary** per group, as a string or as coloured **summary parts**;
 - which facts deserve a place in a theme's summary (**highlights**, with an optional badge), and one **headline** sentence;
-- how facts **shape the topology**: node states, notes and card rows, edge liveness and detail, the fence stamp;
+- how facts **shape the topology**: node states, notes and card rows, edge liveness and detail, the fence stamp and its detail (`fence.detail`, contract addition, e.g. "tl 1/1");
 - where its **producer's install guide** lives.
 
 The view-model and the themes never name a group or key. They apply the active profiles and render what those declare, so adding a profile needs no view-model or theme change.
