@@ -4,6 +4,7 @@ dist-docker/
 .wrangler/
 .dev.vars
 .env*
+docker.env
 !.dev.vars.example
 *.log
 .DS_Store

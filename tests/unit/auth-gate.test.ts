@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { can, type Principal } from "@/shared/auth";
+import { type AuthPlatform, authProviders, baseUrl } from "@/worker/auth/instance";
 import { LEGACY_SECRETS, warnLegacyKeys } from "@/worker/auth/legacy";
 import { hashToken, randomId, randomToken } from "@/worker/auth/tokens";
 import { isAdminPath, pageGate } from "@/worker/middleware/auth-gate";
@@ -88,5 +89,26 @@ describe("legacy key notice", () => {
     expect(line.set).toEqual(["VIEWER_KEY", "ADMIN_KEY"]);
     expect(line.message).toContain("/setup");
     expect(LEGACY_SECRETS).toContain("VIEWER_COOKIE_SECRET");
+  });
+});
+
+describe("sign-in methods", () => {
+  const platform = (values: Record<string, string>) =>
+    ({ setting: (n: string) => values[n], secret: (n: string) => values[n] }) as unknown as AuthPlatform;
+
+  it("offer GitHub and Google only when both the client id and the secret are set", () => {
+    expect(authProviders(platform({}))).toEqual({ emailPassword: true, github: false, google: false });
+    expect(authProviders(platform({ GITHUB_CLIENT_ID: "id" }))).toMatchObject({ github: false });
+    expect(authProviders(platform({ GOOGLE_CLIENT_SECRET: "s" }))).toMatchObject({ google: false });
+    expect(
+      authProviders(platform({ GITHUB_CLIENT_ID: "id", GITHUB_CLIENT_SECRET: "s", GOOGLE_CLIENT_ID: "id" })),
+    ).toEqual({ emailPassword: true, github: true, google: false });
+  });
+
+  it("take the base URL from PUBLIC_URL, else the request", () => {
+    expect(baseUrl(platform({ PUBLIC_URL: "https://status.example.com/" }), "http://localhost:3000/x")).toBe(
+      "https://status.example.com",
+    );
+    expect(baseUrl(platform({}), "http://localhost:3000/x")).toBe("http://localhost:3000");
   });
 });
