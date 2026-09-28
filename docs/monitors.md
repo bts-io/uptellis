@@ -83,7 +83,20 @@ Weekly windows use the given time zone, including daylight saving changes, and m
 
 ## Cards
 
-With `notify.discord` on (admin, Config, "Alerts") and the `DISCORD_WEBHOOK_URL` secret set, a service going `down` posts a red card (service, target, runner, since, reason). Its recovery posts a green card with the outage duration. Each card is sent once per incident. A service in a maintenance window sends none. Cards for silent sources work as before.
+Every transition (a service `down` and back `up`, a source `stale` and `recovered`) becomes one alert message, sent to every notification channel of the site that wants it (`notify.channels`: Discord, Slack, a signed webhook, ntfy, Telegram or email; each with its `events`, and for `down` and `up` optionally its `services`). The contract is in [contracts/phase-6b.md](contracts/phase-6b.md).
+
+- **Discord** keeps the cards it always had: a red card for `down` (service, target, runner, since, reason), a green one with the outage duration for `up`, a dark red one for a silent source (last report, expected interval, still reporting) and a green one when it is back (silent for, beats backfilled).
+- **Slack** gets the same facts in Block Kit with the event's colour, **ntfy** a text notification (priority 5 for down, 4 for stale, 3 for back, a click to the status page), **Telegram** an HTML message, **email** a plain text and an HTML part (subject `[Uptellis] Checkout is down`).
+- **Webhook** gets the message itself as JSON, signed with HMAC-SHA256 (`X-Uptellis-Signature: t=<unix>,v1=<hex>` over `<t>.<body>`), with `X-Uptellis-Event` and an `X-Uptellis-Delivery` id that stays the same across retries of one delivery.
+
+Without configured channels a site behaves as before: the historical Discord channel on `DISCORD_WEBHOOK_URL` gets `stale` and `recovered` always, and `down` and `up` when `notify.discord` is on (admin, Config, "Alerts").
+
+Rules that hold on every channel:
+
+- Each transition is sent at most once per channel (the delivery log, the `notifications` table, one row per incident, transition and channel).
+- A service in a maintenance window when its incident starts sends no `down` anywhere. An `up` (or `recovered`) goes to a channel only if its `down` (or `stale`) was sent there or may still be. A source removed from the config is resolved quietly.
+- A failing channel never holds up the others. A 429, 5xx, timeout or network error is retried up to 3 times within the request (honouring the service's `Retry-After`), then by the five-minute cron for up to an hour; a config problem (404, bad URL, missing secret, `email_unavailable`) is final. The log keeps a short error code, never a URL, token, address or response body.
+- `POST /api/admin/notify/test?site=<slug>&kind=<down|up|stale|recovered>&channel=<id>` sends a TEST message to one channel (any of the site's channels, the implicit `discord` included) and records nothing; without `channel` it posts to `DISCORD_WEBHOOK_URL` as before.
 
 ## Agent API
 

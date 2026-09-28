@@ -40,6 +40,7 @@ Run `bun run verify`, then `bun run deploy`, ideally from CI on merges to your r
 | `ASSETS` | Static Assets | client bundle and fonts from `dist/client` |
 | `INGEST_RATE_LIMIT`, `GATE_RATE_LIMIT`, `ADMIN_WRITE_RATE_LIMIT` | Rate Limiting (namespace ids 1001 to 1003) | see [Rate limits](#rate-limits) |
 | `SITE_DEFAULT` | var | the site a request renders when its host matches no site's `hostnames` |
+| `EMAIL` | Email Service `send_email` (optional, commented out in `wrangler.jsonc`) | the sender of email channels; onboard the sending domain first, then uncomment it and set `EMAIL_FROM`. Without it email channels fail with `email_unavailable` |
 
 ## First run
 
@@ -106,8 +107,9 @@ Worker secrets are set with `bunx wrangler secret put <NAME>`, which prompts for
 | `SOURCE_MASTER_KEY` | 32 random bytes, base64 (`openssl rand -base64 32`): seals the ingest keys stored in D1 | Every key sealed in D1 stops verifying. See [Master key](#master-key) |
 | `INGEST_KEY_<ID>` | Optional env fallback for a producer's HMAC key, used while its key id has no D1 row (binding in `src/worker/ingest/keys.ts`) | Rotate in admin instead, which moves the key into D1 ([Ingest keys](#ingest-keys)); then delete the env secret |
 | `DISCORD_WEBHOOK_URL` | Optional: the Discord webhook the stale and recovered cards (and, for sites with `notify.discord`, the down and up cards) are posted to | In the channel settings create a new webhook, put its URL, send a test card (`POST /api/admin/notify/test`), then delete the old webhook |
+| `NOTIFY_<NAME>` | Optional: what a notification channel names in its config (`secret`, `signingSecret`, `tokenSecret`): a Slack or Discord webhook URL, a webhook endpoint and its signing key, an ntfy topic URL and token, a Telegram bot token. Only names matching `NOTIFY_[A-Z0-9_]` (or `DISCORD_WEBHOOK_URL`) are ever read | Put the new value, send a test to the channel (`POST /api/admin/notify/test?channel=<id>`), then revoke the old one at the service. A webhook's receiver must accept both signing keys while they change |
 
-The Worker only reads secrets; it never logs or returns them. Settings are plain vars: `PUBLIC_URL` (the instance's URL: the base of invite links, the JWT issuer and the origin Better Auth trusts; unset uses each request's origin, fine for local development only), `GITHUB_CLIENT_ID`, `GOOGLE_CLIENT_ID` and `SITE_DEFAULT`.
+The Worker only reads secrets; it never logs or returns them. Settings are plain vars: `EMAIL_FROM` (the default sender address of email channels, on the domain the email sender may send from), `PUBLIC_URL` (the instance's URL: the base of invite links, the JWT issuer and the origin Better Auth trusts; unset uses each request's origin, fine for local development only), `GITHUB_CLIENT_ID`, `GOOGLE_CLIENT_ID` and `SITE_DEFAULT`.
 
 ### Auth secret
 
@@ -156,7 +158,7 @@ Tab **Import and export** exports `sites/<slug>.json` and imports one; run the i
 
 ## A producer is stale
 
-A source is `aging` past 2 times its expected interval and `stale` past 5 times. The 5-minute cron opens a `stale` incident, the page shows the stale banner and, with `DISCORD_WEBHOOK_URL` set, a card is posted. `GET /api/sites/<slug>/sources` (signed in, or with a `read` API key, for a private site) lists each source's age and freshness.
+A source is `aging` past 2 times its expected interval and `stale` past 5 times. The 5-minute cron opens a `stale` incident, the page shows the stale banner and every notification channel of the site that wants `stale` gets an alert (without configured channels: the Discord card, when `DISCORD_WEBHOOK_URL` is set). `GET /api/sites/<slug>/sources` (signed in, or with a `read` API key, for a private site) lists each source's age and freshness.
 
 ```mermaid
 flowchart TD
@@ -203,7 +205,7 @@ The Worker logs JSON lines with an `evt` field, reason codes, ids and counts, an
 | --- | --- | --- |
 | `ingest` | every ingest request | `route`, `status`, `reason` on a rejection, `keyId`, `source`, counts of services, heartbeats, facts, incidents opened and resolved; `step: "key_promoted"` when a rotated key takes over |
 | `cron` | every job run | `job` (`probes`, `fiveMinute`, `daily`), incidents opened and resolved; for probes also sites, checks, down results and failed sites |
-| `notify` | every card | `kind` (`open`, `resolve`), `sent`, the error code on failure |
+| `notify` | every delivery to a channel (and its retries by the five-minute job) | `kind` (`open`, `resolve`), `event`, `channel` (the id), `type`, `sent`, `attempts`, `retry` on a five-minute retry, the error code on failure (`http_404`, `rate_limited`, `timeout`, `secret_missing`, `email_unavailable`, ...); `skipped: "maintenance"` for a suppressed down |
 | `legacy_keys` | once per isolate or process while an old gate secret is still set | `set` (the names), a message pointing at `/setup` |
 | `error` | an unhandled error | `name` only |
 | `scheduler` | Docker: a job failed, or was skipped because its previous run is still going | `job`, `step` (`failed`, `skipped_overlap`), the error `name` |
@@ -249,7 +251,10 @@ Without Docker, the same server runs from a checkout: `bun run build:docker && b
 | Variable | What it does |
 | --- | --- |
 | `SITE_DEFAULT` | the site a request renders when its host matches no site's `hostnames` (default in the image: `demo`) |
-| `BETTER_AUTH_SECRET`, `SOURCE_MASTER_KEY`, `DISCORD_WEBHOOK_URL`, `GITHUB_CLIENT_SECRET`, `GOOGLE_CLIENT_SECRET`, `INGEST_KEY_<ID>` (deprecated) | as in [Secrets](#secrets) |
+| `BETTER_AUTH_SECRET`, `SOURCE_MASTER_KEY`, `DISCORD_WEBHOOK_URL`, `NOTIFY_<NAME>`, `GITHUB_CLIENT_SECRET`, `GOOGLE_CLIENT_SECRET`, `INGEST_KEY_<ID>` (deprecated) | as in [Secrets](#secrets); `NOTIFY_<NAME>` is read when a channel sends, so a new one needs no restart |
+| `EMAIL_FROM` | the default sender address of email channels |
+| `CLOUDFLARE_EMAIL_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | email channels send through the Cloudflare Email Service REST API (a token with Email Sending permission, the account id) when both are set |
+| `SMTP_URL` | otherwise, SMTP: `smtps://user:pass@host:465` (TLS from the start) or `smtp://user:pass@host:587` (STARTTLS when the server offers it; credentials are sent only over TLS or to `localhost`). Percent-encode special characters in the user and password. Without either, email channels fail with `email_unavailable` |
 | `PUBLIC_URL`, `GITHUB_CLIENT_ID`, `GOOGLE_CLIENT_ID` | the public base URL (sign-in links and cookies), and the optional OAuth client ids |
 | `PORT` | the port inside the container (default 3000; the health check follows it) |
 | `DATABASE_PATH` | the SQLite file (default in the image: `/data/uptellis.db`) |
