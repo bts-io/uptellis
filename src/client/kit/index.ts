@@ -13,6 +13,7 @@ export { Gauge } from "./gauge";
 export { Icon, isIconName } from "./icon";
 export { IncidentRail } from "./incident-rail";
 export { KeyValueGrid } from "./key-value-grid";
+export { MaintenanceNotice } from "./maintenance-notice";
 export { Panel } from "./panel";
 export type * from "./props";
 export { Sparkline } from "./sparkline";

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useReducedMotion } from "@/client/effects";
-import { Footer } from "@/client/kit";
+import { Footer, MaintenanceNotice } from "@/client/kit";
 import { sourceName } from "@/shared/view";
 import type { ThemePageProps } from "../types";
 import { ActivityBlock } from "./ActivityBlock";
@@ -47,6 +47,11 @@ export function Page({ view, commit }: ThemePageProps) {
         <div className="overflow-hidden rounded-xl border border-line bg-(--c-window) shadow-[0_0_0_1px_rgb(0_0_0/0.6),0_30px_80px_-30px_color-mix(in_oklab,var(--color-accent)_8%,transparent),0_40px_120px_-40px_color-mix(in_oklab,var(--color-frame)_10%,transparent)]">
           <Header view={view} />
           <main className={isStale(view) ? "[--color-stale:var(--color-faint)]" : undefined}>
+            {!!view.maintenance?.length && (
+              <div className="px-3 pt-3 md:px-4">
+                <MaintenanceNotice windows={view.maintenance} now={view.now} />
+              </div>
+            )}
             {isStale(view) && <CollectorBlock view={view} />}
             {fenceFirst && <TopologyBlock view={view} />}
             <SummaryBlock view={view} />

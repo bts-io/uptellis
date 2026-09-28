@@ -1,4 +1,13 @@
-import { ActivityFeed, EmptyState, Footer, IncidentRail, Panel, StaleBanner, StateDot } from "@/client/kit";
+import {
+  ActivityFeed,
+  EmptyState,
+  Footer,
+  IncidentRail,
+  MaintenanceNotice,
+  Panel,
+  StaleBanner,
+  StateDot,
+} from "@/client/kit";
 import { type SiteView, sourceName } from "@/shared/view";
 import type { ThemePageProps } from "../types";
 import { cx, isStale } from "./format";
@@ -59,6 +68,12 @@ export function Page({ view, commit }: ThemePageProps) {
       {stale && (
         <Wrap className="mt-[22px]">
           <StaleBanner freshness={view.freshness} now={view.now} generatedAt={view.generatedAt} />
+        </Wrap>
+      )}
+
+      {!!view.maintenance?.length && (
+        <Wrap className="mt-[22px]">
+          <MaintenanceNotice windows={view.maintenance} now={view.now} />
         </Wrap>
       )}
 

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { EmptyState, Footer, StaleBanner } from "@/client/kit";
+import { EmptyState, Footer, MaintenanceNotice, StaleBanner } from "@/client/kit";
 import { highlightedGroups, sourceName } from "@/shared/view";
 import type { ThemePageProps } from "../types";
 import { ActivityTile } from "./Activity";
@@ -53,6 +53,7 @@ export function Page({ view, commit }: ThemePageProps) {
       {/* Stale rings in the content read muted; the header and the strip keep the red stale colour. */}
       <main className="relative z-10 [--color-stale:var(--color-muted)]">
         <Wrap className="flex flex-col gap-3 pt-5 pb-10">
+          <MaintenanceNotice windows={view.maintenance} now={view.now} />
           {view.incidents.open.map((incident) => (
             <IncidentRow key={incident.id} view={view} incident={incident} />
           ))}

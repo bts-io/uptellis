@@ -16,6 +16,7 @@ import type {
   FreshnessView,
   IncidentView,
   Level,
+  MaintenanceView,
   SummaryPartView,
   TopologyView,
   VerdictView,
@@ -69,6 +70,12 @@ export interface StaleBannerProps {
   now: string;
   /** Last snapshot time, shown as "showing data from HH:MM:SS UTC". */
   generatedAt: string;
+}
+
+/** Active maintenance windows (contract addition, Phase 6): `SiteView.maintenance` and `SiteView.now`. */
+export interface MaintenanceNoticeProps {
+  windows: MaintenanceView[] | undefined;
+  now: string;
 }
 
 /**
