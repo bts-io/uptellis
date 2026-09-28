@@ -342,13 +342,19 @@ export class D1Store implements Store {
     return (await this.serviceRows(site)).map(rowToService);
   }
 
-  async sweepStaleness(site: string, now: string): Promise<ApplyResult> {
+  async sweepStaleness(site: string, now: string, watched?: ReadonlySet<string>): Promise<ApplyResult> {
     const rows = await this.db.select().from(sources).where(eq(sources.site, site));
     const list = rows.map(rowToSource);
     const seen = list.flatMap((s) => (s.lastSeenAt ? [toMs(s.lastSeenAt)] : []));
     if (seen.length === 0) return empty();
     const known = await this.knownIncidents(site, Math.min(...seen));
-    const transitions = deriveStaleIncidents({ site, sources: list, incidents: known, now });
+    const transitions = deriveStaleIncidents({
+      site,
+      sources: list,
+      incidents: known,
+      now,
+      ...(watched ? { watched } : {}),
+    });
     const stmts = this.incidentStatements(site, transitions, Date.now());
     if (stmts.length === 0) return empty();
     const [first, ...others] = stmts as [Stmt, ...Stmt[]];
@@ -425,7 +431,7 @@ export class D1Store implements Store {
       stmts.push(
         this.db
           .update(incidents)
-          .set({ endedAt: toMs(i.endedAt ?? ""), updatedAt: now })
+          .set({ endedAt: toMs(i.endedAt ?? ""), updatedAt: now, ...(i.notes ? { notes: i.notes } : {}) })
           .where(and(eq(incidents.site, site), eq(incidents.id, i.id), isNull(incidents.endedAt)))
           .returning({ id: incidents.id }),
       );

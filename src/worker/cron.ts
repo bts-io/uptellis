@@ -12,8 +12,9 @@ import { type Db, schema } from "@/worker/db";
 import { changesOf, toIso } from "@/worker/db/util";
 import { D1ConfigStore } from "@/worker/engine/config-store";
 import { D1Store } from "@/worker/engine/d1-store";
+import { RETIRED_NOTE } from "@/worker/engine/incidents";
 import { KvModelCache } from "@/worker/engine/kv-cache";
-import { syncSiteSources } from "@/worker/engine/sites";
+import { getSiteConfig, siteSources, syncSiteSources } from "@/worker/engine/sites";
 import { type BuiltinRun, type BuiltinRunOptions, runBuiltin } from "@/worker/monitors/builtin";
 import { SqlRunnerStates } from "@/worker/monitors/runner-state";
 import { incidentNotifier } from "@/worker/notify";
@@ -151,10 +152,17 @@ export async function runJob(
         );
       }
       for (const site of await store.listSites()) {
-        const r = await store.sweepStaleness(site, toIso(now));
+        // Only the sources the config lists or implies can go stale; a removed one (a retired agent) is
+        // resolved quietly instead of paging forever. A site without a config keeps every source watched.
+        const config = await getSiteConfig(configs, site);
+        const watched = config ? new Set(siteSources(config, platform.runtime).map((s) => s.id)) : undefined;
+        const r = await store.sweepStaleness(site, toIso(now), watched);
         opened.push(...r.incidentsOpened);
         resolved.push(...r.incidentsResolved);
-        await notifier?.notify(site, { opened: r.incidentsOpened, resolved: r.incidentsResolved });
+        await notifier?.notify(site, {
+          opened: r.incidentsOpened,
+          resolved: r.incidentsResolved.filter((i) => i.notes !== RETIRED_NOTE),
+        });
         // Keep latest:<site> in step when a stale incident opened or closed.
         if (r.incidentsOpened.length + r.incidentsResolved.length > 0) {
           await cache.put(await store.loadSiteModel(site, toIso(now)));

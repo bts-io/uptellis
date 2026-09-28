@@ -50,8 +50,12 @@ export interface Store {
   loadHistory?(site: string, now: string): Promise<ServiceDays[]>;
   /** Services' current rows for incident derivation (status before this delta). */
   currentServices(site: string): Promise<Service[]>;
-  /** Mark sources whose freshness crossed into `stale` and open or resolve `stale` incidents. */
-  sweepStaleness(site: string, now: string): Promise<ApplyResult>;
+  /**
+   * Mark sources whose freshness crossed into `stale` and open or resolve `stale` incidents. With `watched`
+   * (the site's configured and implied sources), only those can go stale and the open `stale` incidents of
+   * any other source are resolved as retired (`RETIRED_NOTE` in src/worker/engine/incidents.ts).
+   */
+  sweepStaleness(site: string, now: string, watched?: ReadonlySet<string>): Promise<ApplyResult>;
   /** Keep one raw accepted payload (added at integration: the ingest service records every accepted one). */
   recordSnapshot(input: SnapshotRecord): Promise<void>;
   /** Create or update the site's configured sources (expected intervals); keeps last seen and ok. */

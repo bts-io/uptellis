@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { Fact, Heartbeat, Incident, Service, Source } from "@/shared/model";
 import { schema } from "@/worker/db";
 import { D1Store } from "@/worker/engine/d1-store";
+import { RETIRED_NOTE } from "@/worker/engine/incidents";
 import { KvModelCache, latestKey } from "@/worker/engine/kv-cache";
 import { RECENT_BEATS, type SiteModel } from "@/worker/engine/store";
 import { testPlatform, workerEnv } from "../support/platform";
@@ -277,6 +278,25 @@ describe("D1Store.sweepStaleness", () => {
       { ...swept.incidentsOpened[0], endedAt: "2026-09-27T10:20:00Z" },
     ]);
     expect((await store.loadSiteModel(site, "2026-09-27T10:21:00Z")).openIncidents).toEqual([]);
+  });
+
+  it("resolves a retired source's stale incident with a note and never reopens it", async () => {
+    const site = "t-retired";
+    await store.syncSources(site, [{ id: "kuma:watch-1", kind: "kuma", expectedIntervalS: 60 }]);
+    await store.applyDelta(delta(site, "2026-09-27T10:00:00Z", {}));
+    const open = await store.sweepStaleness(site, "2026-09-27T10:06:00Z");
+    expect(open.incidentsOpened).toHaveLength(1);
+
+    // The source left the config: watched no longer lists it.
+    const retired = await store.sweepStaleness(site, "2026-09-27T10:30:00Z", new Set());
+    expect(retired.incidentsOpened).toEqual([]);
+    expect(retired.incidentsResolved).toEqual([
+      { ...open.incidentsOpened[0], endedAt: "2026-09-27T10:30:00Z", notes: RETIRED_NOTE },
+    ]);
+    const model = await store.loadSiteModel(site, "2026-09-27T11:00:00Z");
+    expect(model.openIncidents).toEqual([]);
+    expect(model.recentIncidents.find((i) => i.sourceId === "kuma:watch-1")?.notes).toBe(RETIRED_NOTE);
+    expect((await store.sweepStaleness(site, "2026-09-27T12:00:00Z", new Set())).incidentsOpened).toEqual([]);
   });
 
   it("keeps the configured interval when a source is touched by ingest", async () => {

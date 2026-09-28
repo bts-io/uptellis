@@ -56,7 +56,16 @@ export interface StaleInput {
   /** Known incidents of the site: at least every open `stale` one. */
   incidents: readonly Incident[];
   now: string;
+  /**
+   * The sources the site watches (configured plus the implied monitor runners). Only these can go stale;
+   * an open `stale` incident of any other source (removed from the config, such as a retired agent) is
+   * resolved at `now` with `RETIRED_NOTE`. Absent: every source is watched.
+   */
+  watched?: ReadonlySet<string>;
 }
+
+/** The note on a `stale` incident resolved because its source is no longer in the config. */
+export const RETIRED_NOTE = "Source removed from the config";
 
 const OPENS: ReadonlySet<ServiceStatus> = new Set(["down"]);
 const CLOSES: ReadonlySet<ServiceStatus> = new Set(["up", "degraded"]);
@@ -175,7 +184,15 @@ export function deriveStaleIncidents(input: StaleInput): IncidentTransitions {
   const out: IncidentTransitions = { opened: [], resolved: [] };
   const now = ms(input.now);
   const known = new Set(input.incidents.map((i) => i.id));
+  const { watched } = input;
+  if (watched) {
+    for (const open of input.incidents) {
+      if (open.kind !== "stale" || open.endedAt || !open.sourceId || watched.has(open.sourceId)) continue;
+      out.resolved.push({ ...open, endedAt: iso(Math.max(now, ms(open.startedAt))), notes: RETIRED_NOTE });
+    }
+  }
   for (const source of [...input.sources].sort((a, b) => a.id.localeCompare(b.id))) {
+    if (watched && !watched.has(source.id)) continue;
     const { open } = subjectState(input.incidents, "stale", (i) => i.sourceId === source.id);
     const freshness = sourceFreshness(source, now);
     if (freshness === "stale" && !open && source.lastSeenAt) {

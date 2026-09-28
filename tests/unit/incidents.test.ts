@@ -8,6 +8,7 @@ import {
   deriveIncidents,
   deriveStaleIncidents,
   isOutdatedDelta,
+  RETIRED_NOTE,
   statusEffect,
 } from "@/worker/engine/incidents";
 
@@ -413,6 +414,62 @@ describe("deriveStaleIncidents", () => {
       now: T("10:33:00"),
     });
     expect(aging.resolved).toHaveLength(1);
+  });
+});
+
+describe("deriveStaleIncidents with watched sources", () => {
+  const src = (id: string, lastSeenAt: string): Source => ({
+    id,
+    site,
+    kind: "probe",
+    expectedIntervalS: 60,
+    lastSeenAt,
+    lastOkAt: lastSeenAt,
+  });
+  const openStale = (sourceId: string, startedAt: string) =>
+    Incident.parse({
+      id: `${sourceId}:${startedAt}`,
+      site,
+      kind: "stale",
+      serviceId: null,
+      sourceId,
+      startedAt,
+      endedAt: null,
+      title: `Source ${sourceId} stale`,
+      notes: null,
+    });
+
+  it("never opens for a source it does not watch", () => {
+    const r = deriveStaleIncidents({
+      site,
+      sources: [src("probe:office-1", T("10:00:00")), src("probe:cf", T("10:00:00"))],
+      incidents: [],
+      now: T("10:06:00"),
+      watched: new Set(["probe:cf"]),
+    });
+    expect(r.opened.map((i) => i.sourceId)).toEqual(["probe:cf"]);
+  });
+
+  it("resolves an unwatched source's open incident at now, noted as retired", () => {
+    const open = openStale("probe:office-1", T("10:05:00"));
+    const r = deriveStaleIncidents({
+      site,
+      sources: [src("probe:office-1", T("10:00:00"))],
+      incidents: [open],
+      now: T("11:00:00"),
+      watched: new Set(),
+    });
+    expect(r).toEqual({ opened: [], resolved: [{ ...open, endedAt: T("11:00:00"), notes: RETIRED_NOTE }] });
+  });
+
+  it("watches everything without a set, as before", () => {
+    const r = deriveStaleIncidents({
+      site,
+      sources: [src("probe:office-1", T("10:00:00"))],
+      incidents: [],
+      now: T("10:06:00"),
+    });
+    expect(r.opened).toHaveLength(1);
   });
 });
 
