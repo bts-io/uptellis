@@ -14,7 +14,7 @@ import { KvModelCache } from "@/worker/engine/kv-cache";
 import { testPlatform, workerEnv } from "../support/platform";
 import { json, pipeline } from "../support/worker-pipeline";
 
-const HEALTH = "https://example.com/api/healthz";
+const HEALTH = "https://example.org/";
 const WEB = "https://example.com/";
 const T0 = Date.parse("2026-09-28T01:00:00Z");
 const minute = (n: number) => T0 + n * 60_000;
@@ -87,7 +87,7 @@ describe("cron: every-minute probes", () => {
       .where(eq(schema.services.site, "demo"))
       .orderBy(asc(schema.services.id));
     expect(services).toEqual([
-      { id: "probe:api-health", kind: "http", target: "example.com/api/healthz" },
+      { id: "probe:api-health", kind: "http", target: "example.org/" },
       { id: "probe:web-app", kind: "http", target: "example.com/" },
     ]);
 

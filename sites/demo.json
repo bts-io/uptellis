@@ -31,7 +31,7 @@
     {
       "id": "api-health",
       "name": "API health (edge)",
-      "url": "https://example.com/api/healthz",
+      "url": "https://example.org/",
       "method": "GET",
       "expectStatus": {
         "min": 200,

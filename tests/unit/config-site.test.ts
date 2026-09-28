@@ -36,7 +36,7 @@ describe("sites/demo.json", () => {
       ["probe:cf", 60],
     ]);
     expect(cfg.probes.map((p) => [p.id, p.url])).toEqual([
-      ["api-health", "https://example.com/api/healthz"],
+      ["api-health", "https://example.org/"],
       ["web-app", "https://example.com/"],
     ]);
     expect(cfg.sections.flatMap((s) => s.services)).toEqual([
