@@ -12,10 +12,12 @@ export function SummaryParts({ parts, stale = false, className }: SummaryPartsPr
           {i > 0 && " "}
           <span
             data-level={p.level ?? undefined}
-            className={cx(
-              p.level && (p.level === "info" || !stale) && TEXT[LEVEL_TONE[p.level]],
-              p.emphasis && "font-semibold",
-            )}
+            className={
+              cx(
+                p.level && (p.level === "info" || !stale) && TEXT[LEVEL_TONE[p.level]],
+                p.emphasis && "font-semibold",
+              ) || undefined
+            }
           >
             {p.text}
           </span>

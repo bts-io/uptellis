@@ -24,7 +24,7 @@ export function CollectorBlock({ view }: { view: SiteView }) {
   // The profiles' highlights (e.g. the watchdog) after them, unless one repeats a label above.
   const slots = highlightSlots(view.highlights).map((slot) => ({
     label: slot.label,
-    value: slot.rows.map((r) => r.display).join(" · "),
+    value: slot.texts.join(" · "),
   }));
   return (
     <Block

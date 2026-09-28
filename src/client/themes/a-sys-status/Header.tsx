@@ -1,19 +1,29 @@
 import { useRef } from "react";
 import { useMatrixRain, useReducedMotion } from "@/client/effects";
 import { Banner, FreshnessChip, Verdict } from "@/client/kit";
-import { type SiteView, sourceName } from "@/shared/view";
+import { highlightSlots, type SiteView, sourceName } from "@/shared/view";
 import { Wrap } from "./Wrap";
+
+/**
+ * What the page reads, from the first highlight slot: its label and its group's summary ("kuma 2.5.5 on
+ * watch-1"), else its value; without highlights, the collector's name.
+ */
+function readsFrom(view: SiteView): string | null {
+  const [first] = highlightSlots(view.highlights);
+  if (!first) {
+    const collector = sourceName(view, "kuma");
+    return collector && `collector ${collector}`;
+  }
+  const summary = view.factGroups.find((g) => g.id === first.rows[0].group)?.summary;
+  return `${first.label} ${summary ?? first.texts[0]}`;
+}
 
 /** Banner, title and subtitle on the left; verdict and freshness on the right; katakana rain behind. */
 export function Header({ view }: { view: SiteView }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const reduced = useReducedMotion();
   useMatrixRain(canvas, { fps: 12, enabled: !reduced });
-  const collector = sourceName(view, "kuma");
-  const subtitle = [
-    (view.branding.tagline ?? view.site.name).toLowerCase(),
-    collector && `collector ${collector}`,
-  ].filter(Boolean);
+  const subtitle = [(view.branding.tagline ?? view.site.name).toLowerCase(), readsFrom(view)].filter(Boolean);
 
   return (
     <header className="relative overflow-hidden border-b border-(--a-line-soft)">

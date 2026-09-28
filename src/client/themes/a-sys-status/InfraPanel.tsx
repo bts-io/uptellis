@@ -1,8 +1,19 @@
 import type { ReactNode } from "react";
-import { Age, EmptyState, FactList, Gauge, Icon, isIconName, Panel, TopologyTile } from "@/client/kit";
+import {
+  Age,
+  EmptyState,
+  FactList,
+  Gauge,
+  Icon,
+  isIconName,
+  Panel,
+  StateDot,
+  SummaryParts,
+  TopologyTile,
+} from "@/client/kit";
 import type { TopologyTileProps } from "@/client/kit/props";
 import { type DisplayState, type FactGroupView, highlightedGroups, type SiteView } from "@/shared/view";
-import { cx, hhmm, LEVEL_TEXT, probeStale } from "./format";
+import { cx, hhmm, LEVEL_STATE, probeStale } from "./format";
 
 /** Topology tile (failover pair, replication edge, fence stamp) over one row per fact group. */
 export function InfraPanel({ view }: { view: SiteView }) {
@@ -58,7 +69,7 @@ export function InfraPanel({ view }: { view: SiteView }) {
             <Icon name={isIconName(g.icon) ? g.icon : "grid"} className="mt-[3px] text-muted" />
             <span className="font-semibold text-accent lowercase">{g.title}</span>
             <div className={cx("min-w-0", !g.fresh && "opacity-70")}>
-              <GroupValue group={g} />
+              <GroupValue group={g} stale={stale || !g.fresh} />
             </div>
           </div>
         ))}
@@ -101,26 +112,44 @@ function nodeRows(view: SiteView, stale: boolean): TopologyTileProps["rows"] {
   return Object.keys(rows).length ? rows : undefined;
 }
 
-/** `peer is a standby · 23:45`: the fence's reason and when the facts probe last reported. */
+/**
+ * `tl 1/1 · peer is a standby · 23:45`: the profile's stamp detail, the fence's reason and when the facts
+ * probe last reported.
+ */
 function fenceDetail(view: SiteView): string | undefined {
   const fence = view.topology?.fence;
   if (!fence) return undefined;
   const probe = view.freshness.perSource.find((s) => s.kind === "facts");
-  return [fence.reason, probe?.lastSeenAt && hhmm(probe.lastSeenAt)].filter(Boolean).join(" · ");
+  return [fence.detail, fence.reason, probe?.lastSeenAt && hhmm(probe.lastSeenAt)]
+    .filter(Boolean)
+    .join(" · ");
 }
 
-/** A group's one-line summary (with a gauge when a row is a percentage), else its rows. */
-function GroupValue({ group }: { group: FactGroupView }) {
-  if (!group.summary) return <FactList rows={group.rows} />;
+/**
+ * A group's summary in coloured parts, else its rows. A percentage row draws a gauge first; otherwise a
+ * line whose first part has no colour of its own (`16.0.5`, `2 of 2 online`) starts with the group's dot.
+ */
+function GroupValue({ group, stale }: { group: FactGroupView; stale: boolean }) {
+  const [lead] = group.summaryParts;
+  if (!lead) return <FactList rows={group.rows} />;
   const gauge = group.rows.find((r) => r.percent !== null);
-  const tone = group.level === "warn" || group.level === "crit" ? LEVEL_TEXT[group.level] : undefined;
-  return (
-    <Inline>
-      {gauge?.percent != null && (
+  if (gauge?.percent != null)
+    return (
+      <Inline>
         <Gauge value={gauge.percent} cells={18} level={gauge.level ?? undefined} label={gauge.label} />
+        <SummaryParts parts={group.summaryParts} />
+      </Inline>
+    );
+  // In the text flow, so a long line wraps under its dot instead of dropping below it.
+  return (
+    <span>
+      {lead.level === null && (
+        <span className="mr-1.5 inline-flex align-middle">
+          <StateDot state={stale ? "stale" : LEVEL_STATE[group.level]} />
+        </span>
       )}
-      <span className={tone}>{group.summary}</span>
-    </Inline>
+      <SummaryParts parts={group.summaryParts} />
+    </span>
   );
 }
 

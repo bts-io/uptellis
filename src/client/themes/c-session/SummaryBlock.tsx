@@ -55,8 +55,8 @@ export function SummaryBlock({ view }: { view: SiteView }) {
                   {slot.note.text}
                 </Small>
               )}
-              {slot.rows.slice(1).map((r) => (
-                <Small key={`${r.group}.${r.key}`}>{r.display}</Small>
+              {slot.texts.slice(1).map((text) => (
+                <Small key={text}>{text}</Small>
               ))}
             </Stat>
           );

@@ -1,4 +1,4 @@
-import { StateDot } from "@/client/kit";
+import { StateDot, SummaryParts } from "@/client/kit";
 import type { FactGroupView, Level, SiteView } from "@/shared/view";
 import { cx, DASH, levelState, probeStale } from "./format";
 import { Chip, Kv, Micro, Tile, TileHead } from "./ui";
@@ -27,8 +27,14 @@ export function GroupTile({
         {chip && <Chip level={group.level}>{chip}</Chip>}
       </TileHead>
       <div className="px-4 pt-2 pb-3.5">
-        {group.summary && <div className="truncate font-mono text-[13px] text-ink">{group.summary}</div>}
-        <div className={cx(group.summary && "mt-2")}>
+        {group.summaryParts.length > 0 && (
+          <SummaryParts
+            parts={group.summaryParts}
+            stale={stale}
+            className="block truncate font-mono text-[13px] text-ink"
+          />
+        )}
+        <div className={cx(group.summaryParts.length > 0 && "mt-2")}>
           {group.rows.map((r) => (
             <Kv key={r.key} k={r.label.toLowerCase()}>
               {r.level && r.level !== "info" && <StateDot state={stale ? "stale" : levelState(r.level)} />}

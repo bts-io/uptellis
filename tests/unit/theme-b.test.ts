@@ -49,7 +49,8 @@ describe("theme B page", () => {
     for (const t of ["Topology", "Response time", ...groups, "Tailnet", "Incidents"])
       expect(html).toContain(t);
     expect(html).toContain("All systems operational");
-    expect(html).toContain("16.0.5 · HTTP 200 · serving app-1");
+    expect(html.replace(/<[^>]+>/g, "")).toContain("16.0.5 · HTTP 200 · serving app-1");
+    expect(html).toMatch(/<span data-level="ok" class="text-up">HTTP 200<\/span>/);
     expect(html).toContain("streaming");
     expect(html.match(/data-check=/g)).toHaveLength(12);
   });

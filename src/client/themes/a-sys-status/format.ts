@@ -37,6 +37,14 @@ export const STATE_TEXT: Record<DisplayState, string> = {
   stale: "text-muted",
 };
 
+/** The dot of a level: ok up, warn degraded, crit down, info unknown. */
+export const LEVEL_STATE: Record<Level, DisplayState> = {
+  ok: "up",
+  warn: "degraded",
+  crit: "down",
+  info: "unknown",
+};
+
 export const healthLevel = (score: number): Level => (score >= 90 ? "ok" : score >= 75 ? "warn" : "crit");
 /** Uptime ratio 0..1: green from 99.9%, amber from 99%. */
 export const uptimeLevel = (ratio: number): Level =>

@@ -1,4 +1,4 @@
-import { EmptyState, Gauge, StateDot } from "@/client/kit";
+import { EmptyState, Gauge, StateDot, SummaryParts } from "@/client/kit";
 import {
   type DisplayState,
   type FactGroupView,
@@ -218,9 +218,11 @@ function InfraFacts({ groups, stale }: { groups: FactGroupView[]; stale: boolean
                   label={gauge.label}
                 />
               )}
-              <span className={tone}>
-                {g.summary ?? g.rows.map((r) => `${r.label} ${r.display}`).join(" · ")}
-              </span>
+              {g.summaryParts.length ? (
+                <SummaryParts parts={g.summaryParts} stale={stale} className={tone} />
+              ) : (
+                <span className={tone}>{g.rows.map((r) => `${r.label} ${r.display}`).join(" · ")}</span>
+              )}
             </span>
           ),
         };

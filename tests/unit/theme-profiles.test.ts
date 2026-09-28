@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { THEMES } from "@/client/themes";
 import type { Fact } from "@/shared/model";
 import { registerProfile } from "@/shared/profiles";
-import { buildSiteView, type SiteView, type ViewInput } from "@/shared/view";
+import { buildSiteView, highlightSlots, type SiteView, type ViewInput } from "@/shared/view";
 import { fixtureInput } from "../fixtures/view";
 
 // Themes name no fact group or key: they render any profile's groups, highlights, headline and topology.
@@ -44,6 +44,35 @@ describe("themes on a site without profiles", () => {
     for (const g of plain.factGroups.filter((x) => !plain.highlights.some((h) => h.row.group === x.id)))
       expect(html.toLowerCase(), g.id).toContain(g.title.toLowerCase());
     expect(html).toMatch(/healthz code/i);
+  });
+});
+
+describe("themes B and C with summary parts, slots and prefixes", () => {
+  const v = viewWith(() => {});
+  const text = (html: string) => html.replace(/<[^>]+>/g, "").replace(/&amp;/g, "&");
+  const literal = (t: string) => t.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+  const shown = v.factGroups.filter((g) => !v.highlights.some((h) => h.row.group === g.id));
+
+  it.each(["b-control-room", "c-session"])(
+    "%s renders every group's coloured parts and every highlight",
+    (id) => {
+      const html = render(id, v);
+      for (const g of shown) {
+        expect(text(html), g.id).toContain(g.summaryParts.map((p) => p.text).join(" "));
+        for (const p of g.summaryParts.filter((x) => x.level === "ok"))
+          expect(html, `${g.id} ${p.text}`).toMatch(
+            new RegExp(`data-level="ok" class="text-up[^"]*">${literal(p.text)}<`),
+          );
+      }
+      for (const slot of highlightSlots(v.highlights))
+        for (const t of slot.texts) expect(text(html), t).toContain(t);
+      expect(text(html)).toContain("db 41.2 MB");
+    },
+  );
+
+  it("theme B still lists every row of every group", () => {
+    const html = text(render("b-control-room", v));
+    for (const r of shown.flatMap((g) => g.rows)) expect(html, `${r.group}.${r.key}`).toContain(r.display);
   });
 });
 

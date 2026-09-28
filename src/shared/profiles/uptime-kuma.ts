@@ -11,7 +11,7 @@ export const uptimeKuma: Profile = {
     {
       id: "kuma",
       title: "Uptime Kuma",
-      icon: "eye",
+      icon: "box",
       order: 80,
       keys: [
         {

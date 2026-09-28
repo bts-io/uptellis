@@ -124,12 +124,7 @@ export function Kpis({ view }: { view: SiteView }) {
                 <Chip level={slot.note.level === "warn" ? "maint" : slot.note.level}>{slot.note.text}</Chip>
               )}
               {(slot.rows.length > 1 || !slot.note) && (
-                <span className="truncate">
-                  {slot.rows
-                    .slice(1)
-                    .map((r) => r.display)
-                    .join(" · ") || DASH}
-                </span>
+                <span className="truncate">{slot.texts.slice(1).join(" · ") || DASH}</span>
               )}
             </Sub>
           </Cell>

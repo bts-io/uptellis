@@ -41,9 +41,74 @@ describe("theme A page", () => {
     expect(html).toContain("collector watch-1");
     // The summary box's highlight slots: the Kuma version with its note, the collector, the watchdog.
     expect(html).toMatch(/>kuma<\/dt><dd[^>]*><span>2\.5\.5<\/span><span class="text-xs text-up">latest</);
+    expect(html).toMatch(
+      /latest<\/span><span class="text-faint">·<\/span><span class="text-muted">db 41\.2 MB</,
+    );
     expect(html).toContain("Asia/Tokyo");
     expect(html).toContain("reachable (HTTP 200)");
     expect(html).toContain("8/8 up");
+  });
+
+  it("reads the summary box in slot order: kuma, then collector and watchdog around the snapshot", () => {
+    const html = render(view("default"));
+    const labels = [...html.matchAll(/<dt[^>]*>(?:<svg.*?<\/svg>)?(?:<span[^>]*>)?([a-z0-9 ]+)</g)].map(
+      (m) => m[1],
+    );
+    const box = labels.slice(0, 9);
+    expect(box).toEqual([
+      "monitors",
+      "avg resp",
+      "kuma",
+      "health",
+      "uptime 24h",
+      "uptime 30d",
+      "collector",
+      "snapshot",
+      "watchdog",
+    ]);
+    // The watchdog is a lone status: it takes its dot.
+    expect(html).toMatch(/>watchdog<\/dt><dd[^>]*><span[^>]*><span role="img" aria-label="up"/);
+  });
+
+  it("names what it reads in the header subline, from the first highlight slot", () => {
+    const html = render(view("default"));
+    expect(html).toMatch(/<p class="mt-2 text-xs text-muted">acme cloud · kuma 2\.5\.5 on watch-1<\/p>/);
+  });
+
+  it("stamps the fence with the timelines", () => {
+    expect(render(view("default"))).toContain("tl 1/1 · peer is a standby · 23:45");
+  });
+
+  it("colours the infra rows part by part, with the group's dot where the line starts plain", () => {
+    const html = render(view("default"));
+    /** The markup of one infra row's value, from its title to the end of the row. */
+    const row = (title: string) => {
+      const at = html.indexOf(`text-accent lowercase">${title}</span>`);
+      return html.slice(at, html.indexOf("</div></div>", at));
+    };
+    // forgejo: the group's dot, the version plain, HTTP 200 green, the rest muted.
+    expect(row("Forgejo")).toMatch(
+      /data-state="up"[^>]*><\/span><\/span><span><span>16\.0\.5<\/span> <span data-level="info" class="text-muted">·<\/span> <span data-level="ok" class="text-up">HTTP 200<\/span>/,
+    );
+    expect(row("Replication")).toMatch(
+      /<span data-level="ok" class="text-up font-semibold">streaming<\/span>/,
+    );
+    expect(row("Fence")).toMatch(/<span data-level="ok" class="text-up font-semibold">SERVE<\/span>/);
+    expect(row("Disk")).toMatch(/<span data-level="ok" class="text-up">12G \/ 79G \(16%\)<\/span>/);
+    expect(row("Runners")).toContain("offline none");
+    // A line that starts plain takes the group's dot; one that starts coloured, or with a gauge, does not.
+    for (const [title, dots] of [
+      ["Forgejo", 1],
+      ["Replication", 0],
+      ["Fence", 0],
+      ["Backup", 0],
+      ["Runners", 1],
+      ["Disk", 0],
+    ] as const)
+      expect(row(title).match(/role="img" aria-label="[^"]*" data-state=/g)?.length ?? 0, title).toBe(dots);
+    const inc = render(view("incident"));
+    expect(inc).toMatch(/<span data-level="warn" class="text-degraded font-semibold">none<\/span>/);
+    expect(inc).toMatch(/<span data-level="warn" class="text-degraded">\(reachable no\)<\/span>/);
   });
 
   it("keeps infra before monitors in document order (the phone order)", () => {

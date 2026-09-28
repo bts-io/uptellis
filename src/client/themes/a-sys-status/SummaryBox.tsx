@@ -1,8 +1,15 @@
 import type { ReactNode } from "react";
 import { Age, Gauge, isIconName, KeyValueGrid, Panel, StateDot } from "@/client/kit";
 import type { IconName } from "@/client/kit/props";
-import { type DisplayState, highlightSlots, type Level, type SiteView } from "@/shared/view";
-import { cx, DASH, healthLevel, hhmmss, isStale, LEVEL_TEXT, pct, uptimeLevel } from "./format";
+import {
+  type DisplayState,
+  type HighlightSlot,
+  highlightSlots,
+  type Level,
+  type SiteView,
+  SUMMARY_SLOTS,
+} from "@/shared/view";
+import { cx, DASH, healthLevel, hhmmss, isStale, LEVEL_STATE, LEVEL_TEXT, pct, uptimeLevel } from "./format";
 
 /** A group's icon from its profile, else the grid. */
 const groupIcon = (view: SiteView, group: string): IconName => {
@@ -15,8 +22,8 @@ const levelText = (level: Level | null) =>
   level === "warn" || level === "crit" ? LEVEL_TEXT[level] : undefined;
 
 /**
- * The `[ sys.status ]` key/value box: the monitor figures, then one cell per highlight slot of the active
- * profiles; three columns on desktop, one on phones.
+ * The `[ sys.status ]` key/value box: the monitor figures and one cell per highlight slot of the active
+ * profiles, all in slot order (`SUMMARY_SLOTS` for the figures); three columns on desktop, one on phones.
  */
 export function SummaryBox({ view }: { view: SiteView }) {
   const s = view.summary;
@@ -24,8 +31,9 @@ export function SummaryBox({ view }: { view: SiteView }) {
   // A legend dot keeps its colour only while the data is live.
   const dot = (state: DisplayState) => <StateDot state={stale ? "stale" : state} />;
 
-  const items: { icon: IconName; label: string; value: ReactNode }[] = [
+  const figures: { slot: number; icon: IconName; label: string; value: ReactNode }[] = [
     {
+      slot: SUMMARY_SLOTS.monitors,
       icon: "grid",
       label: "monitors",
       value: (
@@ -56,6 +64,7 @@ export function SummaryBox({ view }: { view: SiteView }) {
       ),
     },
     {
+      slot: SUMMARY_SLOTS.avgLatency,
       icon: "bolt",
       label: "avg resp",
       value: (
@@ -66,6 +75,7 @@ export function SummaryBox({ view }: { view: SiteView }) {
       ),
     },
     {
+      slot: SUMMARY_SLOTS.health,
       icon: "heart",
       label: "health",
       value: (
@@ -78,16 +88,19 @@ export function SummaryBox({ view }: { view: SiteView }) {
       ),
     },
     {
+      slot: SUMMARY_SLOTS.uptime24h,
       icon: "up",
       label: "uptime 24h",
       value: <UptimeMeter ratio={s.uptime24h} label="uptime 24 hours" />,
     },
     {
+      slot: SUMMARY_SLOTS.uptime30d,
       icon: "clock",
       label: "uptime 30d",
       value: <UptimeMeter ratio={s.uptime30d} label="uptime 30 days" />,
     },
     {
+      slot: SUMMARY_SLOTS.snapshot,
       icon: "camera",
       label: "snapshot",
       value: (
@@ -100,26 +113,49 @@ export function SummaryBox({ view }: { view: SiteView }) {
       ),
     },
     ...highlightSlots(view.highlights).map((slot) => ({
+      slot: slot.slot ?? Number.POSITIVE_INFINITY,
       icon: groupIcon(view, slot.rows[0].group),
       label: slot.label,
-      value: (
-        <>
-          <span className={levelText(slot.rows[0].level)}>{slot.rows[0].display}</span>
-          {slot.note && <span className={cx("text-xs", LEVEL_TEXT[slot.note.level])}>{slot.note.text}</span>}
-          {slot.rows.slice(1).map((r) => (
-            <span key={`${r.group}.${r.key}`} className="text-muted">
-              {r.display}
-            </span>
-          ))}
-        </>
-      ),
+      value: <SlotValue slot={slot} stale={stale} />,
     })),
   ];
+  // Stable: highlights without a slot keep their order after the rest.
+  const items = figures.sort((a, b) => a.slot - b.slot);
 
   return (
     <Panel title="sys.status" exitCode={s.down > 0 ? 1 : 0} className={cx(stale && "border-dashed")}>
       <KeyValueGrid items={items} columns={3} />
     </Panel>
+  );
+}
+
+/**
+ * A highlight slot: the value, its badge, then the details (after a separator when a badge sits between
+ * them), `2.5.5 latest · db 41.2 MB`. A lone value with a level and no badge reads as a status and takes
+ * its dot: `● reachable (HTTP 200)`.
+ */
+function SlotValue({ slot, stale }: { slot: HighlightSlot; stale: boolean }) {
+  const [row] = slot.rows;
+  const details = slot.texts.slice(1);
+  const status = row.level !== null && row.level !== "info" && !slot.note && !details.length;
+  return (
+    <>
+      {status && row.level ? (
+        <Inline>
+          <StateDot state={stale ? "stale" : LEVEL_STATE[row.level]} />
+          <span className={levelText(row.level)}>{slot.texts[0]}</span>
+        </Inline>
+      ) : (
+        <span>{slot.texts[0]}</span>
+      )}
+      {slot.note && <span className={cx("text-xs", LEVEL_TEXT[slot.note.level])}>{slot.note.text}</span>}
+      {slot.note && details.length > 0 && <Sep />}
+      {details.map((text) => (
+        <span key={text} className="text-muted">
+          {text}
+        </span>
+      ))}
+    </>
   );
 }
 
