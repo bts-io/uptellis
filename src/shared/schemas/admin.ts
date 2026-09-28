@@ -15,6 +15,7 @@
  * - `GET    /api/admin/sites/:site/sources`                 -> SourceKeyList
  * - `POST   /api/admin/sites/:site/sources`                 CreateSourceRequest -> IssuedKey (source added to the config as a new revision)
  * - `POST   /api/admin/sites/:site/sources/:keyId/rotate`   -> IssuedKey (the new key is `next`; see KeyState)
+ * - `GET    /api/admin/sites/:site/notifications?limit=50`  -> DeliveryList (`config.edit`; newest first, at most 200)
  */
 import { z } from "zod";
 import { SiteConfig } from "../config";
@@ -135,3 +136,47 @@ export const IssuedKey = z.object({
   slot: z.enum(["current", "next"]),
 });
 export type IssuedKey = z.infer<typeof IssuedKey>;
+
+/**
+ * `GET /api/admin/sites/:site/notifications?limit=50` (`config.edit`, like the notification test): the
+ * site's recent deliveries, newest first, one row per (incident, kind, channel). Never a URL, token, address
+ * or response body: `error` is the provider's short code only.
+ */
+export const DeliveryStatus = z.enum(["pending", "sent", "failed"]);
+export type DeliveryStatus = z.infer<typeof DeliveryStatus>;
+
+export const Delivery = z.object({
+  incidentId: z.string().min(1).max(200),
+  /** The transition as the delivery log stores it (`open`, `resolve`). */
+  kind: z.string().min(1).max(32),
+  /** The channel id (`discord` for the historical channel and rows older than channels). */
+  channel: z.string().min(1).max(64),
+  status: DeliveryStatus,
+  attempts: z.number().int().min(0),
+  /** Whether a failed delivery will be retried (null while pending or once sent). */
+  retryable: z.boolean().nullable(),
+  createdAt: z.string(),
+  sentAt: z.string().nullable(),
+  lastAttemptAt: z.string().nullable(),
+  /** A short error code (`http_404`, `timeout`, `email_unavailable`), null unless failed. */
+  error: z.string().max(64).nullable(),
+});
+export type Delivery = z.infer<typeof Delivery>;
+
+export const DeliveryList = z.object({ deliveries: z.array(Delivery) });
+export type DeliveryList = z.infer<typeof DeliveryList>;
+
+/** Deliveries per page: default and maximum of `limit`. */
+export const DELIVERY_LIMIT = { default: 50, max: 200 } as const;
+
+/**
+ * `POST /api/admin/notify/test?site=&channel=&kind=`: the result of one TEST message to one channel (200 when
+ * sent, 502 when the channel did not take it, with the same body).
+ */
+export const NotifyTestResult = z.object({
+  sent: z.boolean(),
+  status: z.number().int(),
+  error: z.string().nullable(),
+  channel: z.string().optional(),
+});
+export type NotifyTestResult = z.infer<typeof NotifyTestResult>;

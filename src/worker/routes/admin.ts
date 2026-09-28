@@ -9,6 +9,9 @@
  * `currentVersion`; creating or rotating a key without `SOURCE_MASTER_KEY` answers 503 `unavailable`.
  * Secrets appear only in the `IssuedKey` of a create or rotate. Every response is `Cache-Control: no-store`.
  *
+ * `GET /sites/:site/notifications?limit=50` (`config.edit`, like the notification test) lists the site's
+ * recent deliveries, newest first (`DeliveryList`; `limit` 1 to 200, default 50).
+ *
  * `POST /notify/test?kind=stale|recovered|down|up[&site=][&source=][&service=][&channel=]` sends one alert
  * labelled TEST, built from the current state and recorded nowhere. With `channel` (any id of `channelsOf`,
  * the implicit `discord` included; 404 when unknown) it goes through that channel's provider; without it,
@@ -26,6 +29,8 @@ import {
   type ConfigIssue,
   CreateSiteRequest,
   CreateSourceRequest,
+  DELIVERY_LIMIT,
+  type DeliveryList,
   type ImportResult,
   type IssuedKey,
   KeyId,
@@ -39,6 +44,7 @@ import type { AppEnv } from "../app-env";
 import { issueApiKey, listApiKeys, revokeApiKey } from "../auth/api-keys";
 import { authError, principalOf, requirePermission } from "../auth/context";
 import { D1ConfigStore, type SaveOutcome } from "../engine/config-store";
+import { listDeliveries } from "../engine/delivery-log";
 import { KeyStore } from "../engine/key-store";
 import { MasterKeyMissing } from "../engine/seal";
 import { isSameOrigin } from "../middleware/same-origin";
@@ -123,7 +129,12 @@ export function adminRoutes() {
     c.res.headers.set("cache-control", "no-store");
   });
   app.use("/sites", requirePermission("instance.manage"));
-  for (const path of ["/sites/:site/config", "/sites/:site/config/*", "/notify/*"]) {
+  for (const path of [
+    "/sites/:site/config",
+    "/sites/:site/config/*",
+    "/sites/:site/notifications",
+    "/notify/*",
+  ]) {
     app.use(path, requirePermission("config.edit"));
   }
   for (const path of [
@@ -228,6 +239,21 @@ export function adminRoutes() {
         note: `Restored version ${version}`,
       }),
     );
+  });
+
+  app.get("/sites/:site/notifications", async (c) => {
+    const slug = c.req.param("site");
+    if (!(await configs(c).load(slug))) return notFound(c);
+    const raw = c.req.query("limit");
+    const limit = raw === undefined ? DELIVERY_LIMIT.default : Number(raw);
+    if (!Number.isInteger(limit) || limit < 1 || limit > DELIVERY_LIMIT.max) {
+      return fail(c, 400, "invalid", `limit must be 1 to ${DELIVERY_LIMIT.max}`, {
+        issues: [{ path: "limit", message: `Must be a whole number from 1 to ${DELIVERY_LIMIT.max}` }],
+      });
+    }
+    // TODO(p6b-integration): needs migration 0006 (channel, attempts, retryable, last_attempt_at).
+    const deliveries = await listDeliveries(c.var.platform.db, slug, limit);
+    return c.json({ deliveries } satisfies DeliveryList);
   });
 
   app.get("/sites/:site/sources", async (c) => {
