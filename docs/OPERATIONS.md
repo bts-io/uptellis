@@ -214,6 +214,10 @@ In Docker they go to stdout (`docker compose logs -f`). On Cloudflare read them 
 
 Error responses carry a code and a fixed message (`{ "error": "internal", "message": "Something went wrong" }`); ingest rejections add a reason (`missing_headers`, `malformed_headers`, `skew`, `unknown_key`, `bad_signature`, `wrong_source`, and for API keys `bad_api_key`, `scope`) or the error `replay` or the field paths that failed validation, never values.
 
+### Deploying from CI with your own resource ids
+
+The committed `wrangler.jsonc` carries no account or resource ids. For a CI deploy to a known database and namespace, set `DEPLOY_NAME`, `DEPLOY_D1_ID`, `DEPLOY_D1_NAME`, `DEPLOY_KV_ID`, `DEPLOY_PUBLIC_URL` (and optionally `DEPLOY_SITE_DEFAULT`) and run `bun run deploy:config` in the throwaway checkout before `bun run deploy`; it rewrites `wrangler.jsonc` there with those values. The migrations address the database by its binding (`DB`), so they follow whatever the config names. `.forgejo/workflows/staging.yml` is the maintainers' example: it deploys `staging` to a staging Worker on every push, with the ids in repository variables.
+
 ## Docker
 
 The image runs everything in one Bun process: the status page, the API and admin, the static client files, and its own scheduler for the three jobs of [Crons](#crons) (at the start of each UTC minute; a job never overlaps itself). Data lives in one SQLite file in the `/data` volume. The container runs as the unprivileged `bun` user, listens on port 3000, and reports its health from `/api/health`.

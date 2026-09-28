@@ -34,10 +34,11 @@
     "cf:types": "wrangler types",
     "routes:generate": "bun scripts/routes-generate.mjs",
     "db:generate": "drizzle-kit generate",
-    "db:migrate:local": "wrangler d1 migrations apply uptellis-db --local",
-    "db:migrate:remote": "wrangler d1 migrations apply uptellis-db --remote",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
     "deploy": "bun run db:migrate:remote && bun run build && wrangler deploy",
-    "leak-check": "bash scripts/leak-check.sh"
+    "leak-check": "bash scripts/leak-check.sh",
+    "deploy:config": "bun scripts/deploy-config.ts"
   },
   "dependencies": {
     "@headlessui/react": "^2.2.10",

@@ -44,9 +44,9 @@
   // and add the printed "id" here.
   "kv_namespaces": [{ "binding": "CACHE" }],
 
-  // Cron (src/worker/cron.ts matches these strings exactly): every 5 min downsample heartbeats and sweep
-  // source staleness; daily at 03:17 UTC prune rows past retention; every minute run the edge probes of
-  // public URLs (source probe:cf).
+  // The three scheduled jobs (JOBS in src/platform/types.ts; a unit test checks these match): every 5 min
+  // downsample heartbeats and sweep source staleness; daily at 03:17 UTC prune rows past retention; every
+  // minute run the probes of public URLs.
   "triggers": { "crons": ["*/5 * * * *", "17 3 * * *", "* * * * *"] },
 
   // Rate limits (src/worker/middleware/rate-limit.ts). Counted per Cloudflare location, so they are
