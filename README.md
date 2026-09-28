@@ -14,7 +14,7 @@
   <a href="https://github.com/bts-io/uptellis/pkgs/container/uptellis"><img src="https://img.shields.io/badge/image-ghcr.io-blue?logo=docker&logoColor=white" alt="Container image on GHCR"></a>
 </p>
 
-Uptellis collects health data from the tools you already run, keeps it in one normalized model, and renders it as a fast, server-side rendered status page. Sources sign what they send, the page and its API can be kept private behind a viewer key, and everything is configured from an admin panel with a full revision history.
+Uptellis collects health data from the tools you already run, keeps it in one normalized model, and renders it as a fast, server-side rendered status page. Sources sign what they send, each site's page is public or private behind real accounts, and everything is configured from an admin panel with a full revision history.
 
 ## Features
 
@@ -23,8 +23,10 @@ Uptellis collects health data from the tools you already run, keeps it in one no
 - **Incidents**: a service going down opens an incident and recovery resolves it; a source that stops reporting is flagged stale. The page shows 90 days of history.
 - **Discord alerts**: one card when a source goes silent and one when it recovers, sent at most once however often a check runs.
 - **Admin with revisions**: edit the site as a form or raw JSON, see a diff before saving, restore any earlier revision, import and export the site config.
+- **Accounts and roles**: sign-in with email and password, optionally GitHub or Google (Better Auth); owner, admin and viewer roles; the first account becomes the owner and everyone else joins by a one-time invite. Each site is public or private.
+- **API keys and JWTs**: site-scoped API keys (`ingest`, `read`) for pushers and agents, shown once and revocable; short-lived JWTs for the signed-in user, verifiable by other services through the JWKS at `/api/auth/jwks`.
 - **Key rotation**: ingest keys are created and rotated in admin, stored sealed with AES-GCM, and a rotation switches over when the producer first signs with the new secret.
-- **Rate limits and hardening**: signed ingest (HMAC-SHA256 with replay protection), per-client rate limits on ingest, the key gates and admin writes, body size caps and strict security headers.
+- **Rate limits and hardening**: signed ingest (HMAC-SHA256 with replay protection), per-client rate limits on ingest, sign-in attempts and admin writes, body size caps and strict security headers.
 
 ## Screenshots
 
@@ -82,7 +84,7 @@ Before every push:
 bun run verify   # Biome, typecheck, unit + integration + SSR tests, collector tests
 ```
 
-More in [docs/](docs): [THEMES.md](docs/THEMES.md) (themes and the view model), [profiles.md](docs/profiles.md) (what facts mean: built-in profiles and writing one), [SECURITY.md](docs/SECURITY.md) (threat model, gates, rate limits) and [OPERATIONS.md](docs/OPERATIONS.md) (secrets, rotation, restoring a revision).
+More in [docs/](docs): [THEMES.md](docs/THEMES.md) (themes and the view model), [profiles.md](docs/profiles.md) (what facts mean: built-in profiles and writing one), [SECURITY.md](docs/SECURITY.md) (threat model, accounts, roles, API keys, rate limits) and [OPERATIONS.md](docs/OPERATIONS.md) (first run, OAuth, secrets, rotation, restoring a revision).
 
 ## Branches and releases
 

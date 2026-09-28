@@ -18,7 +18,7 @@ export function warnLegacyKeys(value: (name: string) => string | undefined): voi
     JSON.stringify({
       evt: "legacy_keys",
       set,
-      message: `${set.join(", ")} no longer protect anything: open ${AUTH_PAGES.setup} to create the owner account, then delete them`,
+      message: `${set.join(", ")} ${set.length === 1 ? "is" : "are"} no longer used: open ${AUTH_PAGES.setup} to create the owner account, then remove ${set.length === 1 ? "it" : "them"}`,
     }),
   );
 }
