@@ -36,6 +36,13 @@
       "when": 1790556004249,
       "tag": "0004_accounts",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1790564496297,
+      "tag": "0005_monitors",
+      "breakpoints": true
     }
   ]
 }

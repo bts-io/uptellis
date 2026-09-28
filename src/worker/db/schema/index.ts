@@ -6,6 +6,7 @@ export * from "./incidents";
 export * from "./ingest";
 export * from "./keys";
 export * from "./kv";
+export * from "./monitors";
 export * from "./notifications";
 export * from "./services";
 export * from "./sites";
