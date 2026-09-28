@@ -55,7 +55,7 @@ export const uptimeKuma: Profile = {
           : { text: "latest", level: "ok" };
       },
     },
-    { fact: "kuma.dbSize", label: "kuma", slot: 30 },
+    { fact: "kuma.dbSize", label: "kuma", slot: 30, prefix: "db" },
     { fact: "kuma.host", label: "collector", slot: 70 },
     { fact: "kuma.timezone", label: "collector", slot: 70 },
   ],

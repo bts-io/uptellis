@@ -21,17 +21,23 @@ export const SUMMARY_SLOTS = {
 export interface HighlightSlot {
   label: string;
   rows: [FactRowView, ...FactRowView[]];
+  /** Each row's text as the slot shows it: its display after the highlight's `prefix` ("db 41.2 MB"). */
+  texts: [string, ...string[]];
   note: HighlightView["note"];
   slot: number | null;
 }
+
+const prefixed = (h: HighlightView) => (h.prefix ? `${h.prefix} ${h.row.display}` : h.row.display);
 
 /** `SiteView.highlights` grouped by label, in the order each label first appears (so by slot). */
 export function highlightSlots(highlights: readonly HighlightView[]): HighlightSlot[] {
   const slots: HighlightSlot[] = [];
   for (const h of highlights) {
     const slot = slots.find((s) => s.label === h.label);
-    if (slot) slot.rows.push(h.row);
-    else slots.push({ label: h.label, rows: [h.row], note: h.note, slot: h.slot });
+    if (slot) {
+      slot.rows.push(h.row);
+      slot.texts.push(prefixed(h));
+    } else slots.push({ label: h.label, rows: [h.row], texts: [prefixed(h)], note: h.note, slot: h.slot });
   }
   return slots;
 }

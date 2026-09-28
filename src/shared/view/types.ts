@@ -210,6 +210,8 @@ export interface HighlightView {
   note: { text: string; level: Level } | null;
   /** Its place in the summary (`Highlight.slot`, contract addition); null when the profile gives none. */
   slot: number | null;
+  /** A short word before the value (`Highlight.prefix`, contract addition), e.g. "db"; null for none. */
+  prefix: string | null;
 }
 
 export interface FactGroupView {

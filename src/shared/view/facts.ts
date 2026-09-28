@@ -255,7 +255,13 @@ export function buildFactViews(facts: Iterable<Fact>, ctx: FactViewContext): Fac
     const row = index[h.fact];
     if (row && !seen.has(h.fact)) {
       seen.add(h.fact);
-      highlights.push({ label: h.label, row, note: h.note?.(pctx) ?? null, slot: h.slot ?? null });
+      highlights.push({
+        label: h.label,
+        row,
+        note: h.note?.(pctx) ?? null,
+        slot: h.slot ?? null,
+        prefix: h.prefix ?? null,
+      });
     }
   }
   // Stable: equal slots, and highlights without one, keep the profile order.

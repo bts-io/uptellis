@@ -114,3 +114,13 @@ describe("highlight slots", () => {
     ]);
   });
 });
+
+describe("highlight prefixes", () => {
+  it("names the database size within the Kuma slot", () => {
+    const d = view("default");
+    expect(d.highlights.find((h) => h.row.key === "dbSize")).toMatchObject({ prefix: "db" });
+    expect(d.highlights.find((h) => h.row.key === "version")).toMatchObject({ prefix: null });
+    const kuma = highlightSlots(d.highlights).find((s) => s.label === "kuma")!;
+    expect(kuma.texts).toEqual(["2.5.5", "db 41.2 MB"]);
+  });
+});

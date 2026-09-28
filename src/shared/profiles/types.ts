@@ -94,6 +94,11 @@ export interface Highlight {
    * snapshot 80), so a highlight can sit between them, e.g. 30 after the average response.
    */
   slot?: number;
+  /**
+   * A short word before the value (contract addition), e.g. "db" for "db 41.2 MB" when the database size
+   * is the detail of the Kuma slot; `label` names the slot, `prefix` the value within it.
+   */
+  prefix?: string;
 }
 
 export interface Profile {
