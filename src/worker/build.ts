@@ -4,5 +4,5 @@ export const buildId = () => (typeof __BUILD_ID__ === "string" ? __BUILD_ID__ : 
 export const commitId = () => (typeof __COMMIT__ === "string" ? __COMMIT__ : "dev");
 
 /** Paths the Hono app answers; everything else is a page rendered by TanStack Start. */
-const WORKER_OWNED = /^\/(api|embed)(\/|$)/;
+const WORKER_OWNED = /^\/(?:(?:api|badge|embed)(?:\/|$)|embed\.js$)/;
 export const isWorkerOwned = (pathname: string) => WORKER_OWNED.test(pathname);

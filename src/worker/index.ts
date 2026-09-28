@@ -18,12 +18,14 @@ import { incidentNotifier } from "./notify";
 import { accountRoutes, userRoutes } from "./routes/accounts";
 import { adminRoutes } from "./routes/admin";
 import { agentRoutes } from "./routes/agent";
+import { publicRoutes } from "./routes/public";
 import { readRoutes } from "./routes/read";
 
 /**
- * The Hono app: owns /api/* and /embed/*. src/worker/serve.ts dispatches to it with the request's
- * `AppBindings` (./app-env.ts), and SSR loaders call it in-process. Every `/api/*` request but health first
- * gets its principal (session, API key or anonymous); then ingest (`/api/ingest/*`, HMAC-signed or an API
+ * The Hono app: owns /api/*, /badge/*, /embed/* and /embed.js. src/worker/serve.ts dispatches to it with
+ * the request's `AppBindings` (./app-env.ts), and SSR loaders call it in-process. The public endpoints
+ * (`/api/public/*`, badges and the widget, ./routes/public.ts) are anonymous and come first; every other
+ * `/api/*` request but health first gets its principal (session, API key or anonymous); then ingest (`/api/ingest/*`, HMAC-signed or an API
  * key), the agent API (`/api/agent/v1/*`, an API key with the `agent` scope), Better Auth (`/api/auth/*`),
  * the account routes (`/api/me`, `/api/setup`, `/api/invites/*`), read (`/api/sites/*`, `page.view` per
  * site) and admin (`/api/admin/*`, a permission per route).
@@ -59,6 +61,9 @@ export const monitorsBackend = (platform: Platform) => ({
   ...appBackend(platform),
   runners: new SqlRunnerStates(platform),
 });
+
+// Anonymous by design: mounted before the principal middleware, so no session or key is ever looked at.
+app.route("/", publicRoutes(appBackend));
 
 app.use("/api/*", withPrincipal);
 

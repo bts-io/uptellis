@@ -1,10 +1,10 @@
 /**
  * The request path both entry points share (src/server.ts on Cloudflare, src/platform/docker/entry.ts in
- * Docker): the rate limits (./middleware/rate-limit.ts) run first, then the Hono API owns /api/* and
- * /embed/* (it resolves the principal and enforces permissions itself), and every other request passes the
- * page gate (./middleware/auth-gate.ts) and is server-rendered by TanStack Start. Every answer that turns a
- * request away is counted against the client's gate limit, and every response leaves with the security
- * headers (./middleware/security-headers.ts).
+ * Docker): the rate limits (./middleware/rate-limit.ts) run first, then the Hono API owns /api/*, /badge/*,
+ * /embed/* and /embed.js (it resolves the principal and enforces permissions itself), and every other
+ * request passes the page gate (./middleware/auth-gate.ts) and is server-rendered by TanStack Start. Every
+ * answer that turns a request away is counted against the client's gate limit, and every response leaves
+ * with the security headers (./middleware/security-headers.ts).
  *
  * While a page renders, loaders call the API in-process through `globalThis.__apiBridge`
  * (see src/client/lib/api.ts): same Hono app, same platform, no network hop. A bridged call carries the
