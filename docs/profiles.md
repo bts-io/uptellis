@@ -70,6 +70,10 @@ summaryParts: (ctx) =>
   ), // 16.0.5 · HTTP 200 · serving app-1
 ```
 
+## Highlight slots
+
+A highlight's `slot` (contract addition) places it in a theme's summary: lower slots come first, highlights without a slot follow in profile order. The figures a theme draws itself hold fixed slots (`SUMMARY_SLOTS` in `src/shared/view`: monitors 10, avg response 20, health 40, uptime 24h 50, uptime 30d 60, snapshot 80), so a highlight can sit between two of them. The built-ins use 30 for the Kuma version and database size (after the average response), 70 for the collector's host and timezone (before the snapshot) and 90 for the watchdog (last), which gives theme A's summary box its three columns: monitors, avg resp, kuma | health, uptime 24h, uptime 30d | collector, snapshot, watchdog. Highlights sharing a label form one slot and should share its number.
+
 ## Writing a profile
 
 1. Write the producer: anything that signs and POSTs a `FactsPayload` to `/api/ingest/facts` (see [profiles/forgejo-ha/push-facts.sh](../profiles/forgejo-ha/push-facts.sh) for a complete one). Keep group and key names stable: they are the contract between the producer and the profile.

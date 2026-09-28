@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { registerProfile } from "@/shared/profiles";
-import { buildSiteView, type FactGroupView, type SiteView, type ViewInput } from "@/shared/view";
+import {
+  buildSiteView,
+  type FactGroupView,
+  highlightSlots,
+  type SiteView,
+  SUMMARY_SLOTS,
+  type ViewInput,
+} from "@/shared/view";
 import { fixtureInput } from "../fixtures/view";
 
 // Contract additions after 0.2.1: group summary parts, highlight slots and prefixes, the fence detail.
@@ -58,5 +65,52 @@ describe("group summary parts", () => {
     });
     expect(group(v, "queue").summaryParts).toEqual([{ text: "3 waiting", level: null, emphasis: false }]);
     expect(group(v, "misc")).toMatchObject({ summary: null, summaryParts: [] });
+  });
+});
+
+describe("highlight slots", () => {
+  it("orders highlights by slot: kuma after the average response, collector before the snapshot, watchdog last", () => {
+    const d = view("default");
+    expect(d.highlights.map((h) => [h.label, h.row.key, h.slot])).toEqual([
+      ["kuma", "version", 30],
+      ["kuma", "dbSize", 30],
+      ["collector", "host", 70],
+      ["collector", "timezone", 70],
+      ["watchdog", "reachable", 90],
+    ]);
+    expect(highlightSlots(d.highlights).map((s) => [s.label, s.slot])).toEqual([
+      ["kuma", 30],
+      ["collector", 70],
+      ["watchdog", 90],
+    ]);
+    const own = Object.values(SUMMARY_SLOTS);
+    expect(own.filter((n) => n < 30)).toHaveLength(2);
+    expect(own.filter((n) => n > 30 && n < 70)).toHaveLength(3);
+  });
+
+  it("puts highlights without a slot after the slotted ones, in profile order", () => {
+    registerProfile({
+      id: "slot-less",
+      name: "Slot-less",
+      description: "Highlights without slots.",
+      groups: [],
+      highlights: [
+        { fact: "kuma.timezone", label: "zone" },
+        { fact: "forgejo.version", label: "forgejo" },
+        { fact: "disk.percent", label: "disk", slot: 5 },
+      ],
+    });
+    const v = view("default", (i) => {
+      i.config = { ...i.config, profiles: ["slot-less", "forgejo-ha"] };
+    });
+    expect(v.highlights.map((h) => `${h.label}:${h.slot ?? "-"}`)).toEqual([
+      "disk:5",
+      "kuma:30",
+      "kuma:30",
+      "collector:70",
+      "watchdog:90",
+      "zone:-",
+      "forgejo:-",
+    ]);
   });
 });

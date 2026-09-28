@@ -255,9 +255,12 @@ export function buildFactViews(facts: Iterable<Fact>, ctx: FactViewContext): Fac
     const row = index[h.fact];
     if (row && !seen.has(h.fact)) {
       seen.add(h.fact);
-      highlights.push({ label: h.label, row, note: h.note?.(pctx) ?? null });
+      highlights.push({ label: h.label, row, note: h.note?.(pctx) ?? null, slot: h.slot ?? null });
     }
   }
+  // Stable: equal slots, and highlights without one, keep the profile order.
+  const slotOf = (h: HighlightView) => h.slot ?? Number.POSITIVE_INFINITY;
+  highlights.sort((a, b) => slotOf(a) - slotOf(b));
   let headline: string | null = null;
   for (const p of profiles) {
     headline = p.headline?.(pctx) ?? null;

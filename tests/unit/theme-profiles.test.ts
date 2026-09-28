@@ -103,7 +103,12 @@ describe("a new profile", () => {
       ["Depth", "240 msgs", "warn"],
       ["Consumers", "3", null],
     ]);
-    expect(v.highlights[0]).toMatchObject({ label: "queue", note: { text: "backlog", level: "warn" } });
+    // Without a slot it follows the slotted built-ins.
+    expect(v.highlights.at(-1)).toMatchObject({
+      label: "queue",
+      note: { text: "backlog", level: "warn" },
+      slot: null,
+    });
     expect(v.headline).toBe("Queue draining");
     expect(v.topology!.nodes.find((n) => n.id === "runner-1")).toMatchObject({ note: "consumer" });
     // forgejo-ha still refines the pair after it.

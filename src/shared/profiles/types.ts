@@ -87,6 +87,13 @@ export interface Highlight {
   label: string;
   /** A short badge next to the value, e.g. "latest" or "2.6.0 available"; null for none. */
   note?(ctx: ProfileContext): { text: string; level: Level } | null;
+  /**
+   * Where the highlight sits in a theme's summary (contract addition): lower slots first, highlights
+   * without one after them in profile order. The figures a theme draws itself from `SiteView.summary` hold
+   * the slots in `SUMMARY_SLOTS` (monitors 10, avg response 20, health 40, uptime 24h 50, uptime 30d 60,
+   * snapshot 80), so a highlight can sit between them, e.g. 30 after the average response.
+   */
+  slot?: number;
 }
 
 export interface Profile {

@@ -1,22 +1,37 @@
 import type { FactRowView, HighlightView, SiteView } from "./types";
 
 /**
+ * The slots of the figures a theme draws itself from `SiteView.summary` (`Highlight.slot`, contract
+ * addition): a theme that mixes highlights among its own figures orders them all by slot, so a profile can
+ * place a highlight between two figures.
+ */
+export const SUMMARY_SLOTS = {
+  monitors: 10,
+  avgLatency: 20,
+  health: 40,
+  uptime24h: 50,
+  uptime30d: 60,
+  snapshot: 80,
+} as const;
+
+/**
  * Highlights that share a label, as one summary slot: the first row is the value, the others its detail;
- * `note` is the first highlight's badge.
+ * `note` is the first highlight's badge and `slot` its place (null when it has none).
  */
 export interface HighlightSlot {
   label: string;
   rows: [FactRowView, ...FactRowView[]];
   note: HighlightView["note"];
+  slot: number | null;
 }
 
-/** `SiteView.highlights` grouped by label, in the order each label first appears. */
+/** `SiteView.highlights` grouped by label, in the order each label first appears (so by slot). */
 export function highlightSlots(highlights: readonly HighlightView[]): HighlightSlot[] {
   const slots: HighlightSlot[] = [];
   for (const h of highlights) {
     const slot = slots.find((s) => s.label === h.label);
     if (slot) slot.rows.push(h.row);
-    else slots.push({ label: h.label, rows: [h.row], note: h.note });
+    else slots.push({ label: h.label, rows: [h.row], note: h.note, slot: h.slot });
   }
   return slots;
 }

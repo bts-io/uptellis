@@ -51,8 +51,9 @@ export interface SiteView {
   /** `"<group>.<key>"` -> row, every current fact (folded and hidden rows included). */
   factIndex: Record<string, FactRowView>;
   /**
-   * The facts the active profiles ask a theme to place in its summary (`Profile.highlights`), in profile
-   * order, only those with a current fact. Empty when no active profile declares any.
+   * The facts the active profiles ask a theme to place in its summary (`Profile.highlights`), only those
+   * with a current fact: by `slot`, lowest first, then those without a slot in profile order. Empty when
+   * no active profile declares any.
    */
   highlights: HighlightView[];
   /** A sentence about the system from the first active profile that has one (`Profile.headline`), else null. */
@@ -207,6 +208,8 @@ export interface HighlightView {
   row: FactRowView;
   /** A short badge the profile adds to the value (`Highlight.note`), e.g. "latest"; null for none. */
   note: { text: string; level: Level } | null;
+  /** Its place in the summary (`Highlight.slot`, contract addition); null when the profile gives none. */
+  slot: number | null;
 }
 
 export interface FactGroupView {

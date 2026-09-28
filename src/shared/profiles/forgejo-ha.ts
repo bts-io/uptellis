@@ -426,7 +426,8 @@ export const forgejoHa: Profile = {
       },
     },
   ],
-  highlights: [{ fact: "watchdog.reachable", label: "watchdog" }],
+  // After the snapshot, the last summary figure.
+  highlights: [{ fact: "watchdog.reachable", label: "watchdog", slot: 90 }],
   headline: (ctx) => {
     const serving = str(ctx, "forgejo.servingNode");
     if (serving === null) return null;

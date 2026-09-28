@@ -40,9 +40,11 @@ export const uptimeKuma: Profile = {
     },
   ],
   highlights: [
+    // Slots: after the average response (kuma), before the snapshot (collector).
     {
       fact: "kuma.version",
       label: "kuma",
+      slot: 30,
       // Kuma reports the latest release, which can be older than a pre-release in use: never offer a downgrade.
       note: (ctx) => {
         const version = str(ctx, "kuma.version");
@@ -53,9 +55,9 @@ export const uptimeKuma: Profile = {
           : { text: "latest", level: "ok" };
       },
     },
-    { fact: "kuma.dbSize", label: "kuma" },
-    { fact: "kuma.host", label: "collector" },
-    { fact: "kuma.timezone", label: "collector" },
+    { fact: "kuma.dbSize", label: "kuma", slot: 30 },
+    { fact: "kuma.host", label: "collector", slot: 70 },
+    { fact: "kuma.timezone", label: "collector", slot: 70 },
   ],
   producerGuide: "collector/README.md",
 };
