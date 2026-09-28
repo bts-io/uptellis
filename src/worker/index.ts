@@ -1,14 +1,16 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { secureHeaders } from "hono/secure-headers";
+import type { Platform } from "@/platform/types";
 import pkg from "../../package.json";
-import { type AuthEnv, authError, withPrincipal } from "./auth/context";
-import { envAuthPlatform } from "./auth/env-platform";
+import { type AppEnv, platformContext } from "./app-env";
+import { authError, withPrincipal } from "./auth/context";
 import { buildId, commitId } from "./build";
 import { D1ConfigStore } from "./engine/config-store";
 import { D1Store } from "./engine/d1-store";
 import { KeyStore } from "./engine/key-store";
 import { KvModelCache } from "./engine/kv-cache";
+import type { EnvIngestKeys } from "./ingest/keys";
 import { ingestRoutes } from "./ingest/routes";
 import { staleNotifier } from "./notify";
 import { accountRoutes, userRoutes } from "./routes/accounts";
@@ -16,14 +18,15 @@ import { adminRoutes } from "./routes/admin";
 import { readRoutes } from "./routes/read";
 
 /**
- * The Hono app: owns /api/* and /embed/*. src/server.ts dispatches to it and SSR loaders call it in-process.
- * Every `/api/*` request but health first gets its principal (session, API key or anonymous); then ingest
- * (`/api/ingest/*`, HMAC-signed or an API key), Better Auth (`/api/auth/*`), the account routes (`/api/me`,
- * `/api/setup`, `/api/invites/*`), read (`/api/sites/*`, `page.view` per site) and admin (`/api/admin/*`,
- * a permission per route).
+ * The Hono app: owns /api/* and /embed/*. src/worker/serve.ts dispatches to it with the request's
+ * `AppBindings` (./app-env.ts), and SSR loaders call it in-process. Every `/api/*` request but health first
+ * gets its principal (session, API key or anonymous); then ingest (`/api/ingest/*`, HMAC-signed or an API
+ * key), Better Auth (`/api/auth/*`), the account routes (`/api/me`, `/api/setup`, `/api/invites/*`), read
+ * (`/api/sites/*`, `page.view` per site) and admin (`/api/admin/*`, a permission per route).
  */
-const app = new Hono<AuthEnv>();
+const app = new Hono<AppEnv>();
 
+app.use("*", platformContext);
 app.use("*", secureHeaders({ crossOriginEmbedderPolicy: false, contentSecurityPolicy: undefined }));
 
 app.get("/api/health", (c) =>
@@ -31,34 +34,31 @@ app.get("/api/health", (c) =>
 );
 
 /**
- * D1 is the source of truth (models, configs, ingest keys), KV (`latest:<site>`, `config:<site>`) the
- * cache; all are cheap wrappers built per request. The notifier (ingest only) sends in the request's
- * `waitUntil`.
+ * The SQL database is the source of truth (models, configs, ingest keys), the key-value cache
+ * (`latest:<site>`, `config:<site>`) the cache; all are cheap wrappers built per request. The notifier
+ * (ingest only) sends in the platform's `waitUntil`.
  */
-export const d1Backend = (env: Env, ctx?: Pick<ExecutionContext, "waitUntil">) => {
-  const configs = new D1ConfigStore(env.DB, env.CACHE);
+export const appBackend = (platform: Platform, envKeys: EnvIngestKeys = {}) => {
+  const configs = new D1ConfigStore(platform);
   return {
-    store: new D1Store(env.DB),
-    cache: new KvModelCache(env.CACHE),
+    store: new D1Store(platform),
+    cache: new KvModelCache(platform.kv),
     configs,
-    keys: new KeyStore(env.DB, env),
-    notifier: staleNotifier(env, configs, { ctx }),
+    keys: new KeyStore(platform, envKeys),
+    notifier: staleNotifier(platform, configs),
   };
 };
 
-app.use(
-  "/api/*",
-  withPrincipal((c) => envAuthPlatform(c.env)),
-);
+app.use("/api/*", withPrincipal);
 
 app.on(["GET", "POST"], "/api/auth/*", (c) => {
   const auth = c.get("accounts").auth();
   return auth ? auth.handler(c.req.raw) : authError(c, 503, "unavailable", "BETTER_AUTH_SECRET is not set");
 });
 
-app.route("/api/ingest", ingestRoutes<Env>(d1Backend));
+app.route("/api/ingest", ingestRoutes(appBackend));
 app.route("/api", accountRoutes());
-app.route("/api/sites", readRoutes(d1Backend));
+app.route("/api/sites", readRoutes(appBackend));
 app.route("/api/admin", adminRoutes());
 app.route("/api/admin", userRoutes());
 

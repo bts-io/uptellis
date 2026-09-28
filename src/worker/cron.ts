@@ -1,21 +1,20 @@
 /**
- * Scheduled handler body (the lead wires `scheduled` in src/server.ts to `runCron`). The job is picked by
- * the trigger's cron expression, so every trigger must match `wrangler.jsonc` exactly.
+ * The scheduled jobs (`JOBS` in src/platform/types.ts): `probes` every minute, `fiveMinute` every 5
+ * minutes, `daily` once a day. Cloudflare maps each Cron Trigger to its job
+ * (src/platform/cloudflare/scheduled.ts), Docker runs them from its own scheduler
+ * (src/platform/docker/scheduler.ts); both call `runJob` through `runScheduledJob` (./scheduled.ts).
  */
 import { lt, sql } from "drizzle-orm";
+import type { JobName, Platform } from "@/platform/types";
 import type { Incident } from "@/shared/model";
-import { createDb, type Db, schema } from "@/worker/db";
-import { toIso } from "@/worker/db/util";
+import { type Db, schema } from "@/worker/db";
+import { changesOf, toIso } from "@/worker/db/util";
 import { D1ConfigStore } from "@/worker/engine/config-store";
 import { D1Store } from "@/worker/engine/d1-store";
 import { KvModelCache } from "@/worker/engine/kv-cache";
 import { syncSiteSources } from "@/worker/engine/sites";
 import { staleNotifier } from "@/worker/notify";
 import { type ProbeRun, type ProbeRunOptions, runProbes } from "@/worker/probes/scheduler";
-
-export const CRON_EVERY_5_MIN = "*/5 * * * *";
-export const CRON_DAILY = "17 3 * * *";
-export const CRON_EVERY_MINUTE = "* * * * *";
 
 const MIN_MS = 60 * 1000;
 const HOUR_MS = 60 * MIN_MS;
@@ -37,7 +36,7 @@ export const RETENTION_MS = {
 } as const;
 
 export interface CronResult {
-  job: "five-minute" | "daily" | "probes" | "unknown";
+  job: JobName;
   downsampled?: { from: number; to: number };
   opened?: Incident[];
   resolved?: Incident[];
@@ -70,83 +69,86 @@ export async function downsample(db: Db, nowMs: number, lookbackMs = DOWNSAMPLE_
   return { from, to };
 }
 
-/** Deletes rows past retention in one batch. Open incidents are never pruned. */
-export async function prune(db: Db, nowMs: number): Promise<Record<string, number>> {
-  const { heartbeats, heartbeat5m, factSamples, snapshots, ingestNonces, incidents } = schema;
-  const results = await db.batch([
+/**
+ * Deletes rows past retention, and expired `kv` entries (the Docker cache; always empty on D1), in one
+ * batch. Open incidents are never pruned.
+ */
+export async function prune(
+  platform: Pick<Platform, "db" | "batch">,
+  nowMs: number,
+): Promise<Record<string, number>> {
+  const { heartbeats, heartbeat5m, factSamples, snapshots, ingestNonces, incidents, kv } = schema;
+  const { db } = platform;
+  const results = await platform.batch([
     db.delete(heartbeats).where(lt(heartbeats.ts, nowMs - RETENTION_MS.heartbeats)),
     db.delete(heartbeat5m).where(lt(heartbeat5m.bucket, nowMs - RETENTION_MS.heartbeat5m)),
     db.delete(factSamples).where(lt(factSamples.ts, nowMs - RETENTION_MS.factSamples)),
     db.delete(snapshots).where(lt(snapshots.receivedAt, nowMs - RETENTION_MS.snapshots)),
     db.delete(ingestNonces).where(lt(ingestNonces.expiresAt, nowMs)),
     db.delete(incidents).where(lt(incidents.endedAt, nowMs - RETENTION_MS.incidents)),
+    db.delete(kv).where(lt(kv.expiresAt, nowMs)),
   ]);
-  const names = ["heartbeats", "heartbeat5m", "factSamples", "snapshots", "ingestNonces", "incidents"];
-  return Object.fromEntries(names.map((n, i) => [n, results[i]?.meta.changes ?? 0]));
+  const names = ["heartbeats", "heartbeat5m", "factSamples", "snapshots", "ingestNonces", "incidents", "kv"];
+  return Object.fromEntries(names.map((n, i) => [n, changesOf(results[i])]));
 }
 
 /**
- * Runs the job for `event.cron`. The five-minute job hands its `stale` transitions to the Discord notifier
- * (when `DISCORD_WEBHOOK_URL` is set), which sends inside `ctx.waitUntil` when given one.
+ * Runs one job at its scheduled time. The five-minute job hands its `stale` transitions to the Discord
+ * notifier (when the `DISCORD_WEBHOOK_URL` secret is set), which sends inside the platform's `waitUntil`.
  */
-export async function runCron(
-  env: Pick<Env, "DB" | "CACHE"> & Partial<Pick<Env, "DISCORD_WEBHOOK_URL">>,
-  event: Pick<ScheduledController, "cron" | "scheduledTime">,
-  ctx?: Pick<ExecutionContext, "waitUntil">,
+export async function runJob(
+  platform: Platform,
+  job: JobName,
+  scheduledTime: number,
   probeOptions: ProbeRunOptions = {},
 ): Promise<CronResult> {
-  const db = createDb(env.DB);
-  const now = event.scheduledTime;
+  const { db } = platform;
+  const now = scheduledTime;
+  const configs = new D1ConfigStore(platform);
+  const store = new D1Store(platform);
+  const cache = new KvModelCache(platform.kv);
 
-  if (event.cron === CRON_EVERY_MINUTE) {
-    const configs = new D1ConfigStore(db, env.CACHE);
-    const backend = {
-      store: new D1Store(db),
-      cache: new KvModelCache(env.CACHE),
-      configs,
-      // A probe source coming back resolves its stale incident here: that recovery gets its card too.
-      notifier: staleNotifier(env, configs, { ctx, now: () => now }) ?? undefined,
-    };
-    return { job: "probes", probes: await runProbes(backend, now, probeOptions) };
-  }
-
-  if (event.cron === CRON_EVERY_5_MIN) {
-    const downsampled = await downsample(db, now);
-    const store = new D1Store(db);
-    const cache = new KvModelCache(env.CACHE);
-    const opened: Incident[] = [];
-    const resolved: Incident[] = [];
-    // Configured sites get their sources (expected intervals) written before the sweep reads them.
-    const configs = new D1ConfigStore(db, env.CACHE);
-    const notifier = staleNotifier(env, configs, { ctx, now: () => now });
-    for (const site of await configs.slugs()) {
-      await syncSiteSources(store, configs, site).catch((err: unknown) =>
-        console.warn(
-          JSON.stringify({
-            evt: "cron",
-            step: "sync_sources",
-            name: err instanceof Error ? err.name : "unknown",
-          }),
-        ),
-      );
+  switch (job) {
+    case "probes": {
+      const backend = {
+        store,
+        cache,
+        configs,
+        // A probe source coming back resolves its stale incident here: that recovery gets its card too.
+        notifier: staleNotifier(platform, configs, { now: () => now }),
+      };
+      return { job, probes: await runProbes(backend, now, probeOptions) };
     }
-    for (const site of await store.listSites()) {
-      const r = await store.sweepStaleness(site, toIso(now));
-      opened.push(...r.incidentsOpened);
-      resolved.push(...r.incidentsResolved);
-      await notifier?.notify(site, { opened: r.incidentsOpened, resolved: r.incidentsResolved });
-      // Keep latest:<site> in step when a stale incident opened or closed.
-      if (r.incidentsOpened.length + r.incidentsResolved.length > 0) {
-        await cache.put(await store.loadSiteModel(site, toIso(now)));
+    case "fiveMinute": {
+      const downsampled = await downsample(db, now);
+      const opened: Incident[] = [];
+      const resolved: Incident[] = [];
+      const notifier = staleNotifier(platform, configs, { now: () => now });
+      // Configured sites get their sources (expected intervals) written before the sweep reads them.
+      for (const site of await configs.slugs()) {
+        await syncSiteSources(store, configs, site).catch((err: unknown) =>
+          console.warn(
+            JSON.stringify({
+              evt: "cron",
+              step: "sync_sources",
+              name: err instanceof Error ? err.name : "unknown",
+            }),
+          ),
+        );
       }
+      for (const site of await store.listSites()) {
+        const r = await store.sweepStaleness(site, toIso(now));
+        opened.push(...r.incidentsOpened);
+        resolved.push(...r.incidentsResolved);
+        await notifier?.notify(site, { opened: r.incidentsOpened, resolved: r.incidentsResolved });
+        // Keep latest:<site> in step when a stale incident opened or closed.
+        if (r.incidentsOpened.length + r.incidentsResolved.length > 0) {
+          await cache.put(await store.loadSiteModel(site, toIso(now)));
+        }
+      }
+      return { job, downsampled, opened, resolved };
     }
-    return { job: "five-minute", downsampled, opened, resolved };
+    case "daily":
+      return { job, pruned: await prune(platform, now) };
   }
-
-  if (event.cron === CRON_DAILY) {
-    return { job: "daily", pruned: await prune(db, now) };
-  }
-
-  console.warn("cron: no job for this trigger");
-  return { job: "unknown" };
 }

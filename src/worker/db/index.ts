@@ -1,8 +1,6 @@
-import { drizzle } from "drizzle-orm/d1";
+import type { AppDb } from "@/platform/types";
 import * as schema from "./schema";
 
-export function createDb(d1: D1Database) {
-  return drizzle(d1, { schema, casing: "snake_case" });
-}
-export type Db = ReturnType<typeof createDb>;
+/** Drizzle over the app's schema: D1 on Cloudflare, `bun:sqlite` in Docker (built by the platform adapters). */
+export type Db = AppDb;
 export { schema };

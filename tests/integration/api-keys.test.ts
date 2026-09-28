@@ -8,13 +8,14 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { ConfigState } from "@/shared/schemas/admin";
 import { ApiKeyList, IssuedApiKey } from "@/shared/schemas/auth";
 import { randomNonce, signRequest } from "@/shared/signing";
-import { createDb, schema } from "@/worker/db";
+import { schema } from "@/worker/db";
 import { resetConfigCache } from "@/worker/engine/config-store";
 import { freshFixture } from "../ssr/seed";
 import { factsPayloadFrom, kumaSnapshotFrom } from "../support/fixture-payloads";
+import { testPlatform } from "../support/platform";
 import { admin, adminCookie, adminEnv, handle, json, send, sessionCookie, testEmail } from "./admin-app";
 
-const db = createDb(adminEnv.DB);
+const { db } = testPlatform();
 let api: ReturnType<typeof admin>;
 
 const factsBody = () => JSON.stringify(factsPayloadFrom(freshFixture("default")));

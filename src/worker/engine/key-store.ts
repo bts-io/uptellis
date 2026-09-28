@@ -9,11 +9,13 @@
  */
 import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
+import type { Platform } from "@/platform/types";
 import { type SourceId, sourceKindOf } from "@/shared/model";
 import type { IssuedKey, SourceKey } from "@/shared/schemas/admin";
-import { createDb, type Db, schema } from "@/worker/db";
+import { type Db, schema } from "@/worker/db";
 import { toIso } from "@/worker/db/util";
 import {
+  type EnvIngestKeys,
   envSecrets,
   INGEST_KEY_BINDINGS,
   type KeyBinding,
@@ -55,22 +57,21 @@ export class KeyStore implements StoredKeys {
   private key: Promise<CryptoKey> | null = null;
 
   /**
-   * `env` supplies `SOURCE_MASTER_KEY` and the `INGEST_KEY_*` secrets; `bindings` the env key ids (the
-   * same default as the ingest routes).
+   * `platform` supplies the database and `SOURCE_MASTER_KEY`, `env` the `INGEST_KEY_*` secrets (see
+   * `envIngestKeys`), `bindings` the env key ids (the same default as the ingest routes).
    */
   constructor(
-    db: Db | D1Database,
-    private readonly env: object,
+    private readonly platform: Pick<Platform, "db" | "batch" | "secret">,
+    private readonly env: EnvIngestKeys,
     private readonly bindings: KeyBindings = INGEST_KEY_BINDINGS,
   ) {
-    this.db = "batch" in db && "select" in db ? (db as Db) : createDb(db as D1Database);
+    this.db = platform.db;
   }
 
   /** The derived sealing key; rejects with `MasterKeyMissing` when the master key is unset or malformed. */
   private sealer(): Promise<CryptoKey> {
     if (!this.key) {
-      const master = (this.env as { SOURCE_MASTER_KEY?: string }).SOURCE_MASTER_KEY;
-      this.key = sealingKey(master);
+      this.key = sealingKey(this.platform.secret("SOURCE_MASTER_KEY"));
       this.key.catch(() => {
         this.key = null;
       });
@@ -233,6 +234,6 @@ export class KeyStore implements StoredKeys {
 
   /** Runs a statement from `issue` on its own (a key for a source the config already has). */
   async commit(statement: BatchItem<"sqlite">): Promise<void> {
-    await this.db.batch([statement]);
+    await this.platform.batch([statement]);
   }
 }

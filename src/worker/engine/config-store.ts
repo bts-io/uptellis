@@ -10,11 +10,12 @@
  */
 import { and, asc, desc, eq } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
+import type { KeyValue, Platform } from "@/platform/types";
 import { type SiteConfig, SiteConfig as SiteConfigSchema } from "@/shared/config";
 import { diffConfigs } from "@/shared/config/diff";
 import { SiteSlug } from "@/shared/model";
 import type { ConfigDiffEntry, ConfigState, RevisionList } from "@/shared/schemas/admin";
-import { createDb, type Db, schema } from "@/worker/db";
+import { type Db, schema } from "@/worker/db";
 import { toIso } from "@/worker/db/util";
 import { type ConfigSource, seedConfig, seedSlugs } from "./sites";
 
@@ -68,12 +69,11 @@ export interface SaveOptions {
 
 export class D1ConfigStore implements ConfigSource {
   private readonly db: Db;
+  private readonly kv: KeyValue;
 
-  constructor(
-    db: Db | D1Database,
-    private readonly kv?: KVNamespace,
-  ) {
-    this.db = "batch" in db && "select" in db ? (db as Db) : createDb(db as D1Database);
+  constructor(private readonly platform: Pick<Platform, "db" | "batch" | "kv">) {
+    this.db = platform.db;
+    this.kv = platform.kv;
   }
 
   /** The current config for the dashboard (cached as described above), or null for an unknown site. */
@@ -84,10 +84,7 @@ export class D1ConfigStore implements ConfigSource {
 
     let state: ConfigState | null = null;
     try {
-      const cached = await this.kv?.get<ConfigState>(configKey(slug), {
-        type: "json",
-        cacheTtl: KV_CACHE_TTL_S,
-      });
+      const cached = await this.kv.get<ConfigState>(configKey(slug), { cacheTtlS: KV_CACHE_TTL_S });
       if (cached) state = { ...cached, config: SiteConfigSchema.parse(cached.config) };
     } catch (err) {
       warn("kv_get", err);
@@ -120,7 +117,7 @@ export class D1ConfigStore implements ConfigSource {
     if (row) return toState(row);
     const seed = seedConfig(slug);
     if (!seed) return null;
-    await this.db.batch([
+    await this.platform.batch([
       this.db
         .insert(siteConfigs)
         .values({ site: slug, version: 1, body: seed, savedBy: "seed" })
@@ -147,7 +144,7 @@ export class D1ConfigStore implements ConfigSource {
     const version = cur.version + 1;
     const createdAt = Date.now();
     try {
-      await this.db.batch([
+      await this.platform.batch([
         this.db.insert(siteConfigs).values({
           site: slug,
           version,
@@ -179,7 +176,7 @@ export class D1ConfigStore implements ConfigSource {
     const slug = config.slug;
     if (seedConfig(slug) || (await this.latestRow(slug))) return false;
     const createdAt = Date.now();
-    const [inserted] = await this.db.batch([
+    const [inserted] = await this.platform.batch([
       this.db
         .insert(siteConfigs)
         .values({ site: slug, version: 1, body: config, savedBy: "admin", createdAt })
@@ -187,7 +184,7 @@ export class D1ConfigStore implements ConfigSource {
         .returning({ version: siteConfigs.version }),
       this.upsertSite(config, 1),
     ]);
-    if (inserted.length === 0) return false;
+    if ((inserted as unknown[]).length === 0) return false;
     const state: ConfigState = { config, version: 1, savedAt: toIso(createdAt), savedBy: "admin" };
     memory.set(slug, { state, until: Date.now() + CONFIG_MEMORY_TTL_MS });
     knownSlugs = null;
@@ -250,7 +247,7 @@ export class D1ConfigStore implements ConfigSource {
 
   private async putKv(slug: string, state: ConfigState): Promise<void> {
     try {
-      await this.kv?.put(configKey(slug), JSON.stringify(state), { expirationTtl: KV_EXPIRATION_S });
+      await this.kv.put(configKey(slug), state, { ttlS: KV_EXPIRATION_S });
     } catch (err) {
       warn("kv_put", err);
     }

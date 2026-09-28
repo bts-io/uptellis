@@ -1,19 +1,20 @@
 /**
- * The Worker's Hono app as src/server.ts serves `/api/*` in production (the app resolves the principal and
- * enforces permissions itself), over the migrated D1 and KV. The env adds a master key (random per run) to
- * the test bindings of vitest.config.ts. `adminCookie` signs in as the owner, creating it on first use.
+ * The Worker as src/worker/serve.ts serves `/api/*` in production: the Hono app from src/worker/index.ts
+ * (it resolves the principal and enforces permissions itself) over the Cloudflare platform (migrated D1 and
+ * KV). The env adds a master key (random per run) to the test bindings of vitest.config.ts. `adminCookie`
+ * signs in as the owner, creating it on first use.
  */
-import { env } from "cloudflare:test";
 import { SESSION_COOKIE } from "@/worker/auth/cookies";
 import { toBase64Url } from "@/worker/engine/seal";
 import app from "@/worker/index";
+import { fetchWith, workerEnv } from "../support/platform";
 
 export const ORIGIN = "https://worker.example.net";
 
 const masterKey = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))));
 
 export const adminEnv = {
-  ...(env as unknown as Env),
+  ...workerEnv,
   SOURCE_MASTER_KEY: masterKey,
 } as Env;
 
@@ -25,7 +26,7 @@ export const OWNER = { name: "Test Owner", email: testEmail("owner"), password: 
 
 /** One request through the app. */
 export async function handle(path: string, init: RequestInit = {}, e: Env = adminEnv): Promise<Response> {
-  return app.fetch(new Request(`${ORIGIN}${path}`, { redirect: "manual", ...init }), e);
+  return fetchWith(app, new Request(`${ORIGIN}${path}`, { redirect: "manual", ...init }), e);
 }
 
 /** A same-origin JSON POST (or another method). */

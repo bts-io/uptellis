@@ -1,8 +1,11 @@
-import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
+import { RATE_LIMITERS } from "@/platform/types";
 import { INGEST_HEADERS } from "@/shared/signing";
 import { notFound } from "@/worker/middleware/auth-gate";
 import { limitBeforeGates, limitGateRejection, RETRY_AFTER_S } from "@/worker/middleware/rate-limit";
+import { testPlatform } from "../support/platform";
+
+const platform = testPlatform();
 
 // The real Workers Rate Limiting bindings from wrangler.jsonc, as workerd runs them. Each case uses its own
 // client name so the counters of one case never reach another.
@@ -24,7 +27,7 @@ async function awayFromMinuteBoundary(): Promise<void> {
 async function firstLimited(make: () => Request, max: number): Promise<number> {
   await awayFromMinuteBoundary();
   for (let i = 1; i <= max; i++) {
-    const res = await limitBeforeGates(make(), env);
+    const res = await limitBeforeGates(make(), platform);
     if (res) {
       expect(res.status).toBe(429);
       expect(res.headers.get("retry-after")).toBe(String(RETRY_AFTER_S));
@@ -35,9 +38,9 @@ async function firstLimited(make: () => Request, max: number): Promise<number> {
 }
 
 describe("rate limit bindings", () => {
-  it("are bound in the Worker", () => {
-    for (const b of [env.INGEST_RATE_LIMIT, env.GATE_RATE_LIMIT, env.ADMIN_WRITE_RATE_LIMIT]) {
-      expect(typeof b.limit).toBe("function");
+  it("are bound in the Worker, one per RATE_LIMITERS entry", () => {
+    for (const name of Object.keys(RATE_LIMITERS) as (keyof typeof RATE_LIMITERS)[]) {
+      expect(typeof platform.rateLimiter(name)?.limit).toBe("function");
     }
   });
 
@@ -46,14 +49,14 @@ describe("rate limit bindings", () => {
       req("/api/auth/sign-in/email", client, { method: "POST", body: "{}" });
     expect(await firstLimited(() => attempt("gate-client"), 25)).toBe(21);
     // Another client is not affected.
-    expect(await limitBeforeGates(attempt("gate-other"), env)).toBeNull();
+    expect(await limitBeforeGates(attempt("gate-other"), platform)).toBeNull();
   });
 
   it("turn repeated rejections into 429", async () => {
     await awayFromMinuteBoundary();
     const statuses: number[] = [];
     for (let i = 0; i < 21; i++) {
-      statuses.push((await limitGateRejection(req("/", "cookie-client"), env, notFound("/"))).status);
+      statuses.push((await limitGateRejection(req("/", "cookie-client"), platform, notFound("/"))).status);
     }
     expect(statuses.slice(0, 20).every((s) => s === 404)).toBe(true);
     expect(statuses[20]).toBe(429);

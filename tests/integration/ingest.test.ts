@@ -1,11 +1,13 @@
 import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MAX_BODY_BYTES } from "@/shared/signing";
+import { type AppEnv, platformContext } from "@/worker/app-env";
 import { INGEST_KEY_BINDINGS } from "@/worker/ingest/keys";
 import { ingestRoutes } from "@/worker/ingest/routes";
 import { loadFixture } from "../fixtures";
 import { factsPayloadFrom, kumaSnapshotFrom } from "../support/fixture-payloads";
 import { memoryBackend } from "../support/memory-store";
+import { testPlatform } from "../support/platform";
 import { nextNonce, signedPost, TEST_ENV, TEST_KEYS } from "../support/signing";
 
 // Address samples are built at runtime (RFC 5737 documentation range) so this file passes the repo scan.
@@ -20,8 +22,8 @@ function setup(opts: { env?: Record<string, string> } = {}) {
     { id: "webhook:ci", site: "demo", expectedIntervalS: 300 },
   ]);
   let now = NOW;
-  const app = new Hono();
-  // The same mount the Worker uses; the backend resolver ignores env here.
+  const app = new Hono<AppEnv>().use(platformContext);
+  // The same mount the Worker uses; the backend resolver ignores the platform here.
   app.route(
     "/api/ingest",
     ingestRoutes(() => backend, {
@@ -29,8 +31,9 @@ function setup(opts: { env?: Record<string, string> } = {}) {
       bindings: { ...INGEST_KEY_BINDINGS, ci: { site: "demo", source: "webhook:ci" } },
     }),
   );
-  const env = { ...TEST_ENV, ...opts.env };
-  const send = (route: string, init: RequestInit) => app.request(`${BASE}/${route}`, init, env);
+  const envIngestKeys = { ...TEST_ENV, ...opts.env };
+  const send = (route: string, init: RequestInit) =>
+    app.request(`${BASE}/${route}`, init, { platform: testPlatform(), envIngestKeys });
   const post = async (route: string, payload: unknown, sign: Parameters<typeof signedPost>[2] = {}) => {
     const body = typeof payload === "string" ? payload : JSON.stringify(payload);
     return send(route, await signedPost(`/api/ingest/${route}`, body, { now, ...sign }));

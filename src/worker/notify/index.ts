@@ -1,17 +1,18 @@
 /**
  * Discord notifications for sources that go silent and come back: exactly one card when a `stale`
- * incident opens and one when it resolves, posted to the Discord webhook (`DISCORD_WEBHOOK_URL`).
+ * incident opens and one when it resolves, posted to the Discord webhook (the `DISCORD_WEBHOOK_URL` secret).
  * Service `down` incidents never post (Uptime Kuma already alerts on those).
  *
  * Both places that write `stale` transitions hand them here: the 5-minute sweep (src/worker/cron.ts) opens
  * and resolves them, and an ingest resolves one when the silent source reports again
- * (src/worker/engine/ingest-service.ts). Each transition is claimed in D1 `notifications` before its card
+ * (src/worker/engine/ingest-service.ts). Each transition is claimed in the `notifications` table before its card
  * is posted, so it is sent at most once, whoever sees it and however often a cron is retried. Sending runs
  * in `waitUntil` when the caller has one, and nothing here throws into the cron or the ingest.
  */
 import { and, desc, eq, gt, isNotNull, lte, sql } from "drizzle-orm";
+import type { Platform } from "@/platform/types";
 import { FRESHNESS_FACTORS, type Incident, type Source } from "@/shared/model";
-import { createDb, type Db, schema } from "@/worker/db";
+import { type Db, schema } from "@/worker/db";
 import { rowToIncident, rowToSource } from "@/worker/db/rows";
 import { toIso } from "@/worker/db/util";
 import type { ConfigSource } from "@/worker/engine/sites";
@@ -26,7 +27,7 @@ export interface NotifierDeps {
   db: Db;
   configs: ConfigSource;
   webhookUrl: string;
-  /** `ctx.waitUntil` of the request or the cron; without it, `notify` waits for the sends. */
+  /** The platform's `waitUntil` (request or cron); without it, `notify` waits for the sends. */
   waitUntil?: (promise: Promise<unknown>) => void;
   send?: SendOptions;
   now?: () => number;
@@ -120,22 +121,23 @@ export class StaleNotifier {
 }
 
 /**
- * The notifier for a Worker env, or undefined when `DISCORD_WEBHOOK_URL` is not set. `now` is the clock
- * the cards measure ages against (the cron passes its scheduled time, the clock its sweep used).
+ * The notifier for a platform, or undefined when its `DISCORD_WEBHOOK_URL` secret is not set. Sends run
+ * in the platform's `waitUntil`. `now` is the clock the cards measure ages against (the cron passes its
+ * scheduled time, the clock its sweep used).
  */
 export function staleNotifier(
-  env: { DB: D1Database; DISCORD_WEBHOOK_URL?: string },
+  platform: Pick<Platform, "db" | "secret" | "waitUntil">,
   configs: ConfigSource,
-  opts: { ctx?: Pick<ExecutionContext, "waitUntil">; now?: () => number } = {},
+  opts: { now?: () => number } = {},
 ): StaleNotifier | undefined {
-  if (!env.DISCORD_WEBHOOK_URL) return undefined;
-  const { ctx, now } = opts;
+  const webhookUrl = platform.secret("DISCORD_WEBHOOK_URL");
+  if (!webhookUrl) return undefined;
   return new StaleNotifier({
-    db: createDb(env.DB),
+    db: platform.db,
     configs,
-    webhookUrl: env.DISCORD_WEBHOOK_URL,
-    ...(ctx ? { waitUntil: (p: Promise<unknown>) => ctx.waitUntil(p) } : {}),
-    ...(now ? { now } : {}),
+    webhookUrl,
+    waitUntil: (p: Promise<unknown>) => platform.waitUntil(p),
+    ...(opts.now ? { now: opts.now } : {}),
   });
 }
 
