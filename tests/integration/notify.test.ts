@@ -302,10 +302,34 @@ describe("POST /api/admin/notify/test", () => {
     expect((await rows("demo")).filter((r) => r.incidentId.startsWith("test:"))).toEqual([]);
   });
 
+  it("sends TEST down and up cards for a service, recording no incident", async () => {
+    await seed();
+    const t = new Date(Date.now() - 20_000).toISOString().replace(/\.\d+Z$/, "Z");
+    await new D1Store(platform).applyDelta(
+      delta("demo", t, { services: [service("demo", "7", "up", "Checkout")] }),
+    );
+    const { cards } = discord();
+    const down = await post("?kind=down&service=kuma:7");
+    expect(down.status).toBe(200);
+    expect(await down.json()).toMatchObject({
+      source: "kuma:watch-1",
+      service: "kuma:7",
+      kind: "down",
+      sent: true,
+    });
+    expect(text(cards[0]!)).toContain("TEST: Uptellis: Checkout is down");
+    const up = await post("?kind=up&service=kuma:7");
+    expect(up.status).toBe(200);
+    expect(text(cards[1]!)).toContain("TEST: Uptellis: Checkout is back up");
+    expect(text(cards[1]!)).toMatch(/10 min/);
+    expect((await rows("demo")).filter((r) => r.incidentId.startsWith("test:"))).toEqual([]);
+  });
+
   it("validates the kind, the source and the secret, and reports Discord's refusal", async () => {
     await seed();
     discord(429);
-    expect((await post("?kind=down")).status).toBe(400);
+    expect((await post("?kind=nope")).status).toBe(400);
+    expect((await post("?kind=down&service=kuma:nowhere")).status).toBe(404);
     expect((await post("?kind=stale&source=kuma:nowhere")).status).toBe(404);
     expect((await post("?kind=stale&site=nope")).status).toBe(404);
     expect((await post("?kind=stale", adminEnv)).status).toBe(503);

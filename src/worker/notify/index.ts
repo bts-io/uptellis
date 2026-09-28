@@ -269,11 +269,61 @@ export function incidentNotifier(
 /** The name the factory had before the notifier sent `down` cards (src/worker/cron.ts still uses it). */
 export const staleNotifier = incidentNotifier;
 
-export type TestCardKind = "stale" | "recovered";
+export type TestCardKind = "stale" | "recovered" | "down" | "up";
+export const TEST_CARD_KINDS: readonly TestCardKind[] = ["stale", "recovered", "down", "up"];
 
 export type TestCardResult =
-  | { ok: true; source: string; outcome: SendOutcome }
-  | { ok: false; error: "no_source" };
+  | { ok: true; source: string; service?: string; outcome: SendOutcome }
+  | { ok: false; error: "no_source" | "no_service" };
+
+/** How long the outage on a test `up` card lasts. */
+const TEST_OUTAGE_MS = 10 * 60_000;
+
+/**
+ * A test `down` or `up` card for one of the site's services (`serviceId`, else its first monitor, else its
+ * first service), from its current row and display name. Recorded nowhere, like the source test cards.
+ */
+async function sendServiceTestCard(
+  deps: Omit<NotifierDeps, "waitUntil">,
+  site: string,
+  kind: "down" | "up",
+  serviceId: string | undefined,
+  now: number,
+): Promise<TestCardResult> {
+  const rows = (
+    await deps.db.select().from(services).where(eq(services.site, site)).orderBy(services.id)
+  ).map(rowToService);
+  const s = serviceId
+    ? rows.find((r) => r.id === serviceId)
+    : (rows.find((r) => r.id.startsWith("probe:")) ?? rows[0]);
+  if (!s) return { ok: false, error: "no_service" };
+  const [state, pageUrl] = await Promise.all([deps.configs.current(site), sitePageUrl(deps.configs, site)]);
+  const service: CardService = {
+    id: s.id,
+    source: s.source,
+    targetDisplay: s.targetDisplay,
+    name: state?.config.displayNames[s.id] ?? s.name,
+  };
+  const incident: Incident = {
+    id: `test:${s.id}`,
+    site,
+    kind: "down",
+    serviceId: s.id,
+    sourceId: null,
+    startedAt: toIso(kind === "up" ? now - TEST_OUTAGE_MS : now),
+    endedAt: kind === "up" ? toIso(now) : null,
+    title: `${s.name} down`,
+    notes: null,
+  };
+  const card =
+    kind === "up"
+      ? upCard({ site, incident, service, pageUrl, now, test: true })
+      : downCard({ site, incident, service, reason: "test card", pageUrl, now, test: true });
+  const outcome = cardIsSafe(card)
+    ? await postCard(deps.webhookUrl, card, deps.send)
+    : ({ ok: false, status: 0, error: "forbidden_literal" } as const);
+  return { ok: true, source: s.source, service: s.id, outcome };
+}
 
 /**
  * A card labelled TEST, built from the current state of one of the site's sources (`sourceId`, else the
@@ -285,8 +335,10 @@ export async function sendTestCard(
   site: string,
   kind: TestCardKind,
   sourceId?: string,
+  serviceId?: string,
 ): Promise<TestCardResult> {
   const now = deps.now?.() ?? Date.now();
+  if (kind === "down" || kind === "up") return sendServiceTestCard(deps, site, kind, serviceId, now);
   const list = await siteSources(deps.db, site);
   const source = sourceId
     ? list.find((s) => s.id === sourceId)

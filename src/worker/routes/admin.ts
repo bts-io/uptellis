@@ -39,7 +39,7 @@ import { D1ConfigStore, type SaveOutcome } from "../engine/config-store";
 import { KeyStore } from "../engine/key-store";
 import { MasterKeyMissing } from "../engine/seal";
 import { isSameOrigin } from "../middleware/same-origin";
-import { sendTestCard } from "../notify";
+import { sendTestCard, TEST_CARD_KINDS } from "../notify";
 
 type Ctx = Context<AppEnv>;
 
@@ -322,10 +322,10 @@ export function adminRoutes() {
   });
 
   app.post("/notify/test", async (c) => {
-    const kind = c.req.query("kind");
-    if (kind !== "stale" && kind !== "recovered") {
-      return fail(c, 400, "invalid", "kind must be stale or recovered", {
-        issues: [{ path: "kind", message: "Must be stale or recovered" }],
+    const kind = TEST_CARD_KINDS.find((k) => k === c.req.query("kind"));
+    if (!kind) {
+      return fail(c, 400, "invalid", "kind must be stale, recovered, down or up", {
+        issues: [{ path: "kind", message: "Must be stale, recovered, down or up" }],
       });
     }
     const { platform } = c.var;
@@ -341,13 +341,16 @@ export function adminRoutes() {
       site,
       kind,
       c.req.query("source"),
+      c.req.query("service"),
     );
-    if (!out.ok) return fail(c, 404, "not_found", "Unknown source");
+    if (!out.ok)
+      return fail(c, 404, "not_found", out.error === "no_service" ? "Unknown service" : "Unknown source");
     const { outcome } = out;
     return c.json(
       {
         site,
         source: out.source,
+        ...(out.service ? { service: out.service } : {}),
         kind,
         sent: outcome.ok,
         status: outcome.status,
