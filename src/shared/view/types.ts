@@ -205,6 +205,8 @@ export interface HighlightView {
   /** Short label for the summary slot, e.g. "kuma", "db", "collector". */
   label: string;
   row: FactRowView;
+  /** A short badge the profile adds to the value (`Highlight.note`), e.g. "latest"; null for none. */
+  note: { text: string; level: Level } | null;
 }
 
 export interface FactGroupView {

@@ -67,6 +67,8 @@ export interface FactGroupDef {
 export interface Highlight {
   fact: `${string}.${string}`;
   label: string;
+  /** A short badge next to the value, e.g. "latest" or "2.6.0 available"; null for none. */
+  note?(ctx: ProfileContext): { text: string; level: Level } | null;
 }
 
 export interface Profile {
