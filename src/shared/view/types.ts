@@ -62,6 +62,22 @@ export interface SiteView {
   activity: ActivityItem[];
   incidents: { open: IncidentView[]; recent: IncidentView[] };
   links: { label: string; href: string }[];
+  /**
+   * Maintenance windows active at `now`, in config order (contract addition, Phase 6). Services they cover
+   * show `maintenance` whatever was stored. The view-model always sets it; it is optional only so views
+   * built before it still type-check.
+   */
+  maintenance?: MaintenanceView[];
+}
+
+export interface MaintenanceView {
+  id: string;
+  title: string;
+  /** Service ids the window covers; empty means every service of the site. */
+  services: string[];
+  /** The current occurrence. */
+  start: string;
+  end: string;
 }
 
 export interface VerdictView {

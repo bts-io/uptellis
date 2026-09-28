@@ -22,6 +22,7 @@ import {
   sourceAgeS,
   sourceFreshness,
 } from "../model";
+import { activeWindows } from "../monitors/maintenance";
 import { activeProfiles } from "../profiles";
 import { buildFactViews, latestFacts, profileContext } from "./facts";
 import { clock, formatDuration, formatPercent, iso, mean, round, toMs } from "./format";
@@ -108,14 +109,20 @@ export function buildSiteView(input: ViewInput): SiteView {
     if (i.serviceId) openBy.set(i.serviceId, i.id);
   }
 
+  // Maintenance outranks what was stored (and a stale source): the view shows it, the rows stay as they are.
+  const windows = activeWindows(config, nowMs);
+  const inWindow = (id: string) =>
+    windows.some(({ window: w }) => w.services.length === 0 || w.services.includes(id));
+
   const services = new Map<string, ServiceView>();
   for (const s of model.services) {
+    const maint = inWindow(s.id);
     services.set(
       s.id,
-      serviceView(s, {
+      serviceView(maint ? { ...s, status: "maintenance" } : s, {
         config,
         nowMs,
-        stale: sourceStale(s.source),
+        stale: !maint && sourceStale(s.source),
         beats: beatsBy.get(s.id) ?? [],
         days: daysBy.get(s.id) ?? [],
         openIncidentId: openBy.get(s.id) ?? null,
@@ -235,6 +242,13 @@ export function buildSiteView(input: ViewInput): SiteView {
       recent: recentIncidents.map(incidentView),
     },
     links: config.links,
+    maintenance: windows.map(({ window: w, start, end }) => ({
+      id: w.id,
+      title: w.title,
+      services: w.services,
+      start: iso(start),
+      end: iso(end),
+    })),
   };
 }
 
