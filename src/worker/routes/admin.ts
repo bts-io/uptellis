@@ -251,7 +251,6 @@ export function adminRoutes() {
         issues: [{ path: "limit", message: `Must be a whole number from 1 to ${DELIVERY_LIMIT.max}` }],
       });
     }
-    // TODO(p6b-integration): needs migration 0006 (channel, attempts, retryable, last_attempt_at).
     const deliveries = await listDeliveries(c.var.platform.db, slug, limit);
     return c.json({ deliveries } satisfies DeliveryList);
   });

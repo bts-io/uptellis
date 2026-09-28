@@ -65,7 +65,7 @@ flowchart LR
     build["buildSiteView<br/>(pure)"]
     read["/api/sites/:site/view"]
     page["theme Page (SSR)"]
-    notify["notifier<br/>Discord cards"]
+    notify["notifier<br/>channels: Discord, Slack,<br/>webhook, ntfy, Telegram, email"]
   end
   col -->|"signed POST"| ing
   push -->|"signed POST"| ing
@@ -242,12 +242,14 @@ A private site's page sends a signed-out visitor to sign-in (the page loader ask
 
 ## Notifications
 
-When `DISCORD_WEBHOOK_URL` is set, the notifier (`src/worker/notify`) posts exactly one Discord card when a `stale` incident opens (a source went silent) and one when it resolves (it is back, with how many heartbeats were backfilled for the gap). Service `down` incidents do not post: the monitor that watches the service (Uptime Kuma, for example) already alerts on those.
+Every incident transition (a service `down` or back `up`, a source going `stale` or `recovered`) becomes one `AlertMessage` (`src/shared/notify/message.ts`), which the dispatcher (`src/worker/notify`) sends to each of the site's channels that wants the event (`channelsOf` and `channelWants` in `src/shared/notify/schema.ts`): Discord, Slack, a signed webhook, ntfy, Telegram or email ([monitors.md](monitors.md#cards)).
 
-- Both places that see stale transitions hand them to the notifier: the 5-minute sweep and an ingest that brings a silent source back.
-- Each transition is claimed in the D1 `notifications` table before its card is sent, so it goes out at most once, however often a cron retries.
-- Cards never ping anyone, carry only source ids, host names and times, and are checked for addresses, emails and tokens before sending. A send times out after 5 seconds; a 429 is retried once. Failures are recorded, never thrown into the cron or the ingest.
-- `POST /api/admin/notify/test` sends a card labelled TEST built from the current state.
+- Transitions come from the ingest path, the monitors path and the five-minute staleness sweep.
+- Each (incident, kind, channel) is claimed in the `notifications` table before it is sent, so it goes out at most once per channel however often a job retries. A retryable failure (429, 5xx, network) is retried in the request with backoff and then by the five-minute job for up to an hour; a failing channel never blocks the others.
+- A `down` inside a maintenance window sends nothing, and an `up` or `recovered` goes to a channel only if its `down` or `stale` did.
+- Channel secrets are named in the config and read at send time (`Platform.notifySecret`); no URL, token, address or response body is logged or stored. Messages are checked for addresses, emails and tokens before sending.
+- A site without `notify.channels` keeps the historical behaviour: stale and recovered Discord cards on `DISCORD_WEBHOOK_URL`, and down and up cards when `notify.discord` is on.
+- `POST /api/admin/notify/test` sends a message labelled TEST, to one channel with `channel=`.
 
 ## Crons
 

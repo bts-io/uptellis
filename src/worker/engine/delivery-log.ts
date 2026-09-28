@@ -2,10 +2,6 @@
  * The delivery log read for admin (`GET /api/admin/sites/:site/notifications`): a site's recent rows of the
  * `notifications` table, newest first. Only short error codes leave here; anything else in `error` (it
  * should never hold more) is reduced to `error`.
- *
- * TODO(p6b-integration): needs migration 0006 (the `channels` stream): `channel`, `attempts`, `retryable`
- * and `last_attempt_at` are read as raw columns until they are in the Drizzle schema; then use the schema
- * columns here and drop the shim in tests/integration/admin-notifications.test.ts.
  */
 import { desc, eq, sql } from "drizzle-orm";
 import type { Delivery, DeliveryStatus } from "@/shared/schemas/admin";
@@ -30,10 +26,10 @@ export async function listDeliveries(db: Db, site: string, limit: number): Promi
       error: notifications.error,
       sentAt: notifications.sentAt,
       createdAt: notifications.createdAt,
-      channel: sql<string | null>`"channel"`,
-      attempts: sql<number | null>`"attempts"`,
-      retryable: sql<number | null>`"retryable"`,
-      lastAttemptAt: sql<number | null>`"last_attempt_at"`,
+      channel: notifications.channel,
+      attempts: notifications.attempts,
+      retryable: notifications.retryable,
+      lastAttemptAt: notifications.lastAttemptAt,
     })
     .from(notifications)
     .where(eq(notifications.site, site))
@@ -42,10 +38,10 @@ export async function listDeliveries(db: Db, site: string, limit: number): Promi
   return rows.map((r) => ({
     incidentId: r.incidentId,
     kind: r.kind,
-    channel: r.channel ?? "discord",
+    channel: r.channel,
     status: STATUSES.includes(r.status) ? r.status : "failed",
-    attempts: r.attempts ?? (r.status === "pending" ? 0 : 1),
-    retryable: r.status === "failed" && r.retryable !== null ? r.retryable === 1 : null,
+    attempts: r.attempts,
+    retryable: r.status === "failed" ? r.retryable : null,
     createdAt: toIso(r.createdAt),
     sentAt: r.sentAt === null ? null : toIso(r.sentAt),
     lastAttemptAt: r.lastAttemptAt === null ? null : toIso(r.lastAttemptAt),

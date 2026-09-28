@@ -31,8 +31,9 @@ interface Env {
   /** Rotation slot accepted alongside INGEST_KEY_FACTS_1 while the producer moves to it. */
   INGEST_KEY_FACTS_1_NEXT?: string;
   /**
-   * A Discord channel webhook URL: one card when a source goes stale and one when it is back
-   * (src/worker/notify). Unset means no cards.
+   * The historical Discord channel webhook URL (src/shared/notify `channelsOf`): stale and recovered cards
+   * always, down and up with `notify.discord`. Other channels use `NOTIFY_*` secrets. Unset means no
+   * cards on that channel.
    */
   DISCORD_WEBHOOK_URL: string;
 }

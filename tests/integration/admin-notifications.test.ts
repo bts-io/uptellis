@@ -1,10 +1,6 @@
 /**
  * The delivery log read (`GET /api/admin/sites/:site/notifications`): signed in with `config.edit`, newest
  * first, `limit`, unknown sites, and only short error codes.
- *
- * TODO(p6b-integration): needs migration 0006 (the `channels` stream). Until it lands, `withChannelColumns`
- * adds the columns it will add (`channel`, `attempts`, `retryable`, `last_attempt_at`) when they are
- * missing; once 0006 is merged the guard finds them and does nothing, and the shim can be deleted.
  */
 import { env } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -14,18 +10,6 @@ import { admin, adminCookie, handle, json } from "./admin-app";
 
 const DB = (env as unknown as Env).DB;
 const PREFIX = "p6b-log:";
-
-async function withChannelColumns() {
-  const { results } = await DB.prepare("PRAGMA table_info(notifications)").all<{ name: string }>();
-  const have = new Set(results.map((r) => r.name));
-  const add = [
-    ["channel", "text NOT NULL DEFAULT 'discord'"],
-    ["attempts", "integer NOT NULL DEFAULT 0"],
-    ["retryable", "integer"],
-    ["last_attempt_at", "integer"],
-  ].filter(([name]) => !have.has(name!));
-  for (const [name, decl] of add) await DB.exec(`ALTER TABLE notifications ADD COLUMN ${name} ${decl}`);
-}
 
 /** Far-future times, so these rows are the newest whatever else the file's D1 holds. */
 const T = (m: number) => Date.parse("2099-01-01T00:00:00Z") + m * 60_000;
@@ -38,7 +22,7 @@ async function seed() {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   await DB.batch([
-    row.bind("demo", `${PREFIX}a`, "open", "sent", T(1), null, T(1), "ops", 1, null, T(1)),
+    row.bind("demo", `${PREFIX}a`, "open", "sent", T(1), null, T(1), "ops", 1, 0, T(1)),
     row.bind("demo", `${PREFIX}a`, "resolve", "failed", null, "http_503", T(3), "pager", 3, 1, T(4)),
     row.bind(
       "demo",
@@ -53,7 +37,7 @@ async function seed() {
       0,
       T(2),
     ),
-    row.bind("other-site", `${PREFIX}c`, "open", "sent", T(9), null, T(9), "ops", 1, null, T(9)),
+    row.bind("other-site", `${PREFIX}c`, "open", "sent", T(9), null, T(9), "ops", 1, 0, T(9)),
   ]);
 }
 
@@ -61,7 +45,6 @@ let api: ReturnType<typeof admin>;
 
 beforeAll(async () => {
   resetConfigCache();
-  await withChannelColumns();
   await seed();
   api = admin(await adminCookie());
 });
