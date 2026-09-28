@@ -8,6 +8,7 @@
 import type { BatchItem } from "drizzle-orm/batch";
 import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
 import type { CheckTransport } from "@/shared/monitors/check";
+import type { EmailSender } from "@/shared/notify/provider";
 import type * as schema from "@/worker/db/schema";
 
 export type Runtime = "cloudflare" | "docker";
@@ -42,7 +43,13 @@ export const SECRET_NAMES = [
   "GOOGLE_CLIENT_SECRET",
 ] as const;
 export type SecretName = (typeof SECRET_NAMES)[number];
-export const SETTING_NAMES = ["SITE_DEFAULT", "PUBLIC_URL", "GITHUB_CLIENT_ID", "GOOGLE_CLIENT_ID"] as const;
+export const SETTING_NAMES = [
+  "SITE_DEFAULT",
+  "PUBLIC_URL",
+  "GITHUB_CLIENT_ID",
+  "GOOGLE_CLIENT_ID",
+  "EMAIL_FROM",
+] as const;
 export type SettingName = (typeof SETTING_NAMES)[number];
 
 /** Scheduled jobs; Cloudflare maps them to Cron Triggers, Docker runs them from its own scheduler. */
@@ -77,4 +84,11 @@ export interface Platform {
    * Cloudflare, fetch, `node:net`, `node:tls` and the system `ping` in Docker. Added in Phase 6.
    */
   checkTransport: CheckTransport;
+  /**
+   * A notification channel's secret by name (`ChannelSecretName`: `NOTIFY_*` or `DISCORD_WEBHOOK_URL`);
+   * undefined when unset or when the name is outside that pattern. Added in Phase 6b.
+   */
+  notifySecret(name: string): string | undefined;
+  /** The instance's email sender, or null when none is configured (src/shared/notify/provider.ts). */
+  email: EmailSender | null;
 }

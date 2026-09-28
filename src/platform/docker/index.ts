@@ -9,6 +9,7 @@ import type { BatchItem } from "drizzle-orm/batch";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { migrate } from "drizzle-orm/bun-sqlite/migrator";
 import { createBunTransport } from "@/checks/bun-transport";
+import { ChannelSecretName } from "@/shared/notify/schema";
 import { schema } from "@/worker/db";
 import { type Platform, SECRET_NAMES, SETTING_NAMES, type SecretName, type SettingName } from "../types";
 import { type EnvSource, readEnv } from "./env";
@@ -71,6 +72,10 @@ export function createDockerPlatform(opts: DockerPlatformOptions): DockerPlatfor
     rateLimiter: (name) => limiters[name],
     secret: (name) => secrets.get(name),
     setting: (name) => settings.get(name),
+    // Read on use (a channel added in admin needs no restart); `NAME_FILE` works as for every secret.
+    notifySecret: (name) => (ChannelSecretName.safeParse(name).success ? readEnv(opts.env, name) : undefined),
+    // TODO(p6b-channels): the Email Service REST API or SMTP sender when configured.
+    email: null,
     waitUntil(work) {
       const tracked: Promise<unknown> = work
         .catch((err: unknown) =>

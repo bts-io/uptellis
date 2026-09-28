@@ -10,6 +10,7 @@ import {
 } from "../model/common";
 import { containsForbiddenLiteral, safeDisplay } from "../model/safety";
 import { AgentDecl, BUILTIN_RUNNER, MaintenanceWindow, MonitorConfig } from "../monitors/schema";
+import { ChannelConfig } from "../notify/schema";
 
 export { SourceKind };
 
@@ -168,7 +169,14 @@ export const SiteConfig = z
       .object({ enabled: z.boolean().default(false), fields: z.array(PublicField).default([]) })
       .prefault({}),
     notify: z
-      .object({ discord: z.boolean().default(false), webhooks: z.array(SecretName).default([]) })
+      .object({
+        /** Down and up cards on the historical Discord channel (`channelsOf` in src/shared/notify). */
+        discord: z.boolean().default(false),
+        /** Unused since 0.4.0 (never read); kept so older configs still parse. Use `channels`. */
+        webhooks: z.array(SecretName).default([]),
+        /** Notification channels (Phase 6b); read them through `channelsOf`. */
+        channels: z.array(ChannelConfig).max(20).default([]),
+      })
       .prefault({}),
   })
   .superRefine((c, ctx) => {
@@ -211,6 +219,12 @@ export const SiteConfig = z
       (m) => m.id,
       (i) => ["monitors", i, "id"],
       "monitor",
+    );
+    dup(
+      c.notify.channels,
+      (ch) => ch.id,
+      (i) => ["notify", "channels", i, "id"],
+      "channel",
     );
     dup(
       c.agents,

@@ -39,7 +39,10 @@ function harness(onDay: string, edit: (c: SiteConfig) => SiteConfig = (c) => c) 
     current: async (slug) => {
       const state = await seedConfigs.current(slug);
       if (!state) return null;
-      return { ...state, config: edit({ ...state.config, notify: { discord: true, webhooks: [] } }) };
+      return {
+        ...state,
+        config: edit({ ...state.config, notify: { discord: true, webhooks: [], channels: [] } }),
+      };
     },
     slugs: seedConfigs.slugs,
   };
@@ -191,7 +194,7 @@ describe("down and up cards from ingest", () => {
   it("sends nothing for down and up when the site leaves notify.discord off", async () => {
     const { cards, kuma } = harness("2026-09-29", (c) => ({
       ...c,
-      notify: { discord: false, webhooks: [] },
+      notify: { discord: false, webhooks: [], channels: [] },
     }));
     await kuma("10:00:00", [{ ts: "09:59:30", status: 0 }]);
     await kuma("10:43:00", [{ ts: "10:42:30", status: 1 }]);

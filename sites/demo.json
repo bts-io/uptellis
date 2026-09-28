@@ -166,6 +166,7 @@
   },
   "notify": {
     "discord": false,
-    "webhooks": []
+    "webhooks": [],
+    "channels": []
   }
 }

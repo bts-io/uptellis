@@ -4,6 +4,7 @@
  * cron's `ctx.waitUntil`. Built per request (cheap wrappers only).
  */
 import { drizzle } from "drizzle-orm/d1";
+import { ChannelSecretName } from "@/shared/notify/schema";
 import type { AppBindings } from "@/worker/app-env";
 import { schema } from "@/worker/db";
 import { envIngestKeys } from "@/worker/ingest/keys";
@@ -57,6 +58,10 @@ export function createCloudflarePlatform(env: Env, ctx: Pick<ExecutionContext, "
     },
     secret: (name: SecretName) => envString(env, name),
     setting: (name: SettingName) => envString(env, name),
+    notifySecret: (name: string) =>
+      ChannelSecretName.safeParse(name).success ? envString(env, name) : undefined,
+    // TODO(p6b-channels): the Email Service `send_email` binding when the Worker has one.
+    email: null,
     waitUntil: (work) => ctx.waitUntil(work),
     now: () => Date.now(),
     checkTransport: createCloudflareCheckTransport(),

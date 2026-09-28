@@ -77,7 +77,7 @@ describe("SiteConfig", () => {
       backupMaxAgeH: 26,
     });
     expect(cfg.public).toEqual({ enabled: false, fields: [] });
-    expect(cfg.notify).toEqual({ discord: false, webhooks: [] });
+    expect(cfg.notify).toEqual({ discord: false, webhooks: [], channels: [] });
     expect(cfg.links).toEqual([]);
     expect(cfg.displayNames).toEqual({});
     expect(cfg.branding.tokens).toEqual({});

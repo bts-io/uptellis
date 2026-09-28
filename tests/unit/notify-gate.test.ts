@@ -13,7 +13,7 @@ const window = MaintenanceWindow.parse({
   timeZone: "Europe/Paris",
 });
 const config = (discord: boolean, maintenance = [window]) => ({
-  notify: { discord, webhooks: [] },
+  notify: { discord, webhooks: [], channels: [] },
   maintenance,
 });
 // Sunday 2026-09-27 02:30 in Paris is 00:30 UTC.
