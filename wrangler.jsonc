@@ -11,8 +11,8 @@
   // "routes": [{ "pattern": "status.example.com", "custom_domain": true }], and list it in the site config.
   "workers_dev": true,
   "preview_urls": false,
-  // Invocation logs are off: they record each request's URL, and the login links carry the viewer and admin
-  // keys in their query string. The Worker's own structured console logs (ids, codes, counts) stay on.
+  // Invocation logs are off: they record each request's URL, and invite links carry their one-time token in
+  // the path. The Worker's own structured console logs (ids, codes, counts) stay on.
   "observability": { "enabled": true, "logs": { "invocation_logs": false } },
   "upload_source_maps": true,
 
@@ -51,8 +51,8 @@
 
   // Rate limits (src/worker/middleware/rate-limit.ts). Counted per Cloudflare location, so they are
   // approximate: a brake on floods and key guessing, not a quota. Ingest is per key id and client IP (the
-  // collector posts every 60 s, the facts pusher every 15 min); the gate counts requests carrying ?key= or
-  // ?admin= and requests that fail the cookie, per client IP; admin writes are per client IP.
+  // collector posts every 60 s, the facts pusher every 15 min); the gate counts sign-in attempts and
+  // refused requests (401, 403, 404) per client IP; admin writes are per client IP.
   "ratelimits": [
     { "name": "INGEST_RATE_LIMIT", "namespace_id": "1001", "simple": { "limit": 60, "period": 60 } },
     { "name": "GATE_RATE_LIMIT", "namespace_id": "1002", "simple": { "limit": 20, "period": 60 } },

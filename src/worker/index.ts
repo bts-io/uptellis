@@ -2,6 +2,8 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { secureHeaders } from "hono/secure-headers";
 import pkg from "../../package.json";
+import { type AuthEnv, authError, withPrincipal } from "./auth/context";
+import { envAuthPlatform } from "./auth/env-platform";
 import { buildId, commitId } from "./build";
 import { D1ConfigStore } from "./engine/config-store";
 import { D1Store } from "./engine/d1-store";
@@ -9,15 +11,18 @@ import { KeyStore } from "./engine/key-store";
 import { KvModelCache } from "./engine/kv-cache";
 import { ingestRoutes } from "./ingest/routes";
 import { staleNotifier } from "./notify";
+import { accountRoutes, userRoutes } from "./routes/accounts";
 import { adminRoutes } from "./routes/admin";
 import { readRoutes } from "./routes/read";
 
 /**
  * The Hono app: owns /api/* and /embed/*. src/server.ts dispatches to it and SSR loaders call it in-process.
- * Phase 1 mounts ingest (`/api/ingest/*`, HMAC-signed, outside the viewer gate) and read (`/api/sites/*`,
- * behind the gate); Phase 3 adds admin (`/api/admin/*`, behind the admin gate); Phase 4 public and embed.
+ * Every `/api/*` request but health first gets its principal (session, API key or anonymous); then ingest
+ * (`/api/ingest/*`, HMAC-signed or an API key), Better Auth (`/api/auth/*`), the account routes (`/api/me`,
+ * `/api/setup`, `/api/invites/*`), read (`/api/sites/*`, `page.view` per site) and admin (`/api/admin/*`,
+ * a permission per route).
  */
-const app = new Hono<{ Bindings: Env }>();
+const app = new Hono<AuthEnv>();
 
 app.use("*", secureHeaders({ crossOriginEmbedderPolicy: false, contentSecurityPolicy: undefined }));
 
@@ -41,9 +46,21 @@ export const d1Backend = (env: Env, ctx?: Pick<ExecutionContext, "waitUntil">) =
   };
 };
 
+app.use(
+  "/api/*",
+  withPrincipal((c) => envAuthPlatform(c.env)),
+);
+
+app.on(["GET", "POST"], "/api/auth/*", (c) => {
+  const auth = c.get("accounts").auth();
+  return auth ? auth.handler(c.req.raw) : authError(c, 503, "unavailable", "BETTER_AUTH_SECRET is not set");
+});
+
 app.route("/api/ingest", ingestRoutes<Env>(d1Backend));
+app.route("/api", accountRoutes());
 app.route("/api/sites", readRoutes(d1Backend));
 app.route("/api/admin", adminRoutes());
+app.route("/api/admin", userRoutes());
 
 app.notFound((c) => c.json({ error: "not_found", message: "Not found" }, 404));
 

@@ -1,35 +1,12 @@
-import { createExecutionContext, env, SELF, waitOnExecutionContext } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
 import { findForbiddenLiterals } from "@/shared/model";
 import { ConfigState } from "@/shared/schemas/admin";
 import { REGISTERED } from "../support/registered-themes";
+import { ORIGIN, ownerCookie, send } from "./built";
 import { seed } from "./seed";
 
-// `/admin` server-rendered by the built Worker. vitest.config.ts gives the SSR project no ADMIN_KEY (so
-// through SELF admin is always 404), so these requests call the built entry directly with one added.
-const ORIGIN = "https://status.example.com";
-const builtPath = "../../dist/server/index.js";
-type Entry = { fetch: (r: Request, e: Env, c: ExecutionContext) => Promise<Response> };
-const built = ((await import(/* @vite-ignore */ builtPath)) as { default: Entry }).default;
-// The sealing key is random per run, like tests/integration/admin-app.ts.
-const masterKey = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))));
-const adminEnv = {
-  ...(env as unknown as Env),
-  ADMIN_KEY: "test-admin-key",
-  SOURCE_MASTER_KEY: masterKey,
-} as Env;
-
-async function send(path: string, init: RequestInit = {}): Promise<Response> {
-  const ctx = createExecutionContext();
-  const res = await built.fetch(
-    new Request(`${ORIGIN}${path}`, { redirect: "manual", ...init }),
-    adminEnv,
-    ctx,
-  );
-  await waitOnExecutionContext(ctx);
-  return res;
-}
-
+// `/admin` server-rendered by the built Worker, signed in as the owner (tests/ssr/gate.test.ts covers who
+// may not see it).
 let cookie = "";
 const page = async (path: string) => {
   const res = await send(path, { headers: { cookie } });
@@ -45,27 +22,7 @@ const text = (html: string) =>
 
 beforeAll(async () => {
   await seed("default");
-  const login = await send("/admin?admin=test-admin-key");
-  expect(login.status).toBe(302);
-  cookie = (login.headers.get("set-cookie") ?? "").split(";")[0]!;
-  expect(cookie).toMatch(/^uptellis_admin=/);
-});
-
-describe("/admin gate", () => {
-  it("is the 404 page without the admin cookie, also with a viewer cookie", async () => {
-    expect((await send("/admin")).status).toBe(404);
-    const viewer = (
-      (await SELF.fetch(`${ORIGIN}/?key=test-viewer-key`, { redirect: "manual" })).headers.get(
-        "set-cookie",
-      ) ?? ""
-    ).split(";")[0]!;
-    for (const path of ["/admin", "/admin/revisions", "/admin/sources"]) {
-      const res = await send(path, { headers: { cookie: viewer } });
-      expect(res.status, path).toBe(404);
-      expect(await res.text(), path).not.toContain("admin");
-    }
-    expect((await SELF.fetch(`${ORIGIN}/admin`, { headers: { cookie } })).status).toBe(404);
-  });
+  cookie = await ownerCookie();
 });
 
 describe("/admin pages", () => {
