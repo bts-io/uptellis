@@ -29,7 +29,7 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
 };
 
 /** An API key is scoped to one site and a subset of what a pusher or agent may do. */
-export const API_KEY_SCOPES = ["ingest", "read"] as const;
+export const API_KEY_SCOPES = ["ingest", "read", "agent"] as const;
 export type ApiKeyScope = (typeof API_KEY_SCOPES)[number];
 
 export type Principal =

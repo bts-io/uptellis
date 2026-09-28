@@ -9,6 +9,7 @@ import {
   sourceKindOf,
 } from "../model/common";
 import { containsForbiddenLiteral, safeDisplay } from "../model/safety";
+import { AgentDecl, BUILTIN_RUNNER, MaintenanceWindow, MonitorConfig } from "../monitors/schema";
 
 export { SourceKind };
 
@@ -123,7 +124,13 @@ export const SiteConfig = z
     sources: z.array(
       z.object({ id: SourceId, kind: SourceKind, expectedIntervalS: z.number().int().positive() }),
     ),
+    /** Legacy edge checks; read them through `monitorsOf` (src/shared/monitors), which migrates them. */
     probes: z.array(ProbeConfig).max(20).default([]),
+    /** Native monitors (Phase 6): checks run by `builtin` and by the agents below. */
+    monitors: z.array(MonitorConfig).max(200).default([]),
+    /** Agents (`uptellis-agent`) that may run this site's monitors and post results. */
+    agents: z.array(AgentDecl).max(20).default([]),
+    maintenance: z.array(MaintenanceWindow).max(50).default([]),
     sections: z.array(z.object({ id: SectionId, title: safeDisplay(80), services: z.array(ServiceId) })),
     displayNames: z.record(ServiceId, safeDisplay(150)).default({}),
     /** Tailnet name -> label; never addresses (keys and values are display-checked). */
@@ -207,6 +214,44 @@ export const SiteConfig = z
       });
     }
     dup(
+      c.monitors,
+      (m) => m.id,
+      (i) => ["monitors", i, "id"],
+      "monitor",
+    );
+    dup(
+      c.agents,
+      (a) => a.id,
+      (i) => ["agents", i, "id"],
+      "agent",
+    );
+    dup(
+      c.maintenance,
+      (w) => w.id,
+      (i) => ["maintenance", i, "id"],
+      "maintenance window",
+    );
+    const agents = new Set(c.agents.map((a) => a.id));
+    for (const [i, m] of c.monitors.entries()) {
+      for (const [j, r] of m.runners.entries()) {
+        if (r !== BUILTIN_RUNNER && !agents.has(r)) {
+          ctx.addIssue({
+            code: "custom",
+            message: `Unknown agent ${r}`,
+            path: ["monitors", i, "runners", j],
+          });
+        }
+      }
+    }
+    for (const [i, w] of c.maintenance.entries()) {
+      if (w.kind === "once" && Date.parse(w.end) <= Date.parse(w.start)) {
+        ctx.addIssue({ code: "custom", message: "end must be after start", path: ["maintenance", i, "end"] });
+      }
+      if (w.kind === "weekly" && !isTimeZone(w.timeZone)) {
+        ctx.addIssue({ code: "custom", message: "Unknown time zone", path: ["maintenance", i, "timeZone"] });
+      }
+    }
+    dup(
       c.sections,
       (s) => s.id,
       (i) => ["sections", i, "id"],
@@ -234,6 +279,15 @@ export const SiteConfig = z
     }
   });
 export type SiteConfig = z.infer<typeof SiteConfig>;
+
+function isTimeZone(tz: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
 /** What an editor or a JSON file may supply before defaults are applied. */
 export type SiteConfigInput = z.input<typeof SiteConfig>;
 
@@ -248,6 +302,7 @@ type AnyDef = {
   innerType?: z.ZodType;
   element?: z.ZodType;
   valueType?: z.ZodType;
+  options?: z.ZodType[];
 };
 const defOf = (schema: z.ZodType) => (schema as unknown as { _zod: { def: AnyDef } })._zod.def;
 
@@ -271,6 +326,10 @@ function canonicalize(schema: z.ZodType, value: unknown): unknown {
         if (src[k] !== undefined) out[k] = canonicalize(s, src[k]);
       }
       return out;
+    }
+    case "union": {
+      const option = def.options!.find((o) => o.safeParse(value).success);
+      return option ? canonicalize(option, value) : value;
     }
     case "record": {
       const src = value as Record<string, unknown>;

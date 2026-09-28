@@ -53,6 +53,9 @@
       "intervalS": 60
     }
   ],
+  "monitors": [],
+  "agents": [],
+  "maintenance": [],
   "sections": [
     {
       "id": "web",

@@ -13,6 +13,7 @@ import { Button, Card, ConfirmDialog, CopyField, Field, Modal, Notice, when } fr
 const SCOPE_HELP: Record<ApiKeyScope, string> = {
   ingest: "push data as a source of this site",
   read: "read this site's page data and API",
+  agent: "run this site's monitors as an agent (uptellis-agent)",
 };
 
 /**

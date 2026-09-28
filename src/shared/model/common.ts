@@ -56,7 +56,7 @@ export const SERVICE_STATUSES = [
 export const ServiceStatus = z.enum(SERVICE_STATUSES);
 export type ServiceStatus = z.infer<typeof ServiceStatus>;
 
-export const SERVICE_KINDS = ["http", "port", "ping", "keyword", "push", "fact"] as const;
+export const SERVICE_KINDS = ["http", "port", "ping", "keyword", "push", "fact", "tls"] as const;
 export const ServiceKind = z.enum(SERVICE_KINDS);
 export type ServiceKind = z.infer<typeof ServiceKind>;
 

@@ -74,6 +74,8 @@ export function checkType(s: ServiceView): string {
       return "PUSH";
     case "fact":
       return "FACT";
+    case "tls":
+      return "TLS";
   }
 }
 
