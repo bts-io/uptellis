@@ -78,7 +78,7 @@ Accounts come from [Better Auth](https://www.better-auth.com) (`src/worker/auth/
 
 - **Email and password** always. Passwords are 12 to 128 characters and stored as scrypt hashes (Better Auth's default).
 - **GitHub and Google** only when both the client id setting and the secret are set ([OPERATIONS.md](OPERATIONS.md#sign-in-with-github-or-google)). OAuth never creates an account and never links one implicitly: a signed-in user links a provider (`POST /api/auth/link-social`) and can sign in with it from then on.
-- **The session cookie** is `__Secure-uptellis.session_token`: a random token signed with `BETTER_AUTH_SECRET`, `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`, valid 7 days and renewed daily while in use. The session behind it lives in the database (`sessions`); signing out or removing the user ends it.
+- **The session cookie** is `__Secure-uptellis.session_token`: a random token signed with `BETTER_AUTH_SECRET`, `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`, valid 7 days and renewed daily while in use. The session behind it lives in the database (`sessions`); signing out or removing the user ends it. Only when the base URL is plain `http` (local development, where browsers drop `Secure` cookies) is it `uptellis.session_token` without the prefix and the `Secure` flag; an https deployment never accepts that name.
 - **CSRF.** Better Auth checks the `Origin` of its own writes against `PUBLIC_URL`. Every other write (the admin API, setup, accepting an invite) must be same-origin: `Sec-Fetch-Site: same-origin`, or an `Origin` equal to the request's own; otherwise 403. `SameSite=Lax` rather than `Strict`, so following a link to the dashboard from another site keeps you signed in.
 
 ### Who may see what

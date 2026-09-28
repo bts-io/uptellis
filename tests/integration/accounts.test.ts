@@ -19,7 +19,8 @@ import {
 } from "@/shared/schemas/auth";
 import { schema } from "@/worker/db";
 import { resetConfigCache } from "@/worker/engine/config-store";
-import { testPlatform } from "../support/platform";
+import app from "@/worker/index";
+import { fetchWith, testPlatform } from "../support/platform";
 import { admin, handle, json, OWNER, send, sessionCookie, signIn, testEmail } from "./admin-app";
 
 const { db } = testPlatform();
@@ -116,6 +117,29 @@ describe("sign-in", () => {
     });
     expect(out.status).toBe(200);
     expect((await me(cookie!)).user).toBeNull();
+  });
+
+  it("uses a plain session cookie only for an http base URL (local development)", async () => {
+    const local = "http://localhost:5173";
+    const res = await fetchWith(
+      app,
+      new Request(`${local}/api/auth/sign-in/email`, {
+        method: "POST",
+        headers: { origin: local, "content-type": "application/json" },
+        body: JSON.stringify({ email: OWNER.email, password: OWNER.password }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    const set = res.headers.getSetCookie().find((c) => c.startsWith("uptellis.session_token="))!;
+    expect(set).toBeDefined();
+    expect(set).not.toMatch(/;\s*Secure/i);
+    expect(set).toMatch(/HttpOnly/i);
+    expect(res.headers.getSetCookie().some((c) => c.startsWith("__Secure-"))).toBe(false);
+    const cookie = set.split(";")[0]!;
+    const me = await fetchWith(app, new Request(`${local}/api/me`, { headers: { cookie } }));
+    expect(Me.parse(await me.json()).user?.email).toBe(OWNER.email);
+    // The same plain cookie is not accepted by an https deployment.
+    expect(Me.parse(await json(await handle("/api/me", { headers: { cookie } }))).user).toBeNull();
   });
 
   it("treats a forged session cookie as signed out", async () => {

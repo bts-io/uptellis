@@ -9,7 +9,8 @@
  *   through the server API. The first user ever created becomes `owner`, every later one `viewer` until
  *   the invite that created it sets its role.
  * - Sessions live in the database behind an httpOnly, Secure, SameSite=Lax cookie
- *   (`__Secure-uptellis.session_token`); no cookie cache, so a role change or removal applies at once.
+ *   (`__Secure-uptellis.session_token`); no cookie cache, so a role change or removal applies at once. Only
+ *   an http base URL (local development) gets a plain `uptellis.session_token` without `Secure`.
  * - The JWT plugin issues short-lived tokens (`/api/auth/token`) that other services verify against
  *   `/api/auth/jwks`.
  * - Rate limits are Uptellis' own (src/worker/middleware/rate-limit.ts), so Better Auth's are off.
@@ -74,6 +75,7 @@ export async function userCount(p: Pick<Platform, "db">): Promise<number> {
 }
 
 function build(p: AuthPlatform, secret: string, baseURL: string) {
+  const secure = new URL(baseURL).protocol === "https:";
   return betterAuth({
     appName: "Uptellis",
     baseURL,
@@ -109,8 +111,8 @@ function build(p: AuthPlatform, secret: string, baseURL: string) {
     telemetry: { enabled: false },
     advanced: {
       cookiePrefix: COOKIE_PREFIX,
-      useSecureCookies: true,
-      defaultCookieAttributes: { httpOnly: true, secure: true, sameSite: "lax" },
+      useSecureCookies: secure,
+      defaultCookieAttributes: { httpOnly: true, secure, sameSite: "lax" },
       ipAddress: { ipAddressHeaders: ["cf-connecting-ip"] },
     },
     plugins: [

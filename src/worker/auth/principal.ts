@@ -9,7 +9,7 @@
 import type { Principal, Role } from "@/shared/auth";
 import { ROLES } from "@/shared/auth";
 import { bearerToken, verifyApiKey } from "./api-keys";
-import { SESSION_COOKIE } from "./cookies";
+import { sessionCookieName } from "./cookies";
 import type { Auth, AuthPlatform } from "./instance";
 
 export const ANONYMOUS: Principal = { kind: "anonymous" };
@@ -23,11 +23,16 @@ export function rememberPrincipal(request: Request, principal: Principal): void 
 
 export const rememberedPrincipal = (request: Request): Principal | undefined => remembered.get(request);
 
-/** True when the request carries the session cookie. */
+const SESSION_COOKIES = [sessionCookieName(true), sessionCookieName(false)];
+
+/**
+ * True when the request carries a session cookie (either name: Better Auth itself reads only the one its
+ * base URL calls for).
+ */
 export function hasSessionCookie(request: Request): boolean {
   const header = request.headers.get("cookie");
   if (!header) return false;
-  return header.split(";").some((part) => part.trim().startsWith(`${SESSION_COOKIE}=`));
+  return header.split(";").some((part) => SESSION_COOKIES.some((name) => part.trim().startsWith(`${name}=`)));
 }
 
 const isRole = (v: unknown): v is Role => typeof v === "string" && (ROLES as readonly string[]).includes(v);
