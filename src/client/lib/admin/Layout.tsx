@@ -1,5 +1,5 @@
-import { Link } from "@tanstack/react-router";
-import type { ReactNode } from "react";
+import { Link, useRouterState } from "@tanstack/react-router";
+import { type ReactNode, useEffect, useRef } from "react";
 import type { Permission } from "@/shared/auth";
 import type { ConfigState } from "@/shared/schemas/admin";
 import type { Me } from "@/shared/schemas/auth";
@@ -20,6 +20,14 @@ const NAV: readonly { to: string; label: string; needs: Permission }[] = [
  * user's permissions open). Plain layout on the kit tokens.
  */
 export function AdminLayout({ state, me, children }: { state: ConfigState; me: Me; children: ReactNode }) {
+  const nav = useRef<HTMLElement>(null);
+  const path = useRouterState({ select: (s) => s.location.pathname });
+  // On a narrow screen the tab row scrolls sideways: keep the current tab in view.
+  useEffect(() => {
+    nav.current
+      ?.querySelector("[data-status=active]")
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [path]);
   return (
     <div className="min-h-dvh bg-base font-sans text-ink">
       <header className="border-b border-line bg-panel">
@@ -34,7 +42,11 @@ export function AdminLayout({ state, me, children }: { state: ConfigState; me: M
             {me.user && <AccountMenu user={me.user} links={[{ href: "/", label: "Status page" }]} />}
           </div>
         </div>
-        <nav aria-label="Admin" className="mx-auto max-w-5xl overflow-x-auto px-4 [scrollbar-width:none]">
+        <nav
+          ref={nav}
+          aria-label="Admin"
+          className="mx-auto max-w-5xl overflow-x-auto px-4 [scrollbar-width:none]"
+        >
           <ul className="flex gap-1 whitespace-nowrap">
             {NAV.filter((n) => me.permissions.includes(n.needs)).map((n) => (
               <li key={n.to}>
