@@ -5,8 +5,10 @@ import { monitorServiceId, monitorsOf } from "@/shared/monitors";
 import { listProfiles } from "@/shared/profiles";
 import type { ConfigDiffEntry, ConfigIssue, ConfigState } from "@/shared/schemas/admin";
 import { registeredThemes } from "../../themes";
+import { ChannelsField } from "./ChannelsEditor";
 import { type AdminFailure, describeFailure, importConfig, saveConfig } from "./client";
 import { AgentsField, AlertsField, MaintenanceField, MonitorsField } from "./MonitorsEditor";
+import { PublicSettings } from "./PublicEditor";
 import { Button, Card, DiffTable, Field, IssueText, inputClass, issuesAt, Notice, SelectField } from "./ui";
 
 export interface KnownService {
@@ -457,6 +459,26 @@ export function ConfigEditor({ site, state, services, onReload }: ConfigEditorPr
 
           <AlertsField notify={draft.notify} onChange={(notify) => set("notify", notify)} />
 
+          <ChannelsField
+            site={site}
+            notify={draft.notify}
+            saved={state.config.notify}
+            services={[...known]}
+            at={at}
+            onChange={(notify) => set("notify", notify)}
+          />
+
+          <PublicSettings
+            site={draft.slug}
+            visibility={draft.visibility}
+            hostname={draft.hostnames[0] ?? ""}
+            value={draft.public}
+            saved={state.config.public}
+            services={[...known]}
+            issues={at("public")}
+            onChange={(value) => set("public", value)}
+          />
+
           {local.length > 0 && (
             <Notice tone="error">
               {local.length === 1 ? "1 field needs attention" : `${local.length} fields need attention`}
@@ -512,7 +534,7 @@ export function ConfigEditor({ site, state, services, onReload }: ConfigEditorPr
 
 /** Paths the form has an input for; issues elsewhere are listed for the JSON tab. */
 const FORM_PATH =
-  /^(name|theme|visibility|profiles(\.|$)|branding\.(title|tagline)|sections\.\d+(\.|$)|displayNames\.|thresholds\.|links(\.|$)|monitors(\.|$)|agents(\.|$)|maintenance(\.|$)|notify\.discord)/;
+  /^(name|theme|visibility|profiles(\.|$)|branding\.(title|tagline)|sections\.\d+(\.|$)|displayNames\.|thresholds\.|links(\.|$)|monitors(\.|$)|agents(\.|$)|maintenance(\.|$)|notify\.(discord|channels)(\.|$)|public(\.|$))/;
 const isFormPath = (path: string) => FORM_PATH.test(path);
 
 /**

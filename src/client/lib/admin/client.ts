@@ -10,8 +10,10 @@ import {
   type ConfigIssue,
   ConfigState,
   type CreateSourceRequest,
+  DeliveryList,
   ImportResult,
   IssuedKey,
+  NotifyTestResult,
   RevisionList,
   SaveConfigResponse,
   SourceKeyList,
@@ -62,6 +64,46 @@ export const createSource = async (site: string, req: CreateSourceRequest) =>
 
 export const rotateKey = async (site: string, keyId: string) =>
   IssuedKey.parse(await api(`${base(site)}/sources/${encodeURIComponent(keyId)}/rotate`, { method: "POST" }));
+
+/** The site's recent notification deliveries, newest first. */
+export const getDeliveries = async (site: string, limit = 50) =>
+  DeliveryList.parse(await api(`${base(site)}/notifications?limit=${limit}`));
+
+export type TestKind = "down" | "up" | "stale" | "recovered";
+
+/** What a channel test came to: sent, or failed with a short code (and the server's message when it had one). */
+export type ChannelTestOutcome =
+  | { sent: true; status: number }
+  | { sent: false; status: number | null; error: string; message?: string };
+
+/** Sends one TEST message to one saved channel (`POST /api/admin/notify/test?site=&channel=&kind=`). */
+export async function testChannel(
+  site: string,
+  channel: string,
+  kind: TestKind,
+): Promise<ChannelTestOutcome> {
+  const q = new URLSearchParams({ site, channel, kind });
+  try {
+    const r = NotifyTestResult.parse(await api(`/api/admin/notify/test?${q}`, { method: "POST" }));
+    return r.sent
+      ? { sent: true, status: r.status }
+      : { sent: false, status: r.status, error: r.error ?? "not_sent" };
+  } catch (err) {
+    if (err instanceof ApiError) {
+      // 502: the channel did not take the message; the body is the same result with its error code.
+      const r = NotifyTestResult.safeParse(err.body);
+      if (r.success && !r.data.sent)
+        return { sent: false, status: r.data.status, error: r.data.error ?? err.code };
+      return { sent: false, status: err.status, error: err.code, message: err.message };
+    }
+    return {
+      sent: false,
+      status: null,
+      error: "network",
+      message: "The request failed. Check the connection.",
+    };
+  }
+}
 
 /** What went wrong with a save, restore or import, in the shape the editor shows. */
 export interface AdminFailure {

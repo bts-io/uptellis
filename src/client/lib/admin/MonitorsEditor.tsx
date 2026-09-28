@@ -20,6 +20,7 @@ import {
   RUNNER_TYPES,
   WEEKDAYS,
 } from "@/shared/monitors";
+import { LEGACY_DISCORD_CHANNEL, LEGACY_DISCORD_SECRET } from "@/shared/notify";
 import type { ConfigIssue } from "@/shared/schemas/admin";
 import { Button, Field, IssueText, SelectField } from "./ui";
 
@@ -770,6 +771,10 @@ export function AlertsField({
   notify: SiteConfig["notify"];
   onChange: (notify: SiteConfig["notify"]) => void;
 }) {
+  // `channelsOf` drops the built-in channel once a configured one takes its secret or id.
+  const replaced = notify.channels.some(
+    (c) => ("secret" in c && c.secret === LEGACY_DISCORD_SECRET) || c.id === LEGACY_DISCORD_CHANNEL,
+  );
   return (
     <fieldset>
       <legend className="mb-2 text-sm font-semibold">Alerts</legend>
@@ -783,11 +788,18 @@ export function AlertsField({
         <span>
           Discord cards when a service goes down and comes back up
           <span className="block text-xs text-muted">
-            Posted to the DISCORD_WEBHOOK_URL webhook, never for a service in maintenance. Cards for silent
-            sources are always sent.
+            Posted to the DISCORD_WEBHOOK_URL webhook by the built-in Discord channel (listed under
+            notification channels), never for a service in maintenance. Cards for silent sources are always
+            sent.
           </span>
         </span>
       </label>
+      {replaced && (
+        <p className="mt-2 text-xs text-muted">
+          A configured channel uses DISCORD_WEBHOOK_URL, so the built-in channel is off and this switch has no
+          effect: choose that channel's events instead.
+        </p>
+      )}
     </fieldset>
   );
 }
