@@ -47,6 +47,7 @@ The first account created becomes the owner, and only while no account exists, s
 
 1. Open `https://status.example.com/setup` (or `/admin`, which sends you there while no account exists).
 2. Enter your name, email and a password of 12 characters or more. You are signed in as the owner, and setup closes for good (`POST /api/setup` answers 409 from now on).
+   Setup then shows the first site: the one this address serves (`SITE_DEFAULT` or a config listing the hostname), to confirm or adjust its name, hostname, visibility and theme, or a new one with its own slug. Either way you land in `/admin`.
 3. Invite everyone else from the admin UI's users page: pick a role (`viewer` sees private sites, `admin` also edits configs, sources, API keys and users, `owner` also the instance settings) and, optionally, the one address that may use the invite. Send the one-time link over a private channel; it expires after 7 days.
 4. Decide per site whether its page is `public` or `private` (the config's `visibility`; new sites are private).
 
@@ -57,6 +58,7 @@ sequenceDiagram
   participant P as Invited person
   O->>U: /setup (name, email, password)
   U-->>O: owner account, signed in, setup closed
+  O->>U: first site (confirm or create)
   O->>U: invite (role, optional address)
   U-->>O: one-time link, valid 7 days
   O->>P: the link, over a private channel

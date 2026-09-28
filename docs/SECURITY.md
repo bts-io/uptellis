@@ -85,10 +85,10 @@ Accounts come from [Better Auth](https://www.better-auth.com) (`src/worker/auth/
 
 Every request gets a principal (`src/worker/auth/principal.ts`): a signed-in user, an API key, or anonymous. `can()` in `src/shared/auth.ts` decides.
 
-- **Site pages and the read API** (`/api/sites/:site/*`) need `page.view` on that site. A public site is open to everyone. A private site answers 404 to anyone else, exactly as a site that does not exist, so a private site is never revealed. The page's loader calls the read API through the in-process bridge as the same principal, so the page answers 404 too.
+- **Site pages and the read API** (`/api/sites/:site/*`) need `page.view` on that site. A public site is open to everyone. A private site answers 404 to anyone else, exactly as a site that does not exist, so a private site is never revealed. The page's loader calls the read API through the in-process bridge as the same principal: a signed-out visitor is sent to `/sign-in?next=/` (the same for a private and an unknown site), a signed-in user without access gets the 404 page.
 - **The admin API** (`/api/admin/*`) needs the permission of each route: 401 JSON when signed out, 403 when signed in without it (or with an API key).
 - **The admin UI** (`/admin`, `/admin/*`) redirects a signed-out visitor to `/sign-in?next=<path>` (to `/setup` while no account exists) and answers 404 to a signed-in user without an admin permission.
-- **Always open:** `GET /api/health`, the ingest routes (they authenticate themselves), Better Auth's routes, `GET /api/me`, the setup and invite routes, and the account pages `/setup`, `/sign-in` and `/invite/<token>`.
+- **Always open:** `GET /api/health`, the ingest routes (they authenticate themselves), Better Auth's routes, `GET /api/me`, the setup and invite routes, and the account pages `/setup` (404 once an account exists), `/sign-in` and `/invite/<token>`. `/account` sends a signed-out visitor to sign-in.
 
 ### API keys
 
