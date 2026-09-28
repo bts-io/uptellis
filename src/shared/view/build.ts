@@ -219,6 +219,7 @@ export function buildSiteView(input: ViewInput): SiteView {
     }),
     factGroups: facts.groups,
     factIndex: facts.index,
+    highlights: [],
     activity: buildActivity({
       beats: model.recentHeartbeats,
       incidents: uniqueIncidents([...openIncidents, ...recentIncidents]),

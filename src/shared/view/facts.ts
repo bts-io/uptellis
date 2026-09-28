@@ -331,6 +331,7 @@ export function buildFactViews(facts: Iterable<Fact>, ctx: Omit<FactContext, "si
       return {
         id,
         title: spec?.title ?? humanize(id),
+        icon: null,
         level: rows.reduce<Level>(
           (w, r) => (r.level === null || r.level === "info" ? w : (worse(w, r.level) ?? w)),
           "ok",
