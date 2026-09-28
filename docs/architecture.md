@@ -130,7 +130,7 @@ A theme is one React page over `SiteView`. Three are registered (`src/client/the
 
 ## Site config and revisions
 
-A site's config (`SiteConfig`, `src/shared/config/site.ts`) holds its name, hostnames, theme, sources and their expected intervals, probes, sections (which services appear under which title), display names, host aliases, an optional topology (nodes and replication, watches, depends or network edges), health weights, fact thresholds, links, branding, the public allow-list and notification switches.
+A site's config (`SiteConfig`, `src/shared/config/site.ts`) holds its name, hostnames, theme, visibility (`public` or `private`), active profiles, sources and their expected intervals, probes, sections (which services appear under which title), display names, host aliases, an optional topology (nodes and replication, watches, depends or network edges), health weights, fact thresholds, links, branding, the public allow-list and notification switches.
 
 ```mermaid
 flowchart LR

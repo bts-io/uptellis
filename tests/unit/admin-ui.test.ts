@@ -151,6 +151,29 @@ describe("config editor", () => {
     expect(onReload).toHaveBeenCalledTimes(1);
   });
 
+  it("edits the visibility and the profile list, and reviews them as config changes", async () => {
+    editor();
+    const visibility = field("Visibility") as unknown as HTMLSelectElement;
+    expect(visibility.value).toBe("public");
+    expect(body()).toContain("Anyone can open the page");
+    act(() => {
+      visibility.value = "private";
+      visibility.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(body()).toContain("Only signed-in users see the page");
+    const profiles = field("Profile ids, in order") as HTMLInputElement;
+    expect(profiles.value).toBe("forgejo-ha");
+    type(profiles, "forgejo-ha, ");
+    expect(profiles.value).toBe("forgejo-ha, ");
+    type(profiles, "forgejo-ha, Not A Profile");
+    expect(profiles.getAttribute("aria-invalid")).toBe("true");
+    type(profiles, "forgejo-ha, my-db");
+    replies.push({ status: 200, body: { valid: true, issues: [], diff: [], version: null } });
+    act(() => button("Review changes").click());
+    await settle();
+    expect(calls[0]!.body).toMatchObject({ visibility: "private", profiles: ["forgejo-ha", "my-db"] });
+  });
+
   it("edits the raw JSON with parse and schema errors, and back in the form", () => {
     editor();
     act(() => button("JSON").click());

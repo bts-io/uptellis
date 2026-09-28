@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { VISIBILITIES } from "@/shared/auth";
 import { SiteConfig } from "@/shared/config";
 import type { ConfigDiffEntry, ConfigIssue, ConfigState } from "@/shared/schemas/admin";
 import { registeredThemes } from "../../themes";
@@ -9,6 +10,11 @@ export interface KnownService {
   id: string;
   name: string;
 }
+
+const VISIBILITY_HELP: Record<SiteConfig["visibility"], string> = {
+  public: "Anyone can open the page and its read API.",
+  private: "Only signed-in users see the page; everyone else gets a 404.",
+};
 
 const THRESHOLDS = [
   ["certWarnDays", "Cert warning (days)"],
@@ -206,6 +212,21 @@ export function ConfigEditor({ site, state, services, onReload }: ConfigEditorPr
                 <option value={draft.theme}>{draft.theme} (not registered)</option>
               )}
             </SelectField>
+            <SelectField
+              label="Visibility"
+              value={draft.visibility}
+              aria-describedby="visibility-help"
+              onChange={(e) => set("visibility", e.target.value as SiteConfig["visibility"])}
+            >
+              {VISIBILITIES.map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </SelectField>
+            <p id="visibility-help" className="self-end text-xs text-muted">
+              {VISIBILITY_HELP[draft.visibility]}
+            </p>
             <Field
               label="Branding title"
               value={draft.branding.title}
@@ -219,6 +240,12 @@ export function ConfigEditor({ site, state, services, onReload }: ConfigEditorPr
               onChange={(e) => set("branding", { ...draft.branding, tagline: e.target.value || undefined })}
             />
           </fieldset>
+
+          <ProfilesField
+            value={draft.profiles}
+            issues={at("profiles")}
+            onChange={(profiles) => set("profiles", profiles)}
+          />
 
           <fieldset>
             <legend className="mb-2 text-sm font-semibold">Sections</legend>
@@ -450,5 +477,42 @@ export function ConfigEditor({ site, state, services, onReload }: ConfigEditorPr
 
 /** Paths the form has an input for; issues elsewhere are listed for the JSON tab. */
 const FORM_PATH =
-  /^(name|theme|branding\.(title|tagline)|sections\.\d+(\.|$)|displayNames\.|thresholds\.|links(\.|$))/;
+  /^(name|theme|visibility|profiles(\.|$)|branding\.(title|tagline)|sections\.\d+(\.|$)|displayNames\.|thresholds\.|links(\.|$))/;
 const isFormPath = (path: string) => FORM_PATH.test(path);
+
+/**
+ * The site's profiles as a comma separated list of ids, in order (`generic` is always active). Keeps its own
+ * text so a trailing comma survives typing; the draft gets the parsed ids.
+ */
+function ProfilesField({
+  value,
+  issues,
+  onChange,
+}: {
+  value: string[];
+  issues: ConfigIssue[];
+  onChange: (profiles: string[]) => void;
+}) {
+  const [text, setText] = useState(value.join(", "));
+  return (
+    <fieldset>
+      <legend className="mb-2 text-sm font-semibold">Profiles</legend>
+      <Field
+        label="Profile ids, in order"
+        placeholder="forgejo-ha"
+        value={text}
+        issues={issues}
+        onChange={(e) => {
+          setText(e.target.value);
+          onChange(
+            e.target.value
+              .split(",")
+              .map((p) => p.trim())
+              .filter(Boolean),
+          );
+        }}
+      />
+      <p className="mt-1 text-xs text-muted">The generic profile is always active and need not be listed.</p>
+    </fieldset>
+  );
+}
