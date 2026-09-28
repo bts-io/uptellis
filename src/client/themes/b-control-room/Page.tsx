@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { EmptyState, Footer, StaleBanner } from "@/client/kit";
+import { highlightedGroups, sourceName } from "@/shared/view";
 import type { ThemePageProps } from "../types";
 import { ActivityTile } from "./Activity";
-import { cx, DASH, factText, isStale, kumaStale } from "./format";
+import { cx, isStale, kumaStale } from "./format";
 import { Header } from "./Header";
 import { IncidentCalendar } from "./History";
 import { IncidentRow } from "./IncidentRow";
-import { BackupTile, ForgejoTile, RunnersTile, TailnetTile } from "./InfraTiles";
+import { GroupTile, TailnetTile } from "./InfraTiles";
 import { Kpis } from "./Kpis";
 import { MonitorTile } from "./MonitorTile";
 import { ResponseChart } from "./ResponseChart";
@@ -25,7 +26,12 @@ export function Page({ view, commit }: ThemePageProps) {
   const [phoneTab, setPhoneTab] = useState<"activity" | "history">("activity");
   const monitorsStale = kumaStale(view);
   const services = [...view.sections.flatMap((s) => s.services), ...view.unsectioned];
-  const collector = factText(view, "kuma.host");
+  const collector = sourceName(view, "kuma");
+  // The KPI strip shows the highlighted groups; the first two others sit beside the chart, the rest below.
+  const inSummary = highlightedGroups(view);
+  const groups = view.factGroups.filter((g) => !inSummary.has(g.id));
+  const beside = groups.slice(0, 2);
+  const below = groups.slice(2);
 
   return (
     <div className="relative min-h-dvh overflow-x-clip bg-base font-sans text-ink tabular-nums antialiased">
@@ -76,15 +82,20 @@ export function Page({ view, commit }: ThemePageProps) {
 
             <ResponseChart view={view} />
 
-            <section
-              aria-label="Services"
-              className="grid grid-cols-1 content-start gap-3 min-[1100px]:col-span-4"
-            >
-              <ForgejoTile view={view} />
-              <RunnersTile view={view} />
-            </section>
+            {beside.length > 0 && (
+              <section
+                aria-label="Services"
+                className="grid grid-cols-1 content-start gap-3 min-[1100px]:col-span-4"
+              >
+                {beside.map((g) => (
+                  <GroupTile key={g.id} view={view} group={g} />
+                ))}
+              </section>
+            )}
 
-            <BackupTile view={view} />
+            {below.map((g) => (
+              <GroupTile key={g.id} view={view} group={g} className="min-[1100px]:col-span-4" />
+            ))}
             <TailnetTile view={view} />
 
             <div
@@ -120,12 +131,7 @@ export function Page({ view, commit }: ThemePageProps) {
           </div>
 
           <div className="mt-3">
-            <Footer
-              generatedAt={view.generatedAt}
-              collectorHost={collector === DASH ? null : collector}
-              commit={commit}
-              hints={HINTS}
-            />
+            <Footer generatedAt={view.generatedAt} collectorHost={collector} commit={commit} hints={HINTS} />
           </div>
         </Wrap>
       </main>

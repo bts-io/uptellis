@@ -21,6 +21,9 @@ const PATHS: Record<IconName, string> = {
   check: '<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16.5 9.5"/>',
 };
 
+/** True for a name the kit can draw (a profile's group icon is a plain string). */
+export const isIconName = (name: string | null): name is IconName => !!name && Object.hasOwn(PATHS, name);
+
 /** Decorative outline icon in the current text colour (hidden from assistive tech; pair it with text). */
 export function Icon({ name, size = 14, className }: IconProps) {
   return (

@@ -84,7 +84,7 @@ Before every push:
 bun run verify   # Biome, typecheck, unit + integration + SSR tests, Docker adapter tests, collector tests
 ```
 
-More in [docs/](docs): [THEMES.md](docs/THEMES.md) (themes and the view model), [SECURITY.md](docs/SECURITY.md) (threat model, accounts, roles, API keys, rate limits) and [OPERATIONS.md](docs/OPERATIONS.md) (first run, OAuth, Cloudflare and Docker deploys, secrets, rotation, backups, restoring a revision).
+More in [docs/](docs): [THEMES.md](docs/THEMES.md) (themes and the view model), [profiles.md](docs/profiles.md) (what facts mean: built-in profiles and writing one), [SECURITY.md](docs/SECURITY.md) (threat model, accounts, roles, API keys, rate limits) and [OPERATIONS.md](docs/OPERATIONS.md) (first run, OAuth, Cloudflare and Docker deploys, secrets, rotation, backups, restoring a revision).
 
 ## Branches and releases
 

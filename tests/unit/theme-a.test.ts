@@ -38,7 +38,11 @@ describe("theme A page", () => {
     for (const s of v.sections.flatMap((x) => x.services)) expect(html).toContain(s.name);
     for (const title of ["sys.status", "monitors", "infra", "hosts", "activity"])
       expect(html).toContain(title);
-    expect(html).toContain("kuma 2.5.5 on watch-1");
+    expect(html).toContain("collector watch-1");
+    // The summary box's highlight slots: the Kuma version with its note, the collector, the watchdog.
+    expect(html).toMatch(/>kuma<\/dt><dd[^>]*><span>2\.5\.5<\/span><span class="text-xs text-up">latest</);
+    expect(html).toContain("Asia/Tokyo");
+    expect(html).toContain("reachable (HTTP 200)");
     expect(html).toContain("8/8 up");
   });
 
@@ -77,12 +81,12 @@ describe("theme A page", () => {
     expect(html).toContain("7/8 up");
   });
 
-  it("fills the pair cards from the facts: serving, postgres role, disk, and the standby down in an incident", () => {
+  it("fills the pair cards from the node details: serving, postgres role, disk, and the standby down in an incident", () => {
     const html = render(view("default"));
-    expect(html).toContain("forgejo failover pair");
+    expect(html).toContain("failover pair");
     expect(html).toContain("replica");
     expect(html).toContain("16%");
-    expect(html).toContain("tl 1/1 · peer is a standby");
+    expect(html).toContain("peer is a standby · 23:45");
     const inc = render(view("incident"));
     expect(inc).toMatch(/postgres<b class="[^"]*text-down/);
     expect(inc).toContain("no standby streaming");
@@ -103,9 +107,18 @@ describe("theme A page", () => {
   });
 
   it("renders a dash for missing facts and survives a site without topology", () => {
-    const v: SiteView = { ...view("default"), factGroups: [], factIndex: {}, topology: null, activity: [] };
+    const v: SiteView = {
+      ...view("default"),
+      factGroups: [],
+      factIndex: {},
+      highlights: [],
+      headline: null,
+      topology: null,
+      activity: [],
+    };
     const html = render(v);
-    expect(html).toContain("db -");
+    expect(html).toContain("sys.status");
+    expect(html).not.toContain(">kuma</dt>");
     expect(html).toContain("No infrastructure facts yet");
   });
 

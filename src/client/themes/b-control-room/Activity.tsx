@@ -1,5 +1,5 @@
 import type { ServiceView, SiteView } from "@/shared/view";
-import { allServices, checkType, cx, DASH, factText, hhmmss, kumaStale } from "./format";
+import { allServices, checkType, cx, DASH, hhmmss, kumaStale } from "./format";
 import { Chip, Micro, Tile } from "./ui";
 
 /** Rows in the activity tile: the newest checks across every monitor. */
@@ -19,7 +19,6 @@ export function ActivityTile({ view, className }: { view: SiteView; className?: 
     .flatMap((s) => s.recent.map((beat) => ({ s, beat })))
     .sort((a, b) => b.beat.ts.localeCompare(a.beat.ts))
     .slice(0, ROWS);
-  const tz = factText(view, "kuma.timezone");
 
   return (
     <Tile aria-label="Recent activity" stale={kumaStale(view)} className={cx("overflow-hidden", className)}>
@@ -31,9 +30,6 @@ export function ActivityTile({ view, className }: { view: SiteView; className?: 
             <span className="hidden sm:inline"> checks · all monitors</span> · UTC
           </span>
         </div>
-        {tz !== DASH && (
-          <span className="hidden font-mono text-[11.5px] text-muted sm:inline">kuma tz {tz}</span>
-        )}
       </div>
       {rows.length ? (
         <ul className="m-0 list-none p-0">

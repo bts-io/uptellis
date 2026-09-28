@@ -1,4 +1,4 @@
-import type { DisplayState, FactRowView, Level, ServiceView, SiteView } from "@/shared/view";
+import type { DisplayState, Level, ServiceView, SiteView } from "@/shared/view";
 
 /** Shown wherever a value is missing (a fact the probe did not send, a check without latency). */
 export const DASH = "-";
@@ -16,9 +16,6 @@ export const monthDay = (ts: string) => `${MONTHS[Number(ts.slice(5, 7)) - 1]} $
 /** The ISO instant `seconds` before `now`. */
 export const isoBefore = (now: string, seconds: number) =>
   new Date(Date.parse(now) - seconds * 1000).toISOString();
-
-export const fact = (view: SiteView, key: string): FactRowView | undefined => view.factIndex[key];
-export const factText = (view: SiteView, key: string) => view.factIndex[key]?.display ?? DASH;
 
 /** Every service on the page, sections first. */
 export const allServices = (view: SiteView): ServiceView[] => [
@@ -102,7 +99,7 @@ export const slug = (name: string) =>
 
 /** `41.2 MB` -> ["41.2", "MB"], so the unit can be set small; a value without a unit keeps it whole. */
 export function splitUnit(display: string): [string, string | null] {
-  const m = /^([\d.,]+)\s*(\S+)$/.exec(display);
+  const m = /^([\d.,]+)\s+(\S+)$/.exec(display);
   return m ? [m[1]!, m[2]!] : [display, null];
 }
 

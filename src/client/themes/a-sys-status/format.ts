@@ -1,4 +1,4 @@
-import type { DisplayState, FactRowView, Level, ServiceView, SiteView } from "@/shared/view";
+import type { DisplayState, Level, ServiceView, SiteView } from "@/shared/view";
 
 /** Shown wherever a value is missing (a fact the collector did not send, a check without latency). */
 export const DASH = "-";
@@ -8,9 +8,6 @@ export const cx = (...parts: (string | false | null | undefined)[]) => parts.fil
 /** `HH:MM:SS` of an ISO timestamp (times on this page are UTC). */
 export const hhmmss = (ts: string) => ts.slice(11, 19);
 export const hhmm = (ts: string) => ts.slice(11, 16);
-
-export const fact = (view: SiteView, key: string): FactRowView | undefined => view.factIndex[key];
-export const factText = (view: SiteView, key: string) => view.factIndex[key]?.display ?? DASH;
 
 /** Stale or never reported: every dot on the page goes hollow and values are marked frozen. */
 export const isStale = (view: SiteView) =>

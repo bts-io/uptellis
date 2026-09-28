@@ -1,4 +1,4 @@
-import type { BeatDay, DisplayState, FactRowView, Level, ServiceView, SiteView } from "@/shared/view";
+import type { BeatDay, DisplayState, Level, ServiceView, SiteView } from "@/shared/view";
 
 /** Shown wherever a value is missing (a fact the collector did not send, a check without latency). */
 export const DASH = "-";
@@ -14,8 +14,14 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 export const monthDay = (ts: string) => `${MONTHS[Number(ts.slice(5, 7)) - 1]} ${Number(ts.slice(8, 10))}`;
 export const monthName = (ts: string) => MONTHS[Number(ts.slice(5, 7)) - 1]!;
 
-export const fact = (view: SiteView, key: string): FactRowView | undefined => view.factIndex[key];
-export const factText = (view: SiteView, key: string) => view.factIndex[key]?.display ?? DASH;
+/** A figure (`2.5.5`, `41.2 MB`) rather than words: set large in the KPI strip. */
+export const isFigure = (display: string) => /^[\d.,]+(\s\S+)?$/.test(display);
+
+/** `41.2 MB` -> ["41.2", "MB"], so the unit can be set small; a value without a unit keeps it whole. */
+export function splitUnit(display: string): [string, string | null] {
+  const m = /^([\d.,]+)\s+(\S+)$/.exec(display);
+  return m ? [m[1]!, m[2]!] : [display, null];
+}
 
 const staleOrEmpty = (f: string | undefined) => f === "stale" || f === "empty";
 

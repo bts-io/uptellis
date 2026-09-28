@@ -1,6 +1,6 @@
 # Profile: forgejo-ha
 
-A **profile** is a set of fact groups plus a producer for one specific kind of system. The producer runs on the system, gathers its state as typed facts, and pushes them to Uptellis over the signed facts ingest (`POST /api/ingest/facts`). The Worker needs no code for a profile: facts are generic, and the view builder already knows how to label, order and level the groups below (`src/shared/view/facts.ts`); groups and keys it does not know still render with humanized labels.
+A **profile** is a set of fact groups plus a producer for one specific kind of system. The producer runs on the system, gathers its state as typed facts, and pushes them to Uptellis over the signed facts ingest (`POST /api/ingest/facts`). The Worker stores facts generically; how the page labels, orders, formats and levels the groups below, which facts it highlights and how they shape the topology is the code profile `forgejo-ha` in [`src/shared/profiles/forgejo-ha.ts`](../../src/shared/profiles/forgejo-ha.ts). A site turns it on with `"profiles": ["forgejo-ha"]` in its config; without it the same facts still render, with humanised labels and plain formats. What a profile is and how to write one: [docs/profiles.md](../../docs/profiles.md).
 
 This profile covers a highly available, self-hosted Forgejo on two nodes, with streaming Postgres replication between them and a **fence** that decides which node may serve, so a standby never serves while the primary is alive. How it fits into the rest of Uptellis is in [docs/architecture.md](../../docs/architecture.md).
 

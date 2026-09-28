@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useReducedMotion } from "@/client/effects";
 import { Footer } from "@/client/kit";
+import { sourceName } from "@/shared/view";
 import type { ThemePageProps } from "../types";
 import { ActivityBlock } from "./ActivityBlock";
 import { BeatsBlock } from "./BeatsBlock";
 import { CollectorBlock } from "./CollectorBlock";
-import { allServices, DASH, factText, failing, isStale } from "./format";
+import { allServices, failing, isStale } from "./format";
 import { Header } from "./Header";
 import { IncidentsBlock } from "./IncidentsBlock";
 import { InspectBlock } from "./InspectBlock";
@@ -31,7 +32,7 @@ export function Page({ view, commit }: ThemePageProps) {
   const inspected = services.find((s) => s.id === selected) ?? initial;
   // A failed fence is the first thing to read, so topology moves above the summary.
   const fenceFirst = view.topology?.fence?.level === "crit";
-  const collector = factText(view, "kuma.host");
+  const collector = sourceName(view, "kuma");
 
   const select = (id: string) => {
     setSelected(id);
@@ -58,12 +59,7 @@ export function Page({ view, commit }: ThemePageProps) {
           </main>
         </div>
         <div className="mt-3.5 px-3 md:px-6">
-          <Footer
-            generatedAt={view.generatedAt}
-            collectorHost={collector === DASH ? null : collector}
-            commit={commit}
-            hints={HINTS}
-          />
+          <Footer generatedAt={view.generatedAt} collectorHost={collector} commit={commit} hints={HINTS} />
         </div>
       </div>
     </div>

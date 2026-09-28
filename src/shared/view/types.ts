@@ -43,10 +43,20 @@ export interface SiteView {
   /** Services not placed in any section (so nothing silently disappears), in model order. */
   unsectioned: ServiceView[];
   topology: TopologyView | null;
-  /** Fact groups in a stable display order (see `FACT_GROUP_ORDER` in build.ts), rows in label order. */
+  /**
+   * Fact groups in the active profiles' order (`FactGroupDef.order`; groups no profile declares follow
+   * alphabetically), rows in the profile's key order, then by label.
+   */
   factGroups: FactGroupView[];
-  /** `"<group>.<key>"` -> row, for themes that place single facts (e.g. the Kuma version in a summary box). */
+  /** `"<group>.<key>"` -> row, every current fact (folded and hidden rows included). */
   factIndex: Record<string, FactRowView>;
+  /**
+   * The facts the active profiles ask a theme to place in its summary (`Profile.highlights`), in profile
+   * order, only those with a current fact. Empty when no active profile declares any.
+   */
+  highlights: HighlightView[];
+  /** A sentence about the system from the first active profile that has one (`Profile.headline`), else null. */
+  headline: string | null;
   /** Newest first, at most 40: status transitions, incidents opened and resolved, sources going stale. */
   activity: ActivityItem[];
   incidents: { open: IncidentView[]; recent: IncidentView[] };
@@ -174,6 +184,8 @@ export interface TopologyView {
     state: DisplayState;
     /** e.g. "serving", "standby", "watchdog". */
     note: string | null;
+    /** Rows for the node's card from the profiles (e.g. forgejo serving, postgres primary); empty when none. */
+    details: { label: string; value: string; state: DisplayState | null }[];
   }[];
   edges: {
     from: string;
@@ -189,9 +201,21 @@ export interface TopologyView {
   fence: { decision: string; reason: string | null; level: Level } | null;
 }
 
+export interface HighlightView {
+  /** Short label for the summary slot, e.g. "kuma", "db", "collector". */
+  label: string;
+  row: FactRowView;
+  /** A short badge the profile adds to the value (`Highlight.note`), e.g. "latest"; null for none. */
+  note: { text: string; level: Level } | null;
+}
+
 export interface FactGroupView {
   id: string;
   title: string;
+  /** Kit icon name from the profile (`FactGroupDef.icon`); null for groups no profile declares. */
+  icon: string | null;
+  /** One line that sums the group up (`FactGroupDef.summary`), for compact rows; null when none. */
+  summary: string | null;
   /** Worst row severity (`info` rows do not raise it). */
   level: Level;
   observedAt: string;

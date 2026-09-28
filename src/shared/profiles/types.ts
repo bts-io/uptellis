@@ -40,6 +40,13 @@ export interface FactKeyDef {
   labels?: readonly [string, string];
   /** Folded into another row or only used for topology: kept in `factIndex`, left out of the group's rows. */
   hidden?: boolean;
+  /**
+   * Folded into this sibling key's row while that key is present (e.g. `total` into `online`): hidden
+   * then, shown as its own row when the sibling is missing.
+   */
+  foldedInto?: string;
+  /** Custom text for the value (e.g. `1 of 2` from a sibling); null falls back to `format`. */
+  display?(fact: Fact, ctx: ProfileContext): string | null;
   /** The row's level from its value; null keeps the producer's severity. */
   level?(fact: Fact, ctx: ProfileContext): Level | null;
 }
@@ -52,12 +59,16 @@ export interface FactGroupDef {
   /** Display order among all active profiles' groups (lower first). */
   order: number;
   keys: readonly FactKeyDef[];
+  /** One line that sums the group up for a theme's compact row, e.g. "streaming lag 0 s · primary". */
+  summary?(ctx: ProfileContext): string | null;
 }
 
 /** A fact a theme may place in its summary box, with a short label. */
 export interface Highlight {
   fact: `${string}.${string}`;
   label: string;
+  /** A short badge next to the value, e.g. "latest" or "2.6.0 available"; null for none. */
+  note?(ctx: ProfileContext): { text: string; level: Level } | null;
 }
 
 export interface Profile {
@@ -66,6 +77,8 @@ export interface Profile {
   description: string;
   groups: readonly FactGroupDef[];
   highlights?: readonly Highlight[];
+  /** One sentence about the system for a theme's summary, e.g. "Forgejo serving from app-1". */
+  headline?(ctx: ProfileContext): string | null;
   /**
    * Refines the topology built from the site config (node states, notes, edge liveness and details, the
    * fence stamp) from this profile's facts. Profiles run in the order the site lists them.
