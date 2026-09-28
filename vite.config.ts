@@ -3,7 +3,7 @@ import { cloudflare } from "@cloudflare/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defaultServerConditions, defineConfig } from "vite";
 
 /**
  * Two builds of one app. The default (`vite build`, `vite dev`) is the Cloudflare Worker: the Cloudflare
@@ -55,6 +55,11 @@ export default defineConfig(({ command, isPreview, mode }) => {
         "@": fileURLToPath(new URL("./src", import.meta.url)),
       },
     },
+    // Docker: every dependency is bundled into the server output (the image needs no node_modules), in its
+    // Bun build where a package has one (react-dom's server renderer).
+    ...(docker && {
+      ssr: { noExternal: true, resolve: { conditions: ["bun", ...defaultServerConditions] } },
+    }),
     build: {
       sourcemap: true,
       ...(docker && { outDir: "dist-docker", rollupOptions: { external: [/^bun:/] } }),
