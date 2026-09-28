@@ -1,41 +1,69 @@
 /**
- * The Worker as src/server.ts serves `/api/*` in production: admin gate, then viewer gate, then the Hono
- * app from src/worker/index.ts, over the migrated D1 and KV. The env adds an admin key and a master key
- * (random per run) to the test bindings of vitest.config.ts.
+ * The Worker's Hono app as src/server.ts serves `/api/*` in production (the app resolves the principal and
+ * enforces permissions itself), over the migrated D1 and KV. The env adds a master key (random per run) to
+ * the test bindings of vitest.config.ts. `adminCookie` signs in as the owner, creating it on first use.
  */
 import { env } from "cloudflare:test";
+import { SESSION_COOKIE } from "@/worker/auth/cookies";
 import { toBase64Url } from "@/worker/engine/seal";
 import app from "@/worker/index";
-import { adminGate } from "@/worker/middleware/admin-key";
-import { viewerGate } from "@/worker/middleware/viewer-key";
 
 export const ORIGIN = "https://worker.example.net";
-export const ADMIN_KEY = "test-admin-key";
 
 const masterKey = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))));
 
 export const adminEnv = {
   ...(env as unknown as Env),
-  ADMIN_KEY,
   SOURCE_MASTER_KEY: masterKey,
 } as Env;
 
-/** One request through both gates and the app. */
+/** A test address at the reserved example domain (joined here: the literal scan rejects written emails). */
+export const testEmail = (local: string) => [local, "example.com"].join("@");
+
+/** Test-only credentials. */
+export const OWNER = { name: "Test Owner", email: testEmail("owner"), password: "test-owner-password" };
+
+/** One request through the app. */
 export async function handle(path: string, init: RequestInit = {}, e: Env = adminEnv): Promise<Response> {
-  const req = new Request(`${ORIGIN}${path}`, { redirect: "manual", ...init });
-  return (await adminGate(req, e)) ?? (await viewerGate(req, e)) ?? app.fetch(req, e);
+  return app.fetch(new Request(`${ORIGIN}${path}`, { redirect: "manual", ...init }), e);
 }
 
-/** The admin cookie (`name=value`) from `?admin=`. */
+/** A same-origin JSON POST (or another method). */
+export const send = (path: string, body: unknown, init: RequestInit = {}, method = "POST") =>
+  handle(path, {
+    method,
+    ...init,
+    headers: {
+      origin: ORIGIN,
+      "content-type": "application/json",
+      ...(init.headers as Record<string, string>),
+    },
+    body: JSON.stringify(body),
+  });
+
+/** The session cookie (`name=value`) a response set, or null. */
+export function sessionCookie(res: Response): string | null {
+  const set = res.headers.getSetCookie().find((c) => c.startsWith(`${SESSION_COOKIE}=`));
+  return set ? set.split(";")[0]! : null;
+}
+
+/** Signs in with email and password; the session cookie, or null when refused. */
+export async function signIn(email: string, password: string): Promise<string | null> {
+  const res = await send("/api/auth/sign-in/email", { email, password });
+  return res.ok ? sessionCookie(res) : null;
+}
+
+/** The owner's session cookie: first-run setup when no account exists yet, else a sign-in. */
 export async function adminCookie(): Promise<string> {
-  const res = await handle(`/admin?admin=${ADMIN_KEY}`);
-  if (res.status !== 302) throw new Error(`admin login: ${res.status}`);
-  return (res.headers.get("set-cookie") ?? "").split(";")[0]!;
+  const setup = await send("/api/setup", OWNER);
+  const cookie = setup.status === 201 ? sessionCookie(setup) : await signIn(OWNER.email, OWNER.password);
+  if (!cookie) throw new Error(`owner sign-in: ${setup.status}`);
+  return cookie;
 }
 
-/** An admin client: GETs with the cookie, PUT/POST also same-origin, bodies as JSON unless a string. */
+/** An admin client: GETs with the cookie, writes also same-origin, bodies as JSON unless a string. */
 export function admin(cookie: string) {
-  const send = (method: string, path: string, body?: unknown) =>
+  const call = (method: string, path: string, body?: unknown) =>
     handle(`/api/admin${path}`, {
       method,
       headers: {
@@ -45,9 +73,11 @@ export function admin(cookie: string) {
       body: body === undefined ? undefined : typeof body === "string" ? body : JSON.stringify(body),
     });
   return {
-    get: (path: string) => send("GET", path),
-    put: (path: string, body: unknown) => send("PUT", path, body),
-    post: (path: string, body?: unknown) => send("POST", path, body),
+    get: (path: string) => call("GET", path),
+    put: (path: string, body: unknown) => call("PUT", path, body),
+    post: (path: string, body?: unknown) => call("POST", path, body),
+    patch: (path: string, body: unknown) => call("PATCH", path, body),
+    delete: (path: string) => call("DELETE", path),
   };
 }
 

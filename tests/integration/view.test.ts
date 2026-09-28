@@ -2,7 +2,6 @@
  * `GET /api/sites/:site/view` over the real write path: signed kuma and facts payloads through the ingest
  * routes into D1 (`D1Store`) and KV, then the view built from the model and the `heartbeat_5m` history.
  */
-import { env } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { SiteView } from "@/shared/view";
 import { BUCKET_MS, downsample } from "@/worker/cron";
@@ -10,7 +9,6 @@ import { createDb, schema } from "@/worker/db";
 import { ROLLUP_BUCKET_MS } from "@/worker/db/history";
 import { D1Store } from "@/worker/engine/d1-store";
 import { resetSiteSourceSync } from "@/worker/engine/sites";
-import { type ViewerEnv, viewerGate } from "@/worker/middleware/viewer-key";
 import { loadFixture } from "../fixtures";
 import { factsPayloadFrom, kumaSnapshotFrom } from "../support/fixture-payloads";
 import { json, pipeline, workerEnv } from "../support/worker-pipeline";
@@ -77,16 +75,11 @@ describe("GET /api/sites/:site/view", () => {
     expect(ROLLUP_BUCKET_MS).toBe(BUCKET_MS);
   });
 
-  it("answers 404 for unknown sites and sits behind the viewer gate", async () => {
+  it("answers 404 for unknown sites", async () => {
     const res = await get("/api/sites/nope/view");
     expect(res.status).toBe(404);
     expect(res.headers.get("cache-control")).toBe("no-store");
     expect(await json(res)).toEqual({ error: "not_found", message: "Unknown site" });
-    const gated = await viewerGate(
-      new Request("https://example.com/api/sites/demo/view"),
-      env as unknown as ViewerEnv,
-    );
-    expect(gated?.status).toBe(404);
   });
 
   it("serves an empty view before anything was ingested", async () => {

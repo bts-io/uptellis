@@ -1,8 +1,8 @@
 /**
- * Admin API contract (Phase 3, frozen): request and response bodies of `/api/admin/*`. Every route sits behind
- * the admin gate (`ADMIN_KEY`: `?admin=<key>` once sets a signed 30-day `uptellis_admin` cookie; without it `/admin`
- * and `/api/admin/*` answer 404). Responses carry no secrets except the one-time `secret` of a created or
- * rotated ingest key.
+ * Admin API contract (Phase 3, frozen): request and response bodies of `/api/admin/*`. Every route needs a
+ * signed-in user with the route's permission (src/shared/auth.ts: `config.edit` for config, `sources.manage`
+ * for sources and keys); 401 signed out, 403 without it. Responses carry no secrets except the one-time
+ * `secret` of a created or rotated ingest key.
  *
  * Routes (all JSON unless noted; `:site` is a site slug):
  * - `GET    /api/admin/sites/:site/config`                  -> ConfigState

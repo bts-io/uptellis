@@ -4,15 +4,19 @@
  * at runtime they may be absent, and the code treats an empty or missing value as unset.
  */
 interface Env {
-  /** Interim viewer key until Cloudflare Access. Unset means the gate is open (local dev). */
-  VIEWER_KEY: string;
-  /** HMAC secret for the uptellis_view cookie. Falls back to VIEWER_KEY alone when unset. */
-  VIEWER_COOKIE_SECRET: string;
   /**
-   * Admin key: `?admin=<key>` once sets the `uptellis_admin` cookie that opens `/admin` and `/api/admin/*`.
-   * Unset means no admin in production (VIEWER_KEY set) and an open admin in local dev (both unset).
+   * At least 32 random characters: signs session cookies and encrypts the JWT signing keys (Better Auth).
+   * Unset means no accounts: everyone is anonymous and only public sites can be seen.
    */
-  ADMIN_KEY: string;
+  BETTER_AUTH_SECRET: string;
+  /** The public URL of this instance (`https://status.example.com`); unset uses the request's origin. */
+  PUBLIC_URL?: string;
+  /** GitHub OAuth app: sign-in with GitHub is offered when both the id and the secret are set. */
+  GITHUB_CLIENT_ID?: string;
+  GITHUB_CLIENT_SECRET?: string;
+  /** Google OAuth client: sign-in with Google is offered when both the id and the secret are set. */
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
   /**
    * 32 random bytes, base64: the master key that seals ingest secrets kept in D1 (AES-GCM, key derived with
    * HKDF). Required to create or rotate source keys; env-backed `INGEST_KEY_*` keys work without it.

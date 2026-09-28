@@ -1,10 +1,14 @@
-# Copy to .dev.vars (gitignored) for `bun run dev`. Leave VIEWER_KEY empty to keep the gate open locally.
-# Production values are Worker secrets: `bunx wrangler secret put VIEWER_KEY` (and VIEWER_COOKIE_SECRET).
-VIEWER_KEY=
-VIEWER_COOKIE_SECRET=
-# Admin: open /admin?admin=<ADMIN_KEY> once to get the admin cookie. With ADMIN_KEY and VIEWER_KEY both
-# empty, /admin is open locally.
-ADMIN_KEY=
+# Copy to .dev.vars (gitignored) for `bun run dev`. Production values are Worker secrets:
+# `bunx wrangler secret put BETTER_AUTH_SECRET` (and the others you use).
+# Signs sessions and encrypts the JWT keys; generate with: openssl rand -base64 32
+BETTER_AUTH_SECRET=
+# The public URL of this instance; leave empty locally to use the request's origin.
+PUBLIC_URL=
+# Optional sign-in with GitHub or Google: set both the client id and the secret of a provider.
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
 # Seals ingest secrets stored in D1; generate with: openssl rand -base64 32
 SOURCE_MASTER_KEY=
 # Discord webhook URL for the source stale and recovered cards. Leave empty locally: no cards.

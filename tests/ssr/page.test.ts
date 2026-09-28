@@ -1,27 +1,19 @@
 /// <reference types="vite/client" />
 import { SELF } from "cloudflare:test";
-import { beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import demo from "../../sites/demo.json";
 import { FIXTURE_NAMES, loadFixture } from "../fixtures";
 import { seed } from "./seed";
 
 const SITE_CONFIG_TEXT = JSON.stringify(demo);
 
-// The built Worker (dist/server) with the gate armed (VIEWER_KEY from vitest.config.ts).
+// The built Worker (dist/server); the committed demo site is public, so its page needs no session.
 const get = (url: string, init?: RequestInit) => SELF.fetch(url, { redirect: "manual", ...init });
 
-let cookie = "";
-const page = (url: string) => get(url, { headers: { cookie, accept: "text/html" } });
+const page = (url: string) => get(url, { headers: { accept: "text/html" } });
 
 const tag = (html: string, re: RegExp) => re.exec(html)?.[0] ?? "";
 const titleOf = (html: string) => /<title>([^<]*)<\/title>/.exec(html)?.[1];
-
-beforeAll(async () => {
-  cookie = ((await get("https://example.com/?key=test-viewer-key")).headers.get("set-cookie") ?? "").split(
-    ";",
-  )[0]!;
-  expect(cookie).toMatch(/^uptellis_view=/);
-});
 
 describe("site page", () => {
   it("renders the site's theme for the seeded data, with data-theme, title and meta", async () => {

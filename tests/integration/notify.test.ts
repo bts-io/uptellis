@@ -308,8 +308,12 @@ describe("POST /api/admin/notify/test", () => {
     expect(await refused.json()).toMatchObject({ sent: false, status: 429, error: "rate_limited" });
   });
 
-  it("is behind the admin gate", async () => {
-    const res = await handle("/api/admin/notify/test?kind=stale", { method: "POST" }, hookEnv);
-    expect(res.status).toBe(404);
+  it("needs a signed-in user with config.edit", async () => {
+    const res = await handle(
+      "/api/admin/notify/test?kind=stale",
+      { method: "POST", headers: { origin: "https://worker.example.net" } },
+      hookEnv,
+    );
+    expect(res.status).toBe(401);
   });
 });

@@ -1,4 +1,5 @@
 // Drizzle schema for D1. `bun run db:generate` diffs it into ./migrations.
+export * from "./auth";
 export * from "./facts";
 export * from "./heartbeats";
 export * from "./incidents";

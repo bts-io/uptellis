@@ -1,6 +1,8 @@
 /**
- * Admin API, mounted at `/api/admin` (contract: src/shared/schemas/admin.ts). The admin gate in
- * src/server.ts runs first (cookie, and same-origin for PUT/POST), so nothing here re-checks it.
+ * Admin API, mounted at `/api/admin` (contracts: src/shared/schemas/admin.ts, and src/shared/schemas/auth.ts
+ * for API keys). Every route needs a signed-in user with the route's permission (src/shared/auth.ts):
+ * `config.edit` for config, revisions, import and the notification test, `sources.manage` for sources, ingest
+ * keys and API keys; 401 when signed out, 403 without the permission. Writes must be same-origin (403).
  *
  * Config routes read D1 directly (never a cache) so the editor always sees the stored version. Errors use
  * `ConfigErrorResponse`: 400 `invalid` with flattened `issues`, 404 `not_found`, 409 `conflict` with
@@ -27,14 +29,20 @@ import {
   type SaveConfigResponse,
   type SourceKeyList,
 } from "@/shared/schemas/admin";
+import { type ApiKeyList, CreateApiKeyRequest } from "@/shared/schemas/auth";
 import { readCapped, TooLarge } from "@/worker/read-capped";
+import { issueApiKey, listApiKeys, revokeApiKey } from "../auth/api-keys";
+import { type AuthEnv, authError, principalOf, requirePermission } from "../auth/context";
 import { createDb } from "../db";
 import { D1ConfigStore, type SaveOutcome } from "../engine/config-store";
 import { KeyStore } from "../engine/key-store";
 import { MasterKeyMissing } from "../engine/seal";
+import { isSameOrigin } from "../middleware/same-origin";
 import { sendTestCard } from "../notify";
 
-type Ctx = Context<{ Bindings: Env }>;
+type Ctx = Context<AuthEnv>;
+
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 /** Largest accepted config or import body. */
 export const MAX_CONFIG_BYTES = 256 * 1024;
@@ -99,14 +107,28 @@ async function readText(c: Ctx): Promise<string | null> {
 }
 
 export function adminRoutes() {
-  const app = new Hono<{ Bindings: Env }>();
+  const app = new Hono<AuthEnv>();
   const configs = (env: Env) => new D1ConfigStore(env.DB, env.CACHE);
   const keys = (env: Env) => new KeyStore(env.DB, env);
 
   app.use("*", async (c, next) => {
+    if (!SAFE_METHODS.has(c.req.method) && !isSameOrigin(c.req.raw)) {
+      return authError(c, 403, "forbidden", "Cross-site request");
+    }
     await next();
     c.res.headers.set("cache-control", "no-store");
   });
+  for (const path of ["/sites/:site/config", "/sites/:site/config/*", "/notify/*"]) {
+    app.use(path, requirePermission("config.edit"));
+  }
+  for (const path of [
+    "/sites/:site/sources",
+    "/sites/:site/sources/*",
+    "/sites/:site/api-keys",
+    "/sites/:site/api-keys/*",
+  ]) {
+    app.use(path, requirePermission("sources.manage"));
+  }
 
   app.get("/sites/:site/config", async (c) => {
     const state = await configs(c.env).load(c.req.param("site"));
@@ -256,6 +278,34 @@ export function adminRoutes() {
       return keyFailure(c, err);
     }
     return issued ? c.json(issued) : fail(c, 404, "not_found", "Unknown key");
+  });
+
+  app.get("/sites/:site/api-keys", async (c) => {
+    const slug = c.req.param("site");
+    if (!(await configs(c.env).load(slug))) return notFound(c);
+    return c.json({ keys: await listApiKeys(c.get("accounts").platform, slug) } satisfies ApiKeyList);
+  });
+
+  app.post("/sites/:site/api-keys", async (c) => {
+    const slug = c.req.param("site");
+    if (!(await configs(c.env).load(slug))) return notFound(c);
+    const read = await readJson(c);
+    if (!read.ok) return fail(c, 400, "invalid", read.message);
+    const req = CreateApiKeyRequest.safeParse(read.body);
+    if (!req.success) return fail(c, 400, "invalid", "Malformed request", { issues: flatten(req.error) });
+    const principal = principalOf(c);
+    const issued = await issueApiKey(c.get("accounts").platform, {
+      site: slug,
+      name: req.data.name,
+      scopes: req.data.scopes,
+      createdBy: principal.kind === "user" ? principal.userId : null,
+    });
+    return c.json(issued, 201);
+  });
+
+  app.delete("/sites/:site/api-keys/:id", async (c) => {
+    const revoked = await revokeApiKey(c.get("accounts").platform, c.req.param("site"), c.req.param("id"));
+    return revoked ? c.json(revoked) : fail(c, 404, "not_found", "Unknown API key");
   });
 
   app.post("/notify/test", async (c) => {
