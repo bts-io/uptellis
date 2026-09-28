@@ -4,15 +4,44 @@ Uptellis ("uptime, tell us") is a self-hostable status page and monitor. Produce
 
 ## Runtime
 
-One Cloudflare Worker (`src/server.ts`) serves everything:
+One app, two runtimes. On **Cloudflare** a single Worker (`src/server.ts`) serves everything, with D1, KV, Workers Static Assets, Rate Limiting and Cron Triggers. In **Docker** a single Bun process (`src/platform/docker/entry.ts`) serves the same app over one SQLite file and runs the jobs itself. Everything between the two entry points is shared:
 
 - **Hono** owns `/api/*` and `/embed/*` (`src/worker/index.ts`): ingest, the read API, the admin API and `/api/health`.
 - **TanStack Start** (React 19) server-renders every other path: the status page, `/admin` and, under `vite dev` only, `/_preview`.
-- SSR loaders call the Hono app **in-process** through an API bridge (`src/client/lib/api.ts`): same app, same env, no network hop.
-- **D1** (through Drizzle, `src/worker/db/schema`, migrations in `migrations/`) is the source of truth. **KV** caches the assembled model (`latest:<site>`) and the current config (`config:<site>`).
-- **Zod 4** schemas in `src/shared` validate every payload, config and API body, on the Worker and in the producers.
-- Static assets (client bundle, fonts) are served by Workers Static Assets and never reach the Worker.
-- The Worker's `scheduled` handler runs three crons (see [Crons](#crons)).
+- SSR loaders call the Hono app **in-process** through an API bridge (`src/client/lib/api.ts`): same app, same platform, no network hop.
+- The **SQL database** (D1 or SQLite, through Drizzle, `src/worker/db/schema`, migrations in `migrations/`) is the source of truth. A **key-value cache** (KV, or the SQLite `kv` table) holds the assembled model (`latest:<site>`) and the current config (`config:<site>`).
+- **Zod 4** schemas in `src/shared` validate every payload, config and API body, in the app and in the producers.
+- Static assets (client bundle, fonts) are served by Workers Static Assets on Cloudflare and by the Bun server in Docker, before the app.
+- Three scheduled jobs (see [Crons](#crons)): Cron Triggers on Cloudflare, the built-in scheduler in Docker.
+
+The rest of this page names the Cloudflare pieces (the Worker, D1, KV); in Docker read the Bun server, SQLite and the `kv` table.
+
+## Platform layer
+
+Everything the app needs from where it runs is one interface, `Platform` in `src/platform/types.ts`: the database (`db`, and `batch` for atomic multi-statement writes), the key-value cache (`kv`), the rate limiters (`rateLimiter`, budgets in `RATE_LIMITERS`), secrets and settings by name (`secret`, `setting`), `waitUntil` for work that outlives a response, and the clock. Only the adapters in `src/platform/<runtime>/` and the two entry points touch bindings, env vars or files; stores, jobs, routes and middleware receive a `Platform`.
+
+```mermaid
+flowchart TB
+  subgraph cf ["Cloudflare"]
+    worker["src/server.ts<br/>fetch, scheduled"] --> cfp["createCloudflarePlatform(env, ctx)<br/>D1, KV, Rate Limiting bindings,<br/>env secrets, ctx.waitUntil"]
+    cron["Cron Triggers"] -->|"JOBS expression to job"| worker
+  end
+  subgraph dk ["Docker"]
+    bun["src/platform/docker/entry.ts<br/>Bun server"] --> dkp["createDockerPlatform(opts)<br/>bun:sqlite (WAL), kv table,<br/>in-memory limiters, env or NAME_FILE,<br/>tracked waitUntil"]
+    sched["scheduler<br/>minute-aligned, no overlap"] --> bun
+  end
+  cfp --> plat["Platform"]
+  dkp --> plat
+  plat --> serve["src/worker/serve.ts<br/>limits, gates, Hono or Start, headers"]
+  plat --> jobs["src/worker/cron.ts<br/>runJob: probes, fiveMinute, daily"]
+  serve --> api["Hono API: c.var.platform"]
+```
+
+- **Requests.** Each entry point builds `AppBindings` (the platform and the runtime's `INGEST_KEY_*` secrets) and hands the request to `handleRequest` in `src/worker/serve.ts`, which passes the bindings to `app.fetch`; `platformContext` puts them on the Hono context, so every handler reads `c.var.platform`.
+- **Batches.** There are no interactive transactions anywhere: several rows are written as a unit with `platform.batch`, a D1 batch on Cloudflare and one SQLite transaction in Docker. Queries are built once with Drizzle and run on either driver; code that needs a write's row count reads it with `changesOf` (`src/worker/db/util.ts`), which understands both drivers' results.
+- **Jobs.** `JOBS` names the three jobs and their cron expressions. On Cloudflare the `scheduled` handler (`src/platform/cloudflare/scheduled.ts`) maps each Cron Trigger to its job, so the triggers in `wrangler.jsonc` must be exactly the `JOBS` expressions. In Docker the scheduler (`src/platform/docker/scheduler.ts`) wakes at every UTC minute and starts the due jobs. Both run `runScheduledJob` (`src/worker/scheduled.ts`).
+- **Migrations.** One `migrations/` folder serves both: wrangler applies it to D1 on deploy, the Docker server applies it to SQLite at startup (Drizzle's migrator).
+- **Builds.** `vite build` produces the Worker (`dist/`); `vite build --mode docker` (`bun run build:docker`) produces the Bun server (`dist-docker/`: client files and one server bundle with every dependency inside, so the image needs no `node_modules`). `vite dev` runs the Cloudflare build under workerd.
 
 ## Data flow
 
@@ -23,13 +52,13 @@ flowchart LR
     push["facts pusher<br/>(a profile, systemd timer)"]
     hook["any producer<br/>signed webhooks"]
   end
-  subgraph worker ["Cloudflare Worker"]
+  subgraph worker ["Uptellis (Worker or Docker)"]
     ing["/api/ingest/kuma, facts, events<br/>size cap, HMAC, nonce, Zod"]
-    probes["edge probes<br/>every-minute cron"]
+    probes["probes<br/>every-minute job"]
     adapt["adapters<br/>payload to ModelDelta"]
     store["store: apply delta,<br/>derive incidents"]
-    d1[("D1")]
-    kv[("KV<br/>latest:site, config:site")]
+    d1[("D1 or SQLite")]
+    kv[("KV or kv table<br/>latest:site, config:site")]
     build["buildSiteView<br/>(pure)"]
     read["/api/sites/:site/view"]
     page["theme Page (SSR)"]
@@ -188,19 +217,19 @@ When `DISCORD_WEBHOOK_URL` is set, the notifier (`src/worker/notify`) posts exac
 
 ## Crons
 
-The `scheduled` handler (`src/worker/scheduled.ts`) picks the job by the trigger's cron expression, so the triggers in `wrangler.jsonc` and the constants in `src/worker/cron.ts` must match exactly.
+`JOBS` in `src/platform/types.ts` names three jobs and their cron expressions (UTC); `runJob` in `src/worker/cron.ts` performs them. Cloudflare runs them from Cron Triggers (the triggers in `wrangler.jsonc` are exactly these expressions), Docker from its own scheduler ([Platform layer](#platform-layer)).
 
-| Trigger | Job |
-| --- | --- |
-| `* * * * *` | Edge probes: every probe due this minute runs (at most 6 at a time), results go through the ingest path as source `probe:cf` |
-| `*/5 * * * *` | Fold the last 2 hours of heartbeats into `heartbeat_5m`; sync configured sources; sweep source staleness, open and close `stale` incidents, post their cards, refresh `latest:<site>` when anything changed |
-| `17 3 * * *` | Prune rows past retention (see [SECURITY.md](SECURITY.md#data-retention)) |
+| Job | Expression | What it does |
+| --- | --- | --- |
+| `probes` | `* * * * *` | Probes: every probe due this minute runs (at most 6 at a time), results go through the ingest path as source `probe:cf` |
+| `fiveMinute` | `*/5 * * * *` | Fold the last 2 hours of heartbeats into `heartbeat_5m`; sync configured sources; sweep source staleness, open and close `stale` incidents, post their cards, refresh `latest:<site>` when anything changed |
+| `daily` | `17 3 * * *` | Prune rows past retention (see [SECURITY.md](SECURITY.md#data-retention)) and expired `kv` entries |
 
 Probes check public `https` URLs only (no address literals, credentials or private-only names), never follow redirects, never read the body, and retry a failure once after 2 seconds before counting it as `down`.
 
 ## Security gates
 
-Every request passes the same steps in `src/server.ts`: rate limits, the admin gate, the viewer gate, then Hono or TanStack Start, and every response leaves with the security headers.
+Every request passes the same steps in `src/worker/serve.ts`, on both runtimes: rate limits, the admin gate, the viewer gate, then Hono or TanStack Start, and every response leaves with the security headers.
 
 - **Viewer gate.** With `VIEWER_KEY` set, pages and the read API answer 404 without a signed `uptellis_view` or `uptellis_admin` cookie. Opening any page with `?key=<VIEWER_KEY>` sets the cookie and redirects to the same URL without the key.
 - **Admin gate.** `/admin` and `/api/admin/*` need the `uptellis_admin` cookie, set by `?admin=<ADMIN_KEY>`; admin writes must be same-origin.
@@ -213,12 +242,14 @@ The full model, with the cookie construction, the ingest checks, the limits and 
 
 | Path | What lives there |
 | --- | --- |
-| `src/server.ts` | the Worker entry: limits, gates, dispatch, headers, `scheduled` |
-| `src/worker/` | Hono app, ingest, adapters, engine (store, incidents, configs, keys), probes, notify, crons, middleware, D1 schema |
+| `src/server.ts` | the Cloudflare Worker entry: `fetch` and `scheduled` |
+| `src/platform/` | the `Platform` contract (`types.ts`) and its adapters: `cloudflare/` (bindings, Cron Triggers) and `docker/` (SQLite, kv, limiters, env, scheduler, Bun server, entry) |
+| `src/worker/` | the shared request path (`serve.ts`), Hono app, ingest, adapters, engine (store, incidents, configs, keys), probes, notify, jobs, middleware, database schema |
 | `src/shared/` | model, config, payload schemas, signing, the pure view builder |
 | `src/client/` | routes, themes, the kit, effects, the shell (command palette, key map), the admin UI |
 | `collector/` | the Kuma collector (Bun), its Dockerfile and compose file |
 | `profiles/` | producers for specific systems (see [profiles/forgejo-ha](../profiles/forgejo-ha/README.md)) |
 | `sites/` | committed site configs (the seed of version 1) |
-| `migrations/` | D1 migrations |
-| `tests/` | Vitest projects `unit`, `integration` (Hono in workerd with a migrated D1) and `ssr` (the built Worker), and the fixtures |
+| `migrations/` | database migrations (D1 and SQLite) |
+| `tests/` | Vitest projects `unit`, `integration` (Hono in workerd with a migrated D1) and `ssr` (the built Worker); `tests/docker` (Bun: the Docker adapter, scheduler, server and the app on SQLite); the fixtures |
+| `Dockerfile`, `compose.yaml` | the Docker image and a compose file for it ([OPERATIONS.md](OPERATIONS.md#docker)) |

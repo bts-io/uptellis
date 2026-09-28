@@ -1,10 +1,10 @@
 # Operations
 
-How to deploy Uptellis, set and rotate its secrets, undo a config change, bring a stale producer back, and read what the Worker tells you. How the parts fit together is in [architecture.md](architecture.md); the security model behind all of this is in [SECURITY.md](SECURITY.md). Examples use the demo site `demo` at `status.example.com`; replace them with your own.
+How to deploy Uptellis (on Cloudflare or in Docker), set and rotate its secrets, undo a config change, bring a stale producer back, and read what the Worker tells you. How the parts fit together is in [architecture.md](architecture.md); the security model behind all of this is in [SECURITY.md](SECURITY.md). Examples use the demo site `demo` at `status.example.com`; replace them with your own.
 
 ## Deploy
 
-Uptellis runs on Cloudflare Workers today (D1, KV, Workers Static Assets, Rate Limiting, Cron Triggers). A Docker image with Bun and SQLite for any host follows in a later release ([roadmap.md](roadmap.md)).
+Uptellis runs on Cloudflare Workers (D1, KV, Workers Static Assets, Rate Limiting, Cron Triggers), described first, or in Docker on any host (Bun and one SQLite file), described in [Docker](#docker). Both run the same app; only the platform layer differs ([architecture.md](architecture.md#platform-layer)).
 
 ### First deploy
 
@@ -141,7 +141,7 @@ Three Workers Rate Limiting bindings, applied before the gates (`src/worker/midd
 | `GATE_RATE_LIMIT` | requests with `?key=` or `?admin=`, and requests a gate answered 404 | client IP | 20 per minute |
 | `ADMIN_WRITE_RATE_LIMIT` | non-GET requests to admin paths | client IP | 30 per minute |
 
-The collector posts once a minute and a facts pusher typically every 15 minutes, so 60 per minute leaves room for a catch-up burst. A producer that hits 429 is almost always in a restart loop. To change a limit, edit `ratelimits` in `wrangler.jsonc` and deploy. Page views and API reads with a valid cookie, and `/api/health`, are never counted.
+The collector posts once a minute and a facts pusher typically every 15 minutes, so 60 per minute leaves room for a catch-up burst. A producer that hits 429 is almost always in a restart loop. The budgets are `RATE_LIMITERS` in `src/platform/types.ts`; `ratelimits` in `wrangler.jsonc` must match them (a unit test checks it). In Docker the same budgets are counted in memory in fixed one-minute windows, exact for the one process and reset on restart; the client address is the connection's, or the last `X-Forwarded-For` hop with `TRUST_PROXY=1`. Page views and API reads with a valid cookie, and `/api/health`, are never counted.
 
 ## Logs
 
@@ -150,10 +150,71 @@ The Worker logs JSON lines with an `evt` field, reason codes, ids and counts, an
 | `evt` | When | Fields |
 | --- | --- | --- |
 | `ingest` | every ingest request | `route`, `status`, `reason` on a rejection, `keyId`, `source`, counts of services, heartbeats, facts, incidents opened and resolved; `step: "key_promoted"` when a rotated key takes over |
-| `cron` | every cron run | `job` (`probes`, `five-minute`, `daily`), incidents opened and resolved; for probes also sites, checks, down results and failed sites |
+| `cron` | every job run | `job` (`probes`, `fiveMinute`, `daily`), incidents opened and resolved; for probes also sites, checks, down results and failed sites |
 | `notify` | every card | `kind` (`open`, `resolve`), `sent`, the error code on failure |
 | `error` | an unhandled error | `name` only |
+| `scheduler` | Docker: a job failed, or was skipped because its previous run is still going | `job`, `step` (`failed`, `skipped_overlap`), the error `name` |
+| `server` | Docker: start and stop | `step` (`listening`, `stopping`, `stopped`), `port`, `signal` |
+| `background` | Docker: background work (a card, a cache warm-up) failed | `name` only |
 
-Read them live with `bunx wrangler tail --format json`, or in the Workers Logs view of the dashboard (`observability` is on in `wrangler.jsonc`). Workers invocation logs are off on purpose: they record each request's URL, and the login links carry the viewer and admin keys in their query string. Keep them off.
+In Docker they go to stdout (`docker compose logs -f`). On Cloudflare read them live with `bunx wrangler tail --format json`, or in the Workers Logs view of the dashboard (`observability` is on in `wrangler.jsonc`). Workers invocation logs are off on purpose: they record each request's URL, and the login links carry the viewer and admin keys in their query string. Keep them off.
 
 Error responses carry a code and a fixed message (`{ "error": "internal", "message": "Something went wrong" }`); ingest rejections add a reason (`missing_headers`, `malformed_headers`, `skew`, `unknown_key`, `bad_signature`, `wrong_source`) or the error `replay` or the field paths that failed validation, never values.
+
+## Docker
+
+The image runs everything in one Bun process: the status page, the API and admin, the static client files, and its own scheduler for the three jobs of [Crons](#crons) (at the start of each UTC minute; a job never overlaps itself). Data lives in one SQLite file in the `/data` volume. The container runs as the unprivileged `bun` user, listens on port 3000, and reports its health from `/api/health`.
+
+```mermaid
+flowchart LR
+  proxy["reverse proxy<br/>TLS"] --> srv["Bun server :3000"]
+  subgraph container ["container (read-only, user bun)"]
+    srv --> static["dist-docker/client<br/>/assets, /fonts"]
+    srv --> app["same app: gates, Hono API,<br/>TanStack Start"]
+    sched["scheduler<br/>probes, fiveMinute, daily"] --> app
+  end
+  app --> db[("/data/uptellis.db<br/>SQLite, WAL")]
+```
+
+### Run it
+
+1. Copy `docker.env.example` to `docker.env` (gitignored) and fill it in: at least `VIEWER_KEY`, `VIEWER_COOKIE_SECRET`, `ADMIN_KEY` and `SOURCE_MASTER_KEY` for anything reachable from outside ([Secrets](#secrets) explains each).
+2. `docker compose up -d --build` builds the image from this checkout and starts it with the named volume `uptellis-data`. Set `UPTELLIS_PORT` to publish another host port than 3000.
+3. Check it: `curl -s http://localhost:3000/api/health`.
+4. Put a TLS-terminating reverse proxy in front for a public hostname (the cookies are `Secure`, so the gates need HTTPS), list the hostname in the site config's `hostnames`, and set `TRUST_PROXY=1` so the rate limits see client addresses.
+
+To build the image alone: `docker build -t uptellis --build-arg VERSION=$(bun -p "require('./package.json').version") .` The build stage runs on the build machine's platform and the runtime stage only copies files, so both architectures build anywhere: with a multi-platform builder (`docker buildx create --use` once), `docker buildx build --platform linux/amd64,linux/arm64 -t <registry>/uptellis:<version> --push .`.
+
+Without Docker, the same server runs from a checkout: `bun run build:docker && bun run start` (Bun 1.3.14 or newer; `DATABASE_PATH` defaults to `./data/uptellis.db`).
+
+### Environment and secrets
+
+| Variable | What it does |
+| --- | --- |
+| `SITE_DEFAULT` | the site a request renders when its host matches no site's `hostnames` (default in the image: `demo`) |
+| `VIEWER_KEY`, `VIEWER_COOKIE_SECRET`, `ADMIN_KEY`, `SOURCE_MASTER_KEY`, `DISCORD_WEBHOOK_URL`, `INGEST_KEY_<ID>` | as in [Secrets](#secrets) |
+| `PORT` | the port inside the container (default 3000; the health check follows it) |
+| `DATABASE_PATH` | the SQLite file (default in the image: `/data/uptellis.db`) |
+| `TRUST_PROXY` | `1` behind a reverse proxy: the client address is the last `X-Forwarded-For` hop |
+
+Any of these can be read from a file instead: set `NAME_FILE=/run/secrets/<name>` rather than `NAME` (Docker and Compose secrets mount there). A set `NAME` wins over `NAME_FILE`; values are trimmed. Secrets and settings are read once at startup, so a change needs a restart (`docker compose up -d` after editing `docker.env`).
+
+### Backups
+
+The volume holds `uptellis.db` and, while it runs, its `-wal` and `-shm` files; copying them from a live container can catch a half-written state. Take a consistent copy with SQLite's `VACUUM INTO` instead, then move it off the host:
+
+```sh
+docker compose exec uptellis bun -e 'new (require("bun:sqlite").Database)("/data/uptellis.db").exec("VACUUM INTO \x27/data/backup.db\x27")'
+docker compose cp uptellis:/data/backup.db ./uptellis-$(date +%F).db
+docker compose exec uptellis rm /data/backup.db
+```
+
+To restore, stop the container, replace `uptellis.db` in the volume with the backup (and delete any `-wal` and `-shm` next to it), and start it again. Site configs can also be exported from admin as `sites/<slug>.json`, but that covers configs only.
+
+### Upgrades
+
+Pull or build the new image and recreate the container (`docker compose up -d --build`). On startup the server applies any pending migrations from `migrations/` (the same files D1 uses, tracked in the `__drizzle_migrations` table) before it takes requests. Migrations are only ever added, never rolled back, so take a backup before upgrading; to go back, restore that backup with the older image. On `docker compose down` or `docker stop` the server stops taking requests, lets running requests, jobs and Discord cards finish, then closes the database (`stop_grace_period` in `compose.yaml` gives it 30 s).
+
+### Smoke test
+
+`bun run docker:smoke` builds the image and checks it on a throwaway volume: the first request and `/api/health`, a page and one of its assets, a config saved through the admin API, a scheduler run, the health check, a clean exit on SIGTERM, and the saved config in a new container on the same volume. `IMAGE=<ref>` tests an existing image instead; `PLATFORM=linux/arm64` builds and runs another platform (needs emulation on an amd64 host).

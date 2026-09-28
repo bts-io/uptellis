@@ -20,7 +20,7 @@ Out of scope: an attacker with access to your Cloudflare account, your repositor
 
 ## Request path
 
-Every request runs through the same steps in `src/worker/serve.ts` (both runtimes). Assets under `/assets/*` and `/fonts/*` are served by Workers Static Assets and never reach the Worker (`run_worker_first` in `wrangler.jsonc`).
+Every request runs through the same steps in `src/worker/serve.ts`, on Cloudflare and in Docker. Assets under `/assets/*` and `/fonts/*` are served before it: by Workers Static Assets (`run_worker_first` in `wrangler.jsonc`), or in Docker by the Bun server from the built client folder only, with the same security headers.
 
 ```mermaid
 flowchart TD
@@ -87,7 +87,7 @@ Producers sign each POST (`src/shared/signing.ts`): HMAC-SHA256 over `v1`, key i
 
 ## Rate limits
 
-Workers Rate Limiting bindings in `wrangler.jsonc`, applied by `src/worker/middleware/rate-limit.ts`. The counters are kept per Cloudflare location, so the limits are approximate: a brake on floods and key guessing, not a quota. Over the limit the Worker answers 429 with `retry-after: 60` (JSON on `/api/*`, plain text elsewhere).
+The platform's limiters (`RATE_LIMITERS` in `src/platform/types.ts`), applied by `src/worker/middleware/rate-limit.ts`. On Cloudflare they are Workers Rate Limiting bindings in `wrangler.jsonc`, counted per Cloudflare location, so the limits are approximate: a brake on floods and key guessing, not a quota. In Docker they are fixed one-minute windows in memory, exact for the process and reset by a restart; the client address is the connection's (a client's own `cf-connecting-ip` is replaced), or the last `X-Forwarded-For` hop when `TRUST_PROXY=1` says a reverse proxy sets it. Over the limit the Worker answers 429 with `retry-after: 60` (JSON on `/api/*`, plain text elsewhere).
 
 | Binding | Counts | Key | Limit |
 | --- | --- | --- | --- |
