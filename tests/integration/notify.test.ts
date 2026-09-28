@@ -19,6 +19,7 @@ import { beat, delta, service } from "./storage-helpers";
 const HOOK = "https://discord.test/api/webhooks/1/test";
 const platform = testPlatform();
 const hooked = testPlatform({ DISCORD_WEBHOOK_URL: HOOK });
+const hookSecret = (name: string) => (name === "DISCORD_WEBHOOK_URL" ? HOOK : undefined);
 const db = platform.db;
 const T = (hms: string) => `2026-09-27T${hms}Z`;
 const at = (hms: string) => Date.parse(T(hms));
@@ -95,7 +96,7 @@ describe("stale notifications from the 5-minute sweep", () => {
     const notifier = new StaleNotifier({
       db,
       configs: seedConfigs,
-      webhookUrl: HOOK,
+      secret: hookSecret,
       now: () => at("10:06:00"),
     });
     await notifier.notify(site, { opened: r.incidentsOpened, resolved: [] });
@@ -107,12 +108,20 @@ describe("stale notifications from the 5-minute sweep", () => {
     const site = "t-notify-fail";
     const store = new D1Store(platform);
     await store.applyDelta(delta(site, T("10:00:00"), {}));
-    const { cards } = discord(500);
+    // A final refusal (a 5xx is retried: tests/integration/notify-channels.test.ts).
+    const { cards } = discord(404);
     const r = await sweep(at("10:06:00"));
     expect(r.opened?.some((i) => i.site === site)).toBe(true);
     expect(ofSite(cards, site)).toHaveLength(1);
     expect(await rows(site)).toEqual([
-      expect.objectContaining({ status: "failed", error: "http_500", sentAt: null }),
+      expect.objectContaining({
+        channel: "discord",
+        status: "failed",
+        error: "http_404",
+        sentAt: null,
+        attempts: 1,
+        retryable: false,
+      }),
     ]);
   });
 
@@ -134,7 +143,7 @@ describe("stale notifications from the 5-minute sweep", () => {
     expect(down.incidentsOpened.map((i) => i.kind)).toEqual(["down"]);
     expect(up.incidentsResolved.map((i) => i.kind)).toEqual(["down"]);
     const { spy } = discord();
-    const notifier = new StaleNotifier({ db, configs: seedConfigs, webhookUrl: HOOK });
+    const notifier = new StaleNotifier({ db, configs: seedConfigs, secret: hookSecret });
     await notifier.notify(site, { opened: down.incidentsOpened, resolved: up.incidentsResolved });
     expect(spy).not.toHaveBeenCalled();
     expect(await rows(site)).toEqual([]);
@@ -286,6 +295,7 @@ describe("POST /api/admin/notify/test", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       site: "demo",
+      channel: null,
       source: "kuma:watch-1",
       kind: "stale",
       sent: true,

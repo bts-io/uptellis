@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { MaintenanceWindow } from "@/shared/monitors";
-import { downCardBlock } from "@/worker/notify";
+import { channelsOf, channelWants } from "@/shared/notify";
+import { eventOf, inMaintenanceAtStart } from "@/worker/notify";
 
 const window = MaintenanceWindow.parse({
   kind: "weekly",
@@ -12,39 +13,38 @@ const window = MaintenanceWindow.parse({
   durationMin: 60,
   timeZone: "Europe/Paris",
 });
-const config = (discord: boolean, maintenance = [window]) => ({
-  notify: { discord, webhooks: [], channels: [] },
-  maintenance,
-});
+const config = (maintenance = [window]) => ({ maintenance });
 // Sunday 2026-09-27 02:30 in Paris is 00:30 UTC.
 const inside = { serviceId: "probe:web", startedAt: "2026-09-27T00:30:00Z" };
 const outside = { serviceId: "probe:web", startedAt: "2026-09-27T01:30:00Z" };
 
-describe("down card gate", () => {
-  it("sends when the site enables Discord and the service is not in maintenance", () => {
-    expect(downCardBlock(config(true), "open", outside)).toBeNull();
-    expect(downCardBlock(config(true), "resolve", outside)).toBeNull();
+describe("down gate", () => {
+  it("names the event of each transition", () => {
+    expect(eventOf("open", { kind: "down" })).toBe("down");
+    expect(eventOf("resolve", { kind: "down" })).toBe("up");
+    expect(eventOf("open", { kind: "stale" })).toBe("stale");
+    expect(eventOf("resolve", { kind: "stale" })).toBe("recovered");
   });
 
-  it("follows notify.discord, and sends nothing for an unknown site", () => {
-    expect(downCardBlock(config(false), "open", outside)).toBe("notify_off");
-    expect(downCardBlock(config(false), "resolve", outside)).toBe("notify_off");
-    expect(downCardBlock(null, "open", outside)).toBe("notify_off");
+  it("sends down and up on the historical channel only when notify.discord is on", () => {
+    const [on] = channelsOf({ discord: true, channels: [] });
+    const [off] = channelsOf({ discord: false, channels: [] });
+    expect(channelWants(on!, "down", "probe:web")).toBe(true);
+    expect(channelWants(on!, "up", "probe:web")).toBe(true);
+    expect(channelWants(off!, "down", "probe:web")).toBe(false);
+    expect(channelWants(off!, "up", "probe:web")).toBe(false);
+    expect(channelWants(off!, "stale", null)).toBe(true);
   });
 
-  it("suppresses the down card of an incident that starts inside a window", () => {
-    expect(downCardBlock(config(true), "open", inside)).toBe("maintenance");
+  it("suppresses the down of an incident that starts inside a window", () => {
+    expect(inMaintenanceAtStart(config(), outside)).toBe(false);
+    expect(inMaintenanceAtStart(config(), inside)).toBe(true);
     // Another service is not covered by this window.
-    expect(downCardBlock(config(true), "open", { ...inside, serviceId: "probe:api" })).toBeNull();
+    expect(inMaintenanceAtStart(config(), { ...inside, serviceId: "probe:api" })).toBe(false);
     // A window without services covers every service.
     const all = MaintenanceWindow.parse({ ...window, services: [] });
-    expect(downCardBlock(config(true, [all]), "open", { ...inside, serviceId: "kuma:7" })).toBe(
-      "maintenance",
-    );
-  });
-
-  it("leaves the up card to the open card's claim, not to the window", () => {
-    // Resolving inside a window still sends once the down card went out (checked by the notifier).
-    expect(downCardBlock(config(true), "resolve", inside)).toBeNull();
+    expect(inMaintenanceAtStart(config([all]), { ...inside, serviceId: "kuma:7" })).toBe(true);
+    // An unknown site has no windows.
+    expect(inMaintenanceAtStart(null, inside)).toBe(false);
   });
 });

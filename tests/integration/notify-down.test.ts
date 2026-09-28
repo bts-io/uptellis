@@ -57,9 +57,9 @@ function harness(onDay: string, edit: (c: SiteConfig) => SiteConfig = (c) => c) 
         notifier: new IncidentNotifier({
           db: platform.db,
           configs,
-          webhookUrl: HOOK,
+          secret: (name) => (name === "DISCORD_WEBHOOK_URL" ? HOOK : undefined),
           waitUntil: (p) => platform.waitUntil(p),
-          send: { fetch: sender },
+          fetch: sender,
           now: () => clock.now.getTime(),
         }),
       }),

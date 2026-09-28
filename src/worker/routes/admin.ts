@@ -9,9 +9,12 @@
  * `currentVersion`; creating or rotating a key without `SOURCE_MASTER_KEY` answers 503 `unavailable`.
  * Secrets appear only in the `IssuedKey` of a create or rotate. Every response is `Cache-Control: no-store`.
  *
- * `POST /notify/test?kind=stale|recovered[&site=][&source=]` posts one Discord card labelled TEST, built
- * from the current state, to `DISCORD_WEBHOOK_URL` (503 `unavailable` when unset); it answers
- * `{ site, source, kind, sent, status, error }`, 502 when Discord did not take the card.
+ * `POST /notify/test?kind=stale|recovered|down|up[&site=][&source=][&service=][&channel=]` sends one alert
+ * labelled TEST, built from the current state and recorded nowhere. With `channel` (any id of `channelsOf`,
+ * the implicit `discord` included; 404 when unknown) it goes through that channel's provider; without it,
+ * to `DISCORD_WEBHOOK_URL` as before channels (503 `unavailable` when unset). It answers
+ * `{ site, channel, source, service?, kind, sent, status, error }` (`channel` null without one), 502 when
+ * the channel did not take it.
  */
 import { type Context, Hono } from "hono";
 import type { z } from "zod";
@@ -330,25 +333,41 @@ export function adminRoutes() {
     }
     const { platform } = c.var;
     const site = c.req.query("site") ?? platform.setting("SITE_DEFAULT") ?? "";
+    const channel = c.req.query("channel");
     const store = configs(c);
     if (!(await store.load(site))) return notFound(c);
-    const webhookUrl = platform.secret("DISCORD_WEBHOOK_URL");
-    if (!webhookUrl) {
+    // Without a channel: the historical Discord webhook, as before channels.
+    if (channel === undefined && !platform.secret("DISCORD_WEBHOOK_URL")) {
       return c.json({ error: "unavailable", message: "DISCORD_WEBHOOK_URL is not set", issues: [] }, 503);
     }
+    const emailFrom = platform.setting("EMAIL_FROM");
     const out = await sendTestCard(
-      { db: platform.db, configs: store, webhookUrl },
+      {
+        db: platform.db,
+        configs: store,
+        secret: (name) => platform.notifySecret(name),
+        email: platform.email,
+        ...(emailFrom ? { emailFrom } : {}),
+      },
       site,
       kind,
       c.req.query("source"),
       c.req.query("service"),
+      channel,
     );
-    if (!out.ok)
-      return fail(c, 404, "not_found", out.error === "no_service" ? "Unknown service" : "Unknown source");
+    if (!out.ok) {
+      const what = {
+        no_service: "Unknown service",
+        no_source: "Unknown source",
+        no_channel: "Unknown channel",
+      };
+      return fail(c, 404, "not_found", what[out.error]);
+    }
     const { outcome } = out;
     return c.json(
       {
         site,
+        channel: out.channel,
         source: out.source,
         ...(out.service ? { service: out.service } : {}),
         kind,

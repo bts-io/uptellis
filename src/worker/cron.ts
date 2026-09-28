@@ -100,8 +100,9 @@ export async function prune(
 }
 
 /**
- * Runs one job at its scheduled time. The five-minute job hands its `stale` transitions to the Discord
- * notifier (when the `DISCORD_WEBHOOK_URL` secret is set), which sends inside the platform's `waitUntil`.
+ * Runs one job at its scheduled time. The five-minute job hands its `stale` transitions to the notifier
+ * (src/worker/notify: every channel of the site that wants them) and retries the deliveries that failed
+ * with a retryable error in the last hour; both send inside the platform's `waitUntil`.
  */
 export async function runJob(
   platform: Platform,
@@ -159,7 +160,7 @@ export async function runJob(
         const r = await store.sweepStaleness(site, toIso(now), watched);
         opened.push(...r.incidentsOpened);
         resolved.push(...r.incidentsResolved);
-        await notifier?.notify(site, {
+        await notifier.notify(site, {
           opened: r.incidentsOpened,
           resolved: r.incidentsResolved.filter((i) => i.notes !== RETIRED_NOTE),
         });
@@ -168,6 +169,8 @@ export async function runJob(
           await cache.put(await store.loadSiteModel(site, toIso(now)));
         }
       }
+      // Deliveries that failed with a retryable error in the last hour get another try.
+      await notifier.retryFailed();
       return { job, downsampled, opened, resolved };
     }
     case "daily":
