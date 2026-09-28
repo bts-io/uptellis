@@ -111,6 +111,8 @@ flowchart LR
 <ActivityFeed items={events} checks={[{ id: s.id, service: s.name, beat: s.recent[0] }]} now={view.now} limit={12} columns={2} />
 {view.incidents.open.map((i) => <IncidentRail key={i.id} incident={i} now={view.now} />)}
 <FactList rows={group.rows} />
+// A group's summary line, coloured part by part (contract addition); `stale` drops the state colours.
+<SummaryParts parts={group.summaryParts} stale={!group.fresh} />
 <KeyValueGrid columns={3} items={[{ icon: "grid", label: "monitors", value: `${view.summary.total} total` }]} />
 <Icon name="database" size={14} className="text-muted" />
 <EmptyState title="No monitors yet" detail="No source has reported." />

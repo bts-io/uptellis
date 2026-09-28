@@ -18,5 +18,6 @@ export type * from "./props";
 export { Sparkline } from "./sparkline";
 export { StaleBanner } from "./stale-banner";
 export { StateDot } from "./state-dot";
+export { SummaryParts } from "./summary-parts";
 export { TopologyTile } from "./topology-tile";
 export { Verdict } from "./verdict";

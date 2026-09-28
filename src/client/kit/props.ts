@@ -16,6 +16,7 @@ import type {
   FreshnessView,
   IncidentView,
   Level,
+  SummaryPartView,
   TopologyView,
   VerdictView,
 } from "@/shared/view";
@@ -98,6 +99,17 @@ export interface GaugeProps {
   cells?: number;
   level?: Level;
   label: string;
+}
+
+/**
+ * A fact group's summary line from its parts (`FactGroupView.summaryParts`, contract addition), a space
+ * between them: a part's level colours it (`info` muted), `emphasis` sets it semibold. `stale` drops the
+ * state colours, so old data never reads green.
+ */
+export interface SummaryPartsProps {
+  parts: SummaryPartView[];
+  stale?: boolean;
+  className?: string;
 }
 
 /** Nodes with roles and state, edges (replication edge flows only while `live`), fence stamp. */

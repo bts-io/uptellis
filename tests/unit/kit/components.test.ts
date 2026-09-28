@@ -19,6 +19,7 @@ import {
   Sparkline,
   StaleBanner,
   StateDot,
+  SummaryParts,
   TopologyTile,
   Verdict,
 } from "../../../src/client/kit";
@@ -393,6 +394,26 @@ describe("FactList, KeyValueGrid, Icon", () => {
       expect(svg.getAttribute("width")).toBe("16");
       expect(svg.children.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("SummaryParts", () => {
+  const parts = def.factGroups.find((g) => g.id === "replication")!.summaryParts;
+
+  it("colours each part by level, mutes info, bolds emphasis and keeps the text", () => {
+    const el = dom(render(SummaryParts, { parts }));
+    expect(el.textContent).toBe(parts.map((p) => p.text).join(" "));
+    const streaming = el.querySelector("[data-level=ok]")!;
+    expect(streaming.textContent).toBe("streaming");
+    expect(streaming.className).toContain("text-up");
+    expect(streaming.className).toContain("font-semibold");
+    expect(el.querySelector("[data-level=info]")!.className).toContain("text-muted");
+  });
+
+  it("drops the state colours on stale data", () => {
+    const el = dom(render(SummaryParts, { parts, stale: true }));
+    expect(el.innerHTML).not.toContain("text-up");
+    expect(el.querySelector("[data-level=info]")!.className).toContain("text-muted");
   });
 });
 
