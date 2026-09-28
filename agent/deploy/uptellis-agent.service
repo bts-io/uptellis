@@ -1,0 +1,61 @@
+# Uptellis agent as a hardened systemd service (agent/README.md, "systemd"):
+#   install -m 755 uptellis-agent-linux-amd64 /usr/local/bin/uptellis-agent
+#   install -d -m 700 /etc/uptellis-agent
+#   install -m 600 agent.env.example /etc/uptellis-agent/agent.env    (then edit it)
+#   install -m 600 /dev/null /etc/uptellis-agent/api_key                (then write the key into it)
+#   install -m 644 uptellis-agent.service /etc/systemd/system/
+#   systemctl daemon-reload && systemctl enable --now uptellis-agent
+[Unit]
+Description=Uptellis agent (runs Uptellis monitors inside this network)
+Documentation=https://github.com/bts-io/uptellis/tree/main/agent
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/uptellis-agent
+EnvironmentFile=/etc/uptellis-agent/agent.env
+# The key reaches the service as a credential (mode 400, owned by the service user), never the environment.
+LoadCredential=api_key:/etc/uptellis-agent/api_key
+Environment=UPTELLIS_API_KEY_FILE=%d/api_key
+# The result buffer and the last monitor list: /var/lib/uptellis-agent, kept across restarts and upgrades.
+StateDirectory=uptellis-agent
+StateDirectoryMode=0700
+Environment=UPTELLIS_DATA_DIR=%S/uptellis-agent
+Restart=on-failure
+RestartSec=10
+# Running checks finish and the buffer is flushed on SIGTERM.
+TimeoutStopSec=30
+
+# Hardening. A dynamic user owns nothing outside its state directory.
+DynamicUser=yes
+UMask=0077
+NoNewPrivileges=yes
+# Ping monitors: raw ICMP for the system ping (inherited as an ambient capability), and nothing else.
+AmbientCapabilities=CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_RAW
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+PrivateIPC=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RemoveIPC=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+# Not MemoryDenyWriteExecute: the JavaScript engine compiles code at run time.
+
+[Install]
+WantedBy=multi-user.target

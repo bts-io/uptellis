@@ -1,0 +1,51 @@
+# Uptellis agent inside a private network. Run from the repo checkout:
+#   docker compose -f agent/compose.yaml up -d --build
+# or with the published image (drop `build:`). Host files (outside git): see agent/README.md "Docker".
+name: uptellis-agent
+
+services:
+  agent:
+    image: ghcr.io/bts-io/uptellis-agent:latest
+    build:
+      context: ..
+      dockerfile: agent/Dockerfile
+    container_name: uptellis-agent
+    # The default bridge reaches the LAN through NAT. Use `network_mode: host` instead when monitors target
+    # names only the host resolves (mDNS `.local`, a tailnet's MagicDNS).
+    read_only: true
+    tmpfs:
+      - /tmp:size=1m,mode=1777
+    volumes:
+      - agent-data:/data
+    # Unprivileged ICMP for ping monitors (every group may open an ICMP echo socket inside the container).
+    sysctls:
+      net.ipv4.ping_group_range: "0 2147483647"
+    cap_drop: [ALL]
+    # Where the sysctl above is not allowed, ping needs raw sockets instead:
+    # cap_add: [NET_RAW]
+    security_opt:
+      - no-new-privileges:true
+    user: "1000:1000"
+    restart: unless-stopped
+    # Time for running checks to finish and the buffer to flush.
+    stop_grace_period: 30s
+    env_file:
+      - /etc/uptellis/agent.env
+    environment:
+      UPTELLIS_API_KEY_FILE: /run/secrets/uptellis_api_key
+    secrets:
+      - uptellis_api_key
+    mem_limit: 128m
+    pids_limit: 64
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  agent-data:
+
+secrets:
+  uptellis_api_key:
+    file: /etc/uptellis/agent_api_key
