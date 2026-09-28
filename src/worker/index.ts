@@ -14,7 +14,7 @@ import { KvModelCache } from "./engine/kv-cache";
 import type { EnvIngestKeys } from "./ingest/keys";
 import { ingestRoutes } from "./ingest/routes";
 import { SqlRunnerStates } from "./monitors/runner-state";
-import { staleNotifier } from "./notify";
+import { incidentNotifier } from "./notify";
 import { accountRoutes, userRoutes } from "./routes/accounts";
 import { adminRoutes } from "./routes/admin";
 import { agentRoutes } from "./routes/agent";
@@ -49,7 +49,7 @@ export const appBackend = (platform: Platform, envKeys: EnvIngestKeys = {}) => {
     cache: new KvModelCache(platform.kv),
     configs,
     keys: new KeyStore(platform, envKeys),
-    notifier: staleNotifier(platform, configs),
+    notifier: incidentNotifier(platform, configs),
     runtime: platform.runtime,
   };
 };

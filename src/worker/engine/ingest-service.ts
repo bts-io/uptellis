@@ -5,8 +5,8 @@
  *
  * Before the first ingest of a site (per isolate and config version), the site's configured sources are
  * synced to the store (`syncSiteSources`). Every accepted payload is also kept raw (`Store.recordSnapshot`, 7 days) for
- * debugging; neither step can fail the ingest. When the delta resolves a `stale` incident (the source is back),
- * the backend's notifier posts the recovered card (src/worker/notify), which cannot fail the ingest either.
+ * debugging; neither step can fail the ingest. Every incident the delta opens or resolves (a service `down`,
+ * a `stale` source back) goes to the backend's notifier (src/worker/notify), which cannot fail the ingest either.
  *
  * Ordering: a delta whose `generatedAt` is older than the source's last accepted one (its `lastSeenAt`)
  * is "outdated": its heartbeats are still stored (idempotent history, marked not important so they cannot
@@ -22,7 +22,7 @@ import { normalizeFacts } from "../adapters/facts";
 import { normalizeKuma } from "../adapters/kuma";
 import { issue, PayloadRejected, zodIssues } from "../ingest/issues";
 import type { IngestRoute, KeyBinding } from "../ingest/keys";
-import type { StaleNotifier } from "../notify";
+import type { IncidentNotifier } from "../notify";
 import type { KeyStore } from "./key-store";
 import { type ConfigSource, seedConfigs, syncSiteSources } from "./sites";
 import type { ModelCache, SiteModel, Store } from "./store";
@@ -34,8 +34,8 @@ export interface IngestBackend {
   configs?: ConfigSource;
   /** Ingest keys stored in D1; without it only the env keys exist. */
   keys?: KeyStore;
-  /** Discord cards for `stale` transitions (a silent source reporting again); none when absent. */
-  notifier?: Pick<StaleNotifier, "notify">;
+  /** Discord cards for `down` transitions and `stale` recoveries (src/worker/notify); none when absent. */
+  notifier?: Pick<IncidentNotifier, "notify">;
   /** Where the instance runs: decides the builtin runner's implied source (`syncSiteSources`). */
   runtime?: Runtime;
 }

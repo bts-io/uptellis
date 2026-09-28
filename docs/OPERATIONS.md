@@ -105,7 +105,7 @@ Worker secrets are set with `bunx wrangler secret put <NAME>`, which prompts for
 | `GITHUB_CLIENT_SECRET`, `GOOGLE_CLIENT_SECRET` | Optional: the OAuth client secrets ([Sign-in with GitHub or Google](#sign-in-with-github-or-google)) | Create a new secret at the provider, put it, then delete the old one there |
 | `SOURCE_MASTER_KEY` | 32 random bytes, base64 (`openssl rand -base64 32`): seals the ingest keys stored in D1 | Every key sealed in D1 stops verifying. See [Master key](#master-key) |
 | `INGEST_KEY_<ID>` | Optional env fallback for a producer's HMAC key, used while its key id has no D1 row (binding in `src/worker/ingest/keys.ts`) | Rotate in admin instead, which moves the key into D1 ([Ingest keys](#ingest-keys)); then delete the env secret |
-| `DISCORD_WEBHOOK_URL` | Optional: the Discord webhook the stale and recovered cards are posted to | In the channel settings create a new webhook, put its URL, send a test card (`POST /api/admin/notify/test`), then delete the old webhook |
+| `DISCORD_WEBHOOK_URL` | Optional: the Discord webhook the stale and recovered cards (and, for sites with `notify.discord`, the down and up cards) are posted to | In the channel settings create a new webhook, put its URL, send a test card (`POST /api/admin/notify/test`), then delete the old webhook |
 
 The Worker only reads secrets; it never logs or returns them. Settings are plain vars: `PUBLIC_URL` (the instance's URL: the base of invite links, the JWT issuer and the origin Better Auth trusts; unset uses each request's origin, fine for local development only), `GITHUB_CLIENT_ID`, `GOOGLE_CLIENT_ID` and `SITE_DEFAULT`.
 

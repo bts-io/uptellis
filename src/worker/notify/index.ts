@@ -1,22 +1,40 @@
 /**
- * Discord notifications for sources that go silent and come back: exactly one card when a `stale`
- * incident opens and one when it resolves, posted to the Discord webhook (the `DISCORD_WEBHOOK_URL` secret).
- * Service `down` incidents never post (Uptime Kuma already alerts on those).
+ * Discord notifications from incidents: exactly one card when an incident opens and one when it resolves,
+ * posted to the Discord webhook (the `DISCORD_WEBHOOK_URL` secret).
  *
- * Both places that write `stale` transitions hand them here: the 5-minute sweep (src/worker/cron.ts) opens
- * and resolves them, and an ingest resolves one when the silent source reports again
- * (src/worker/engine/ingest-service.ts). Each transition is claimed in the `notifications` table before its card
- * is posted, so it is sent at most once, whoever sees it and however often a cron is retried. Sending runs
- * in `waitUntil` when the caller has one, and nothing here throws into the cron or the ingest.
+ * - `stale` (a source went silent, and is back): always, as before.
+ * - `down` (a service is down, and back up with the outage duration): only for sites whose config sets
+ *   `notify.discord` (off by default, so a site still alerted by Uptime Kuma gets no second page). A service
+ *   inside a maintenance window when its incident starts gets no card, and a resolve card goes out only for
+ *   an incident whose open card was claimed, so nobody hears "back up" without having heard "down" (an
+ *   outage that opened and closed within one input, or before this notifier sent down cards, stays quiet).
+ *
+ * Every place that writes transitions hands them here: the 5-minute sweep (src/worker/cron.ts) opens and
+ * resolves `stale` ones, and an ingest or a probe run (`applyIngestDelta` in
+ * src/worker/engine/ingest-service.ts) opens and resolves `down` ones and resolves `stale` ones when the
+ * silent source reports again. Each transition is claimed in the `notifications` table before its card is
+ * posted, so it is sent at most once, whoever sees it and however often a cron is retried. Sending runs in
+ * `waitUntil` when the caller has one, and nothing here throws into the cron or the ingest.
  */
 import { and, desc, eq, gt, isNotNull, lte, sql } from "drizzle-orm";
 import type { Platform } from "@/platform/types";
+import type { SiteConfig } from "@/shared/config";
 import { FRESHNESS_FACTORS, type Incident, type Source } from "@/shared/model";
+import { inMaintenance } from "@/shared/monitors";
 import { type Db, schema } from "@/worker/db";
-import { rowToIncident, rowToSource } from "@/worker/db/rows";
+import { rowToIncident, rowToService, rowToSource } from "@/worker/db/rows";
 import { toIso } from "@/worker/db/util";
 import type { ConfigSource } from "@/worker/engine/sites";
-import { cardIsSafe, type DiscordCard, recoveredCard, silentSince, staleCard } from "./card";
+import {
+  type CardService,
+  cardIsSafe,
+  type DiscordCard,
+  downCard,
+  recoveredCard,
+  silentSince,
+  staleCard,
+  upCard,
+} from "./card";
 import { postCard, type SendOptions, type SendOutcome } from "./send";
 
 const { notifications, sources, heartbeats, services, incidents } = schema;
@@ -42,21 +60,73 @@ export interface Transitions {
 const warn = (step: string, err: unknown) =>
   console.warn(JSON.stringify({ evt: "notify", step, name: err instanceof Error ? err.name : "unknown" }));
 
-export class StaleNotifier {
+/** Why a `down` transition gets no card, or null when it gets one (pure; `config` null: unknown site). */
+export function downCardBlock(
+  config: Pick<SiteConfig, "notify" | "maintenance"> | null,
+  kind: NotificationKind,
+  incident: Pick<Incident, "serviceId" | "startedAt">,
+): "notify_off" | "maintenance" | null {
+  if (!config?.notify.discord || !incident.serviceId) return "notify_off";
+  if (kind === "open" && inMaintenance(config, incident.serviceId, Date.parse(incident.startedAt))) {
+    return "maintenance";
+  }
+  return null;
+}
+
+export class IncidentNotifier {
   constructor(private readonly deps: NotifierDeps) {}
 
-  /** Posts a card for every `stale` transition in `t`; other incidents are ignored. Never throws. */
+  /** Posts a card for every `stale` and `down` transition in `t` (see above); others are ignored. Never throws. */
   async notify(site: string, t: Transitions): Promise<void> {
+    const opens = (i: Incident) => i.endedAt === null;
     const jobs: (readonly [NotificationKind, Incident])[] = [
-      ...t.opened.filter((i) => i.kind === "stale" && i.endedAt === null).map((i) => ["open", i] as const),
-      ...t.resolved.filter((i) => i.kind === "stale").map((i) => ["resolve", i] as const),
+      ...t.opened
+        .filter((i) => (i.kind === "stale" || i.kind === "down") && opens(i))
+        .map((i) => ["open", i] as const),
+      ...t.resolved
+        .filter((i) => i.kind === "stale" || i.kind === "down")
+        .map((i) => ["resolve", i] as const),
     ];
     if (jobs.length === 0) return;
     const run = (async () => {
-      for (const [kind, incident] of jobs) await this.deliver(site, kind, incident);
+      let config: SiteConfig | null | undefined;
+      for (const [kind, incident] of jobs) {
+        if (incident.kind === "down") {
+          try {
+            if (config === undefined) config = (await this.deps.configs.current(site))?.config ?? null;
+            const blocked = downCardBlock(config, kind, incident);
+            if (blocked) {
+              if (blocked === "maintenance")
+                console.log(JSON.stringify({ evt: "notify", kind, skipped: blocked }));
+              continue;
+            }
+            if (kind === "resolve" && !(await this.claimed(site, incident.id, "open"))) continue;
+          } catch (err) {
+            warn("down_gate", err);
+            continue;
+          }
+        }
+        await this.deliver(site, kind, incident);
+      }
     })();
     if (this.deps.waitUntil) this.deps.waitUntil(run);
     else await run;
+  }
+
+  /** Whether a card for this transition was claimed (sent, failed or in flight). */
+  private async claimed(site: string, incidentId: string, kind: NotificationKind): Promise<boolean> {
+    const [row] = await this.deps.db
+      .select({ id: notifications.incidentId })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.site, site),
+          eq(notifications.incidentId, incidentId),
+          eq(notifications.kind, kind),
+        ),
+      )
+      .limit(1);
+    return !!row;
   }
 
   /** One transition: claim it, build its card, post it, record the outcome. */
@@ -103,6 +173,7 @@ export class StaleNotifier {
   }
 
   private async card(site: string, kind: NotificationKind, incident: Incident): Promise<DiscordCard | null> {
+    if (incident.kind === "down") return this.downCard(site, kind, incident);
     const [list, pageUrl] = await Promise.all([
       siteSources(this.deps.db, site),
       sitePageUrl(this.deps.configs, site),
@@ -115,9 +186,63 @@ export class StaleNotifier {
     return recoveredCard({ site, incident, source, backfilled, pageUrl, now });
   }
 
+  private async downCard(
+    site: string,
+    kind: NotificationKind,
+    incident: Incident,
+  ): Promise<DiscordCard | null> {
+    const { db, configs } = this.deps;
+    const serviceId = incident.serviceId;
+    if (!serviceId) return null;
+    const [row, state, pageUrl] = await Promise.all([
+      db
+        .select()
+        .from(services)
+        .where(and(eq(services.site, site), eq(services.id, serviceId)))
+        .limit(1)
+        .then((r) => r[0]),
+      configs.current(site),
+      sitePageUrl(configs, site),
+    ]);
+    if (!row) return null;
+    const s = rowToService(row);
+    const service: CardService = {
+      id: s.id,
+      source: s.source,
+      targetDisplay: s.targetDisplay,
+      name: state?.config.displayNames[s.id] ?? s.name,
+    };
+    const now = this.now();
+    if (kind === "resolve") return upCard({ site, incident, service, pageUrl, now });
+    const reason = await downReason(db, site, incident);
+    return downCard({ site, incident, service, reason, pageUrl, now });
+  }
+
   private now() {
     return this.deps.now?.() ?? Date.now();
   }
+}
+
+/** The name the notifier had before it sent `down` cards. */
+export { IncidentNotifier as StaleNotifier };
+
+/** The message of the latest `down` heartbeat at or before the incident's start (the check that failed). */
+async function downReason(db: Db, site: string, incident: Incident): Promise<string | null> {
+  if (!incident.serviceId) return null;
+  const [row] = await db
+    .select({ message: heartbeats.message })
+    .from(heartbeats)
+    .where(
+      and(
+        eq(heartbeats.site, site),
+        eq(heartbeats.serviceId, incident.serviceId),
+        eq(heartbeats.status, "down"),
+        lte(heartbeats.ts, Date.parse(incident.startedAt)),
+      ),
+    )
+    .orderBy(desc(heartbeats.ts))
+    .limit(1);
+  return row?.message ?? null;
 }
 
 /**
@@ -125,14 +250,14 @@ export class StaleNotifier {
  * in the platform's `waitUntil`. `now` is the clock the cards measure ages against (the cron passes its
  * scheduled time, the clock its sweep used).
  */
-export function staleNotifier(
+export function incidentNotifier(
   platform: Pick<Platform, "db" | "secret" | "waitUntil">,
   configs: ConfigSource,
   opts: { now?: () => number } = {},
-): StaleNotifier | undefined {
+): IncidentNotifier | undefined {
   const webhookUrl = platform.secret("DISCORD_WEBHOOK_URL");
   if (!webhookUrl) return undefined;
-  return new StaleNotifier({
+  return new IncidentNotifier({
     db: platform.db,
     configs,
     webhookUrl,
@@ -140,6 +265,9 @@ export function staleNotifier(
     ...(opts.now ? { now: opts.now } : {}),
   });
 }
+
+/** The name the factory had before the notifier sent `down` cards (src/worker/cron.ts still uses it). */
+export const staleNotifier = incidentNotifier;
 
 export type TestCardKind = "stale" | "recovered";
 

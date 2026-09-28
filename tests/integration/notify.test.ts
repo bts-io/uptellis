@@ -116,7 +116,7 @@ describe("stale notifications from the 5-minute sweep", () => {
     ]);
   });
 
-  it("posts nothing for service down and up incidents", async () => {
+  it("posts nothing for down and up incidents of a site without notify.discord", async () => {
     const site = "t-notify-down";
     const store = new D1Store(platform);
     const down = await store.applyDelta(
@@ -211,9 +211,9 @@ describe("recovery at ingest", () => {
     );
   }
 
-  it("posts the recovered card with the gap and the backfilled beats, and nothing for down/up", async () => {
+  it("posts the recovered card with the gap and the backfilled beats, and nothing for down/up (Discord off)", async () => {
     const { cards } = discord();
-    // A down beat opens a `down` incident: no card.
+    // A down beat opens a `down` incident: no card, the demo site leaves `notify.discord` off.
     expect((await kuma([{ ts: T("09:59:30"), status: 0 }])).status).toBe(202);
     expect(cards).toHaveLength(0);
 

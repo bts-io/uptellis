@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import type { Incident, Source } from "@/shared/model";
 import {
   ACCENT,
+  type CardService,
   cardIsSafe,
   type DiscordCard,
+  downCard,
   duration,
   hostOf,
   IS_COMPONENTS_V2,
@@ -11,6 +13,7 @@ import {
   producerOf,
   recoveredCard,
   staleCard,
+  upCard,
 } from "@/worker/notify/card";
 
 const site = "demo";
@@ -49,7 +52,9 @@ describe("producers", () => {
     expect(hostOf("kuma:watch-1")).toBe("watch-1");
     expect(producerOf("kuma:watch-1")).toBe("Kuma collector on watch-1");
     expect(producerOf("facts:app-1")).toBe("facts pusher on app-1");
-    expect(producerOf("probe:edge")).toBe("Cloudflare probes");
+    expect(producerOf("probe:cf")).toBe("Cloudflare probes");
+    expect(producerOf("probe:server")).toBe("the server's own probes");
+    expect(producerOf("probe:office-1")).toBe("agent office-1");
     expect(producerOf("webhook:ci")).toBe("signed webhooks from ci");
   });
 
@@ -120,8 +125,8 @@ describe("stale card", () => {
   it("names Cloudflare probes and drops the button without a hostname", () => {
     const card = staleCard({
       site,
-      incident: stale("probe:edge", "10:05:00"),
-      sources: [src("probe:edge", "10:00:00", 60), src("kuma:watch-1", "10:06:00", 60)],
+      incident: stale("probe:cf", "10:05:00"),
+      sources: [src("probe:cf", "10:00:00", 60), src("kuma:watch-1", "10:06:00", 60)],
       pageUrl: null,
       now: at("10:06:30"),
     });
@@ -183,6 +188,93 @@ describe("recovered card", () => {
     expect(body(card)).toContain("**Producer:** facts pusher on app-1");
     expect(body(card)).toContain("**Silent for:** 1 h 40 min");
     expect(body(card)).not.toContain("backfilled");
+  });
+});
+
+const down = (serviceId: string, startedAt: string, endedAt: string | null = null): Incident => ({
+  id: `${serviceId}:${T(startedAt)}`,
+  site,
+  kind: "down",
+  serviceId,
+  sourceId: null,
+  startedAt: T(startedAt),
+  endedAt: endedAt === null ? null : T(endedAt),
+  title: "Web down",
+  notes: null,
+});
+
+const web: CardService = {
+  id: "probe:web",
+  source: "probe:cf",
+  name: "Web",
+  targetDisplay: "www.example.org/",
+};
+
+describe("down card", () => {
+  it("names the service, target, runner, start and reason", () => {
+    const card = downCard({
+      site,
+      incident: down("probe:web", "10:02:00"),
+      service: web,
+      reason: "HTTP 503",
+      pageUrl: PAGE,
+      now: at("10:04:30"),
+    });
+    expect(card.components[0].accent_color).toBe(ACCENT.down);
+    expect(body(card).split("\n")).toEqual([
+      "### 🔴 Uptellis: Web is down",
+      "Confirmed down; an incident is open on the status page.",
+      "",
+      "**Service:** probe:web",
+      "**Target:** www.example.org/",
+      "**Checked by:** Cloudflare probes",
+      "**Down since:** 2026-09-27 10:02 UTC (2 min ago)",
+      "**Reason:** HTTP 503",
+    ]);
+    expect(buttons(card)).toEqual([{ type: 2, style: 5, label: "Status page", url: PAGE }]);
+    expect(card.allowed_mentions).toEqual({ parse: [] });
+    expect(cardIsSafe(card)).toBe(true);
+  });
+
+  it("omits a missing target and reason and names an agent", () => {
+    const card = downCard({
+      site,
+      incident: down("probe:nas", "10:02:00"),
+      service: { id: "probe:nas", source: "probe:office-1", name: "NAS", targetDisplay: null },
+      reason: null,
+      pageUrl: null,
+      now: at("10:02:10"),
+      test: true,
+    });
+    expect(body(card)).toMatch(/^### 🔴 TEST: Uptellis: NAS is down\nTest card/);
+    expect(body(card)).toContain("**Checked by:** agent office-1");
+    expect(body(card)).toContain("(under 1 min ago)");
+    expect(body(card)).not.toContain("Target");
+    expect(body(card)).not.toContain("Reason");
+    expect(parts(card).map((c) => c.type)).toEqual([10, 10]);
+  });
+});
+
+describe("up card", () => {
+  it("gives the outage duration and both ends", () => {
+    const card = upCard({
+      site,
+      incident: down("probe:web", "10:02:00", "11:19:30"),
+      service: web,
+      pageUrl: PAGE,
+      now: at("11:19:31"),
+    });
+    expect(card.components[0].accent_color).toBe(ACCENT.recovered);
+    expect(body(card).split("\n")).toEqual([
+      "### ✅ Uptellis: Web is back up",
+      "Up again; the incident is resolved.",
+      "",
+      "**Service:** probe:web",
+      "**Down for:** 1 h 17 min",
+      "**Down since:** 2026-09-27 10:02 UTC",
+      "**Back up:** 2026-09-27 11:19 UTC",
+    ]);
+    expect(texts(card)[1]).toBe(`-# Uptellis · demo · <t:${Math.floor(at("11:19:31") / 1000)}:f>`);
   });
 });
 

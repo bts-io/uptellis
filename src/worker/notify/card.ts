@@ -1,6 +1,7 @@
 /**
- * The two Discord cards Uptellis posts to its webhook: a source went silent (its `stale` incident opened) and
- * it is back (the incident resolved). Pure: everything the card says comes in through the input.
+ * The Discord cards Uptellis posts to its webhook: a source went silent (its `stale` incident opened) and
+ * it is back (the incident resolved); a service is down (its `down` incident opened) and it is back up (the
+ * incident resolved). Pure: everything the card says comes in through the input.
  *
  * Layout: Components V2 (flags 32768), one container with an accent colour, a `###` heading with an emoji,
  * `**Key:** value` fields, a small grey footer with a Discord timestamp, a divider and a row of link buttons.
@@ -12,14 +13,15 @@ import {
   containsForbiddenLiteral,
   FRESHNESS_FACTORS,
   type Incident,
+  type Service,
   type Source,
   sourceFreshness,
 } from "@/shared/model";
 
 export const IS_COMPONENTS_V2 = 1 << 15;
 
-/** The card accents: dark red for silent, green for back. */
-export const ACCENT = { stale: 0x7f1d1d, recovered: 0x22c55e } as const;
+/** The card accents: dark red for silent, red for down, green for back. */
+export const ACCENT = { stale: 0x7f1d1d, down: 0xdc2626, recovered: 0x22c55e } as const;
 
 /** Webhook display name. */
 export const USERNAME = "Uptellis";
@@ -62,6 +64,34 @@ export interface RecoveredCardInput {
   test?: boolean;
 }
 
+/** The service of a `down` incident as the cards show it. */
+export type CardService = Pick<Service, "id" | "source" | "targetDisplay"> & {
+  /** Display name (the config's `displayNames` applied). */
+  name: string;
+};
+
+export interface DownCardInput {
+  site: string;
+  /** The `down` incident that opened. */
+  incident: Incident;
+  service: CardService;
+  /** The message of the check that went down (e.g. `HTTP 503`, `timeout`), or null. */
+  reason: string | null;
+  pageUrl: string | null;
+  now: number;
+  test?: boolean;
+}
+
+export interface UpCardInput {
+  site: string;
+  /** The `down` incident that resolved (`endedAt` set). */
+  incident: Incident;
+  service: CardService;
+  pageUrl: string | null;
+  now: number;
+  test?: boolean;
+}
+
 const MIN_MS = 60_000;
 
 /** The machine a source id's suffix names: `kuma:watch-1` runs on `watch-1`. */
@@ -72,7 +102,9 @@ export function producerOf(sourceId: string): string {
   const kind = sourceId.slice(0, sourceId.indexOf(":"));
   if (kind === "kuma") return `Kuma collector on ${hostOf(sourceId)}`;
   if (kind === "facts") return `facts pusher on ${hostOf(sourceId)}`;
-  if (kind === "probe") return "Cloudflare probes";
+  if (sourceId === "probe:cf") return "Cloudflare probes";
+  if (sourceId === "probe:server") return "the server's own probes";
+  if (kind === "probe") return `agent ${hostOf(sourceId)}`;
   return `signed webhooks from ${hostOf(sourceId)}`;
 }
 
@@ -140,6 +172,50 @@ export function recoveredCard(input: RecoveredCardInput): DiscordCard {
       ...(input.backfilled === null
         ? []
         : ([["Beats backfilled for the gap", String(input.backfilled)]] as [string, string][])),
+    ],
+    site: input.site,
+    now: input.now,
+    pageUrl: input.pageUrl,
+  });
+}
+
+export function downCard(input: DownCardInput): DiscordCard {
+  const { incident, service } = input;
+  const since = Date.parse(incident.startedAt);
+  return card({
+    accent: ACCENT.down,
+    heading: `🔴 ${title(input.test)}Uptellis: ${service.name} is down`,
+    description: input.test
+      ? "Test card from the admin panel, built from the current state: nothing is down."
+      : "Confirmed down; an incident is open on the status page.",
+    fields: [
+      ["Service", service.id],
+      ...(service.targetDisplay ? ([["Target", service.targetDisplay]] as [string, string][]) : []),
+      ["Checked by", producerOf(service.source)],
+      ["Down since", `${utc(since)} (${duration(input.now - since)} ago)`],
+      ...(input.reason ? ([["Reason", input.reason]] as [string, string][]) : []),
+    ],
+    site: input.site,
+    now: input.now,
+    pageUrl: input.pageUrl,
+  });
+}
+
+export function upCard(input: UpCardInput): DiscordCard {
+  const { incident, service } = input;
+  const from = Date.parse(incident.startedAt);
+  const back = Date.parse(incident.endedAt ?? incident.startedAt);
+  return card({
+    accent: ACCENT.recovered,
+    heading: `✅ ${title(input.test)}Uptellis: ${service.name} is back up`,
+    description: input.test
+      ? "Test card from the admin panel, built from the current state: nothing changed."
+      : "Up again; the incident is resolved.",
+    fields: [
+      ["Service", service.id],
+      ["Down for", duration(back - from)],
+      ["Down since", utc(from)],
+      ["Back up", utc(back)],
     ],
     site: input.site,
     now: input.now,

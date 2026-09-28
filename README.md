@@ -52,7 +52,7 @@ flowchart LR
   col -->|"signed POST"| ingest
   facts -->|"signed POST"| ingest
   cron -->|"https checks"| sites["your public URLs"]
-  engine -->|"stale and recovered cards"| discord["Discord webhook"]
+  engine -->|"stale, down and up cards"| discord["Discord webhook"]
   visitor["Visitors"] --> ssr
 ```
 
