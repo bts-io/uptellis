@@ -132,7 +132,9 @@ describe("monitors editor", () => {
     });
     const m = () => group("Monitor db");
     expect(field("Port", m()).value).toBe("5432");
-    expect(m().querySelector('[role="note"]')).toBeNull();
+    // TCP runs on Cloudflare, with the note about hosts behind Cloudflare.
+    expect(m().querySelectorAll('[role="note"]')).toHaveLength(1);
+    expect(text(m())).toContain("cannot open TCP connections to hosts behind Cloudflare");
 
     choose(field("Type", m()), "ping");
     expect(field("Host", m()).value).toBe("db.example.org");

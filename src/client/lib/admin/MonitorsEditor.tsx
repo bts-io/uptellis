@@ -283,6 +283,12 @@ function MonitorRow({
           server and agents run it.
         </p>
       )}
+      {m.type === "tcp" && m.runners.includes(BUILTIN_RUNNER) && (
+        <p role="note" className="mt-2 text-xs text-muted">
+          On Cloudflare, builtin cannot open TCP connections to hosts behind Cloudflare itself (the Workers
+          socket limit); check those with an HTTP monitor or from an agent.
+        </p>
+      )}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <label className="mr-2 flex items-center gap-2 text-sm">
