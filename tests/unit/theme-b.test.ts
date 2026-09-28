@@ -44,10 +44,12 @@ describe("theme B page", () => {
     const v = view("default");
     const html = render(v);
     for (const s of services(v)) expect(html).toContain(s.name);
-    for (const t of ["Topology", "Response time", "Forgejo", "CI runners", "Backup", "Tailnet", "Incidents"])
+    // One tile per fact group the KPI strip does not already show, titled by its profile.
+    const groups = ["Forgejo", "Replication", "Fence", "Backup", "Runners", "Disk"];
+    for (const t of ["Topology", "Response time", ...groups, "Tailnet", "Incidents"])
       expect(html).toContain(t);
     expect(html).toContain("All systems operational");
-    expect(html).toContain("v16.0.5");
+    expect(html).toContain("16.0.5 · HTTP 200 · serving app-1");
     expect(html).toContain("streaming");
     expect(html.match(/data-check=/g)).toHaveLength(12);
   });
@@ -91,20 +93,27 @@ describe("theme B page", () => {
     expect(html).toContain("partial outage: Replica Postgres");
     expect(html).toContain("timeout");
     expect(html).toContain("replication stopped");
-    expect(html).toContain("no stream");
+    expect(html).toMatch(/>wal<\/span><b[^>]*>(?:(?!<\/b>).)*text-down">stopped</);
     expect(html).toMatch(/data-live="false"/);
     expect(html).toContain('data-check="down"');
     // The chart opens on the section with the failing service.
     expect(html).toMatch(/aria-selected="true"[^>]*>Database</);
   });
 
-  it("renders a dash for missing facts and survives a site without topology", () => {
-    const v: SiteView = { ...view("default"), factGroups: [], factIndex: {}, topology: null, activity: [] };
+  it("survives a site without facts or topology", () => {
+    const v: SiteView = {
+      ...view("default"),
+      factGroups: [],
+      factIndex: {},
+      highlights: [],
+      headline: null,
+      topology: null,
+      activity: [],
+    };
     const html = render(v);
     expect(html).toContain("No infrastructure facts yet");
-    expect(html).toMatch(/text-\[22px\] font-medium">-</);
-    expect(html).toContain("on -");
-    expect(html).toContain("- online");
+    expect(html).toContain("Tailnet");
+    expect(html).not.toContain(">Forgejo<");
   });
 
   it("combines the 90-day bars by each day's worst state", () => {

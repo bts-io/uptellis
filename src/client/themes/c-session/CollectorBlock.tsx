@@ -1,14 +1,31 @@
 import { Age } from "@/client/kit";
-import type { SiteView } from "@/shared/view";
+import { highlightSlots, type SiteView, sourceName } from "@/shared/view";
 import { Block } from "./Block";
-import { DASH, factText, hhmmss } from "./format";
+import { DASH, hhmmss } from "./format";
 import { KeyValues } from "./KeyValues";
 
 /** Only while the data is stale or missing: which source went quiet, since when, and what the page shows. */
 export function CollectorBlock({ view }: { view: SiteView }) {
   const { perSource, stalestSourceId } = view.freshness;
   const source = perSource.find((s) => s.id === stalestSourceId) ?? perSource[0];
-  const host = factText(view, "kuma.host");
+  const collector = sourceName(view, "kuma");
+  const items = [
+    { label: "last snapshot", value: `${hhmmss(view.generatedAt)} UTC` },
+    { label: "source", value: source?.id ?? DASH },
+    {
+      label: "collector",
+      value: (
+        <>
+          {collector ?? DASH} <span className="text-down">not reporting</span>
+        </>
+      ),
+    },
+  ];
+  // The profiles' highlights (e.g. the watchdog) after them, unless one repeats a label above.
+  const slots = highlightSlots(view.highlights).map((slot) => ({
+    label: slot.label,
+    value: slot.rows.map((r) => r.display).join(" · "),
+  }));
   return (
     <Block
       id="collector"
@@ -36,17 +53,8 @@ export function CollectorBlock({ view }: { view: SiteView }) {
       <KeyValues
         className="mt-3"
         items={[
-          { label: "last snapshot", value: `${hhmmss(view.generatedAt)} UTC` },
-          { label: "source", value: source?.id ?? DASH },
-          {
-            label: "collector",
-            value: (
-              <>
-                {host} <span className="text-down">not reporting</span>
-              </>
-            ),
-          },
-          { label: "watchdog", value: factText(view, "watchdog.reachable") },
+          ...items,
+          ...slots.filter((x) => !items.some((i) => i.label === x.label)),
           { label: "showing", value: <span className="text-muted">last known values, hatched to now</span> },
         ]}
       />

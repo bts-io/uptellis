@@ -1,9 +1,8 @@
 import type { ReactNode } from "react";
 import { StateDot } from "@/client/kit";
-import type { SiteView } from "@/shared/view";
-import { isNewer } from "@/shared/view";
+import { highlightSlots, type SiteView } from "@/shared/view";
 import { Block, DataAge, kumaSeenAt } from "./Block";
-import { allServices, cx, DASH, fact, factText, failing, hhmmss, isStale, pct, splitUnit } from "./format";
+import { allServices, cx, DASH, failing, hhmmss, isStale, LEVEL_TEXT, pct, splitUnit } from "./format";
 
 /** One sentence that says whether anything needs you, then the stat strip. */
 export function SummaryBlock({ view }: { view: SiteView }) {
@@ -13,9 +12,6 @@ export function SummaryBlock({ view }: { view: SiteView }) {
   // Once stale, the counts are the last known ones (the view counts stale services as `other`).
   const up = stale ? services.filter((x) => x.status === "up").length : s.up;
   const down = stale ? services.filter((x) => x.status === "down").length : s.down;
-  const version = factText(view, "kuma.version");
-  const latest = fact(view, "kuma.latestVersion");
-  const [db, dbUnit] = splitUnit(factText(view, "kuma.dbSize"));
 
   return (
     <Block
@@ -48,19 +44,23 @@ export function SummaryBlock({ view }: { view: SiteView }) {
           {s.uptime30d !== null && <Small>%</Small>}
         </Stat>
         <Stat label="maintenance">{s.maintenance}</Stat>
-        <Stat label="kuma">
-          {version}
-          {latest &&
-            (isNewer(latest.display, version) ? (
-              <Small className="text-degraded">{latest.display} available</Small>
-            ) : (
-              <Small>latest</Small>
-            ))}
-        </Stat>
-        <Stat label="kuma db">
-          {db}
-          {dbUnit && <Small>{dbUnit}</Small>}
-        </Stat>
+        {highlightSlots(view.highlights).map((slot) => {
+          const [value, unit] = splitUnit(slot.rows[0].display);
+          return (
+            <Stat key={slot.label} label={slot.label}>
+              {value}
+              {unit && <Small>{unit}</Small>}
+              {slot.note && (
+                <Small className={slot.note.level === "ok" ? undefined : LEVEL_TEXT[slot.note.level]}>
+                  {slot.note.text}
+                </Small>
+              )}
+              {slot.rows.slice(1).map((r) => (
+                <Small key={`${r.group}.${r.key}`}>{r.display}</Small>
+              ))}
+            </Stat>
+          );
+        })}
       </dl>
     </Block>
   );
@@ -68,14 +68,7 @@ export function SummaryBlock({ view }: { view: SiteView }) {
 
 function Say({ view, up }: { view: SiteView; up: number }) {
   const s = view.summary;
-  const serving = fact(view, "forgejo.servingNode");
-  const replication = view.topology?.edges.find((e) => e.kind === "replication");
-  const repl = fact(view, "replication.state");
-  const replText = replication
-    ? replication.live
-      ? `replication ${repl?.display ?? "streaming"}`
-      : (replication.detail ?? "replication stopped")
-    : null;
+  const headline = view.headline;
   const names = allServices(view)
     .filter(failing)
     .map((x) => x.name);
@@ -98,28 +91,14 @@ function Say({ view, up }: { view: SiteView; up: number }) {
     text = (
       <span>
         <Em className={s.down > 0 ? "text-down" : "text-degraded"}>{`${names.length} of ${s.total}`}</Em>{" "}
-        {s.down > 0 ? "down" : "degraded"}: {names.join(", ")}.
-        {serving && (
-          <>
-            {" "}
-            Forgejo still serving from <Em>{serving.display}</Em>
-            {replText ? `; ${replText}.` : "."}
-          </>
-        )}
+        {s.down > 0 ? "down" : "degraded"}: {names.join(", ")}.{headline && ` ${headline}.`}
       </span>
     );
   } else {
     dot = <StateDot state="up" pulse />;
     text = (
       <span>
-        All <Em>{String(s.total)}</Em> monitors up.
-        {serving && (
-          <>
-            {" "}
-            Forgejo serving from <Em>{serving.display}</Em>
-            {replText ? `, ${replText}` : ""}, nothing needs you.
-          </>
-        )}
+        All <Em>{String(s.total)}</Em> monitors up.{headline && ` ${headline}, nothing needs you.`}
       </span>
     );
   }

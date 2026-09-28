@@ -22,7 +22,8 @@ import {
   sourceAgeS,
   sourceFreshness,
 } from "../model";
-import { buildFactViews, latestFacts } from "./facts";
+import { activeProfiles } from "../profiles";
+import { buildFactViews, latestFacts, profileContext } from "./facts";
 import { clock, formatDuration, formatPercent, iso, mean, round, toMs } from "./format";
 import type { DayCell, ViewInput } from "./input";
 import { worstState } from "./state";
@@ -145,7 +146,9 @@ export function buildSiteView(input: ViewInput): SiteView {
   const maintenance = count("maintenance");
 
   const currentFacts = latestFacts(model.facts);
-  const facts = buildFactViews(currentFacts.values(), { nowMs, thresholds: config.thresholds });
+  const profiles = activeProfiles(config);
+  const factCtx = { nowMs, thresholds: config.thresholds, config, profiles, sourceStale };
+  const facts = buildFactViews(currentFacts.values(), factCtx);
 
   const nameOf = (id: string) => services.get(id)?.name ?? id;
   const subjectOf = (i: Incident) => (i.serviceId ? nameOf(i.serviceId) : (i.sourceId ?? i.id));
@@ -212,15 +215,14 @@ export function buildSiteView(input: ViewInput): SiteView {
     unsectioned: all.filter((v) => !placed.has(v.id)),
     topology: buildTopology({
       topology: config.topology,
-      facts: currentFacts,
-      nowMs,
-      sourceStale,
+      profiles,
+      ctx: profileContext(currentFacts, factCtx),
       services: all,
     }),
     factGroups: facts.groups,
     factIndex: facts.index,
-    highlights: [],
-    headline: null,
+    highlights: facts.highlights,
+    headline: facts.headline,
     activity: buildActivity({
       beats: model.recentHeartbeats,
       incidents: uniqueIncidents([...openIncidents, ...recentIncidents]),

@@ -59,3 +59,7 @@ export function humanize(id: string): string {
 
 /** `99.86%` from a ratio. */
 export const formatPercent = (ratio: number) => `${(ratio * 100).toFixed(2)}%`;
+
+/** True while a fact is inside its `freshForS` window at `nowMs`. */
+export const factFresh = (f: { observedAt: string; freshForS: number }, nowMs: number) =>
+  nowMs - toMs(f.observedAt) <= f.freshForS * 1000;

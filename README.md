@@ -82,7 +82,7 @@ Before every push:
 bun run verify   # Biome, typecheck, unit + integration + SSR tests, collector tests
 ```
 
-More in [docs/](docs): [THEMES.md](docs/THEMES.md) (themes and the view model), [SECURITY.md](docs/SECURITY.md) (threat model, gates, rate limits) and [OPERATIONS.md](docs/OPERATIONS.md) (secrets, rotation, restoring a revision).
+More in [docs/](docs): [THEMES.md](docs/THEMES.md) (themes and the view model), [profiles.md](docs/profiles.md) (what facts mean: built-in profiles and writing one), [SECURITY.md](docs/SECURITY.md) (threat model, gates, rate limits) and [OPERATIONS.md](docs/OPERATIONS.md) (secrets, rotation, restoring a revision).
 
 ## Branches and releases
 

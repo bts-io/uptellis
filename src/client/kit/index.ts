@@ -10,7 +10,7 @@ export { FactList } from "./fact-list";
 export { Footer } from "./footer";
 export { FreshnessChip } from "./freshness-chip";
 export { Gauge } from "./gauge";
-export { Icon } from "./icon";
+export { Icon, isIconName } from "./icon";
 export { IncidentRail } from "./incident-rail";
 export { KeyValueGrid } from "./key-value-grid";
 export { Panel } from "./panel";

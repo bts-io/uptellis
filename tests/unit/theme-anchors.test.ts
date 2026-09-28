@@ -16,17 +16,32 @@ describe("service anchors", () => {
   });
 });
 
-// Kuma reports the latest release, which can be older than a pre-release in use: no theme offers a downgrade.
+// Kuma reports the latest release, which can be older than a pre-release in use: the uptime-kuma profile's
+// highlight note offers an update only for a newer release, and every theme shows that note as its badge.
 describe("Kuma update badge", () => {
-  const base = buildSiteView(fixtureInput("default"));
   const withLatest = (latest: string) => {
-    const row = { ...base.factIndex["kuma.latestVersion"]!, display: latest };
-    return { ...base, factIndex: { ...base.factIndex, "kuma.latestVersion": row } };
+    const input = fixtureInput("default");
+    input.model.facts = input.model.facts.map((f) =>
+      f.group === "kuma" && f.key === "latestVersion"
+        ? { ...f, value: { type: "string", value: latest }, severity: "info" }
+        : f,
+    );
+    return buildSiteView(input);
   };
-  it.each(Object.keys(THEMES))("%s shows 'available' only for a newer release", (id) => {
+
+  it("comes from the kuma version highlight's note, never offering an older release", () => {
+    const note = (latest: string) => withLatest(latest).highlights.find((h) => h.row.key === "version")?.note;
+    expect(note("2.6.0")).toEqual({ text: "2.6.0 available", level: "warn" });
+    expect(note("2.4.0")).toEqual({ text: "latest", level: "ok" });
+    expect(note("2.5.5")).toEqual({ text: "latest", level: "ok" });
+  });
+
+  it.each(Object.keys(THEMES))("%s shows the note: 'available' only for a newer release", (id) => {
     const Page = THEMES[id as keyof typeof THEMES]!.module.Page;
-    const html = (v: typeof base) => renderToStaticMarkup(createElement(Page, { view: v, commit: null }));
-    expect(html(withLatest("2.4.0"))).not.toMatch(/2\.4\.0 available/i);
-    expect(html(withLatest("2.6.0"))).toMatch(/2\.6\.0 available/i);
+    const html = (latest: string) =>
+      renderToStaticMarkup(createElement(Page, { view: withLatest(latest), commit: null }));
+    expect(html("2.4.0")).not.toMatch(/2\.4\.0 available/i);
+    expect(html("2.4.0")).toMatch(/latest/i);
+    expect(html("2.6.0")).toMatch(/2\.6\.0 available/i);
   });
 });

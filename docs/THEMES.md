@@ -27,7 +27,7 @@ Renaming or removing anything in these files breaks every theme, so it needs a m
 
 ### Facts, highlights and topology
 
-Themes never name a fact group or key: what the site's facts mean comes from its active profiles (see [profiles.md](profiles.md)). A theme reads three generic things:
+Themes never name a fact group or key: what the site's facts mean comes from its active profiles (see [profiles.md](profiles.md)). A theme reads these generic parts of the view:
 
 - `factGroups`: every group with its `title`, `icon` (a kit icon name, or null), `summary` (one line for a compact row, or null), `level` and rows (label, display, level, percent), in the profiles' order.
 - `highlights`: `{ label, row, note }` entries (`note` is an optional badge such as "latest" with a level) the active profiles ask a theme to place in its summary (for example the collector's version and host). Empty when no active profile declares any; a theme shows its summary without them.

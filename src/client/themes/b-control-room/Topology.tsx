@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { EmptyState, Icon, StateDot } from "@/client/kit";
 import type { DisplayState, ServiceView, SiteView, TopologyView } from "@/shared/view";
-import { allServices, cx, DASH, fact, factText, hhmm, probeStale, targetHost } from "./format";
+import { allServices, cx, DASH, hhmm, probeStale, targetHost } from "./format";
 import { Chip, Micro, Tile, TileHead } from "./ui";
 
 type Node = TopologyView["nodes"][number];
@@ -24,7 +24,9 @@ export function Topology({ view }: { view: SiteView }) {
         <div className="flex min-w-0 items-center gap-2.5">
           <Micro>Topology</Micro>
           <span className="hidden text-faint sm:inline">/</span>
-          <span className="hidden truncate text-[13px] text-muted sm:inline">Forgejo failover pair</span>
+          <span className="hidden truncate text-[13px] text-muted sm:inline">
+            {edge ? "Failover pair" : "Machines"}
+          </span>
         </div>
         {edge && (live ? <Chip level="ok">streaming</Chip> : <Chip level="crit">replication stopped</Chip>)}
       </TileHead>
@@ -40,7 +42,7 @@ export function Topology({ view }: { view: SiteView }) {
         )}
       </div>
 
-      <FactsRow view={view} edge={edge} />
+      <FactsRow topo={topo} edge={edge} />
     </Tile>
   );
 }
@@ -62,9 +64,9 @@ function Pair({
   if (!primary || !standby) return null;
   const watchdog = topo.nodes.find((n) => n.roles.includes("watchdog"));
   const endpoint = allServices(view).find((s) => s.kind === "http" || s.kind === "keyword");
-  const healthz = factText(view, "forgejo.healthzCode").replace(/^HTTP /, "");
-  const reach = fact(view, "watchdog.reachable");
+  const lastCheck = endpoint?.recent[0]?.message ?? DASH;
   const fence = topo.fence;
+  const probe = view.freshness.perSource.find((s) => s.kind === "facts");
 
   return (
     <>
@@ -74,7 +76,7 @@ function Pair({
             <Icon name="link" size={16} className="flex-none text-accent" />
             <div className="min-w-0 font-mono">
               <div className="truncate text-[12.5px]">{targetHost(endpoint)}</div>
-              <div className="truncate text-[10.5px] text-muted">healthz {healthz}</div>
+              <div className="truncate text-[10.5px] text-muted">{lastCheck}</div>
             </div>
           </div>
         ) : (
@@ -86,7 +88,7 @@ function Pair({
             <Icon name="eye" size={16} className="flex-none" />
             <div className="min-w-0 font-mono">
               <div className="truncate text-[11.5px]">watchdog {watchdog.label}</div>
-              <div className="truncate text-[10.5px]">{reach?.display ?? DASH}</div>
+              <div className="truncate text-[10.5px]">{watchdog.details[0]?.value ?? DASH}</div>
             </div>
           </div>
         )}
@@ -108,9 +110,9 @@ function Pair({
       </div>
 
       <div className="grid grid-cols-1 items-stretch md:grid-cols-[minmax(0,1fr)_104px_minmax(0,1fr)] md:items-center">
-        <NodeCard view={view} node={primary} edge={edge} stale={stale} />
+        <NodeCard view={view} node={primary} stale={stale} />
         <Link edge={edge} stale={stale} />
-        <NodeCard view={view} node={standby} edge={edge} stale={stale} />
+        <NodeCard view={view} node={standby} stale={stale} />
       </div>
 
       {fence && (
@@ -124,9 +126,7 @@ function Pair({
             <span>Fence</span>
             <b className="font-bold tracking-[.12em]">{fence.decision}</b>
             <span className="truncate opacity-75">
-              {[fence.reason, fact(view, "fence.decision") && hhmm(fact(view, "fence.decision")!.observedAt)]
-                .filter(Boolean)
-                .join(" · ")}
+              {[fence.reason, probe?.lastSeenAt && hhmm(probe.lastSeenAt)].filter(Boolean).join(" · ")}
             </span>
           </div>
         </div>
@@ -158,38 +158,42 @@ function LegendItem({ children }: { children: ReactNode }) {
   return <span className="flex items-center gap-1.5">{children}</span>;
 }
 
-/** A port monitor aimed at this node (`app-2:5432`). */
+/** A port monitor aimed at this node (`app-2:22`). */
 const portCheck = (view: SiteView, node: Node, port: number): ServiceView | undefined =>
   allServices(view).find((s) => s.kind === "port" && s.targetDisplay === `${node.label}:${port}`);
 
+/** A percentage value (`16%`) of a node detail, for its bar. */
+const percentOf = (value: string) => {
+  const m = /^(\d+(?:\.\d+)?)%$/.exec(value);
+  return m ? Number(m[1]) : null;
+};
+
+const BAR: Partial<Record<DisplayState, string>> = { down: "bg-down", degraded: "bg-degraded" };
+
 /**
- * One node of the pair: forgejo serving or parked (facts), postgres and ssh from the node's own port monitors,
- * then the disk on the node that runs the facts probe, or the WAL receive state on its peer.
+ * One node of the pair: the rows its profiles give it (e.g. forgejo serving, postgres primary), ssh from the
+ * node's own port monitor, then percentages (e.g. the disk) with a bar.
  */
-function NodeCard({ view, node, edge, stale }: { view: SiteView; node: Node; edge: Edge; stale: boolean }) {
+function NodeCard({ view, node, stale }: { view: SiteView; node: Node; stale: boolean }) {
   const serving = node.note === "serving";
   const primary = node.roles.includes("primary");
+  const down = node.state === "down";
   const shown = (state: DisplayState): DisplayState => (stale ? "stale" : state);
-  const pg = portCheck(view, node, 5432);
   const ssh = portCheck(view, node, 22);
-  const pgState = pg?.state ?? shown(node.state);
-  const pgDown = pgState === "down" || (!pg && node.state === "down");
-  const reporter = factText(view, "forgejo.node");
-  const disk = fact(view, "disk.percent");
-  const diskUsed = factText(view, "disk.display").split(" (")[0]!.replaceAll(" ", "");
-  const lag = factText(view, "replication.lagSeconds");
+  const rows = node.details.filter((d) => percentOf(d.value) === null);
+  const gauges = node.details.filter((d) => percentOf(d.value) !== null);
 
   return (
     <div
       data-node={node.id}
       className={cx(
         "flex min-w-0 flex-col gap-[9px] rounded-xl px-3 py-3 font-mono shadow-[0_10px_30px_-12px_var(--b-shadow)]",
-        serving && !pgDown
+        serving && !down
           ? cx(
               "border-gradient-brand [--kit-fill:var(--b-node)]",
               !stale && "shadow-[0_12px_40px_-14px_var(--b-serving-glow)]",
             )
-          : cx("border bg-(--b-node)", pgDown ? "border-down/50" : "border-hair"),
+          : cx("border bg-(--b-node)", down ? "border-down/50" : "border-hair"),
       )}
     >
       <div className="flex items-center justify-between gap-2">
@@ -199,42 +203,24 @@ function NodeCard({ view, node, edge, stale }: { view: SiteView; node: Node; edg
         </Chip>
       </div>
       <div className="-mt-1 truncate text-[11px] text-muted">{node.location ?? DASH}</div>
-      <Row label="forgejo">
-        <StateDot state={serving ? shown(node.state) : "paused"} />
-        {serving ? (node.state === "down" ? "down" : "serving") : "parked"}
-      </Row>
-      <Row label="postgres">
-        <StateDot state={pgState} />
-        {pgDown ? <span className="text-down">down</span> : primary ? "primary" : "replica"}
-      </Row>
+      {rows.map((d) => (
+        <Row key={d.label} label={d.label}>
+          {d.state && <StateDot state={d.state === "paused" ? "paused" : shown(d.state)} />}
+          {d.state === "down" ? <span className="text-down">{d.value}</span> : d.value}
+        </Row>
+      ))}
       {ssh && (
         <Row label="ssh">
           <StateDot state={ssh.state} />
           {ssh.latencyMs === null ? <span className="text-down">timeout</span> : `${ssh.latencyMs} ms`}
         </Row>
       )}
-      {node.id === reporter && disk?.percent != null ? (
-        <>
-          <Row label="disk">
-            {disk.percent}% <span className="font-normal text-muted">{diskUsed}</span>
-          </Row>
-          <Bar
-            percent={disk.percent}
-            className={disk.level === "crit" ? "bg-down" : disk.level === "warn" ? "bg-degraded" : "bg-up"}
-          />
-        </>
-      ) : (
-        <>
-          <Row label="wal recv">
-            {edge.live ? (
-              <span className="text-up">{lag === DASH ? "streaming" : `${lag} behind`}</span>
-            ) : (
-              <span className="text-down">no stream</span>
-            )}
-          </Row>
-          <Bar percent={edge.live ? 100 : 0} className="bg-up/35" />
-        </>
-      )}
+      {gauges.map((d) => (
+        <div key={d.label} className="flex flex-col gap-[9px]">
+          <Row label={d.label}>{d.value}</Row>
+          <Bar percent={percentOf(d.value)!} className={(d.state && BAR[d.state]) ?? "bg-up"} />
+        </div>
+      ))}
     </div>
   );
 }
@@ -318,39 +304,25 @@ function Link({ edge, stale }: { edge: Edge; stale: boolean }) {
   );
 }
 
-/** Serving node, Forgejo version, fence timelines and replication, one cell each (two by two on phones). */
-function FactsRow({ view, edge }: { view: SiteView; edge: Edge | undefined }) {
-  const version = fact(view, "forgejo.version");
-  const replication = fact(view, "replication.state");
-  const lag = factText(view, "replication.lagSeconds");
-  const streaming = edge?.live ?? replication?.display === "streaming";
+/** The serving node, the fence decision and the replication link, one cell each (two by two on phones). */
+function FactsRow({ topo, edge }: { topo: TopologyView | null; edge: Edge | undefined }) {
+  if (!topo) return null;
   const cells: { k: string; v: ReactNode }[] = [
-    { k: "Serving", v: factText(view, "forgejo.servingNode") },
-    { k: "Forgejo", v: version ? `v${version.display}` : DASH },
-    { k: "Timeline", v: `${factText(view, "fence.timeline")} / ${factText(view, "fence.peerTimeline")}` },
+    { k: "Serving", v: topo.nodes.find((n) => n.note === "serving")?.label ?? DASH },
+    { k: "Fence", v: topo.fence?.decision ?? DASH },
     {
       k: "Replication",
-      v: streaming ? (
-        lag === DASH ? (
-          "streaming"
-        ) : (
-          `${lag} lag`
-        )
-      ) : (
-        <span className={replication ? "text-down" : undefined}>
-          {replication ? (edge && !edge.live ? "stopped" : replication.display) : DASH}
-        </span>
-      ),
+      v: !edge ? DASH : edge.live ? (edge.detail ?? "streaming") : <span className="text-down">stopped</span>,
     },
   ];
   return (
-    <div className="grid grid-cols-2 border-t border-(--b-hair2) md:grid-cols-4">
+    <div className="grid grid-cols-2 border-t border-(--b-hair2) md:grid-cols-3">
       {cells.map((c, i) => (
         <div
           key={c.k}
           className={cx(
             "flex min-w-0 flex-col gap-[5px] border-(--b-hair2) px-3.5 py-[11px]",
-            i < 3 && "md:border-r",
+            i < cells.length - 1 && "md:border-r",
             i % 2 === 0 && "max-md:border-r",
             i < 2 && "max-md:border-b",
           )}

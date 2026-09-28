@@ -1,8 +1,7 @@
 import { useRef } from "react";
 import { useMatrixRain, useReducedMotion } from "@/client/effects";
 import { Banner, FreshnessChip, Verdict } from "@/client/kit";
-import type { SiteView } from "@/shared/view";
-import { DASH, fact, factText } from "./format";
+import { type SiteView, sourceName } from "@/shared/view";
 import { Wrap } from "./Wrap";
 
 /** Banner, title and subtitle on the left; verdict and freshness on the right; katakana rain behind. */
@@ -10,11 +9,10 @@ export function Header({ view }: { view: SiteView }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const reduced = useReducedMotion();
   useMatrixRain(canvas, { fps: 12, enabled: !reduced });
-  const kuma = fact(view, "kuma.version") ? `kuma ${factText(view, "kuma.version")}` : null;
-  const host = factText(view, "kuma.host");
+  const collector = sourceName(view, "kuma");
   const subtitle = [
     (view.branding.tagline ?? view.site.name).toLowerCase(),
-    kuma && (host === DASH ? kuma : `${kuma} on ${host}`),
+    collector && `collector ${collector}`,
   ].filter(Boolean);
 
   return (

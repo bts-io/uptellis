@@ -84,17 +84,24 @@ describe("theme C page", () => {
     expect(html).toContain("1 of 8");
     expect(html).toContain("Inspect: Replica Postgres");
     expect(html).toContain("monitors --inspect replica-postgres");
-    expect(html).toContain("pg unreachable");
+    expect(html).toMatch(/text-down">postgres down</);
     expect(html).toContain('data-live="false"');
     expect(html.match(/data-fail="true"/g)?.length).toBeGreaterThanOrEqual(4);
     expect(html).not.toContain("No open incidents");
   });
 
-  it("renders a dash for missing facts and survives a site without topology or services", () => {
-    const v: SiteView = { ...view("default"), factGroups: [], factIndex: {}, topology: null };
+  it("survives a site without facts, topology or services", () => {
+    const v: SiteView = {
+      ...view("default"),
+      factGroups: [],
+      factIndex: {},
+      highlights: [],
+      headline: null,
+      topology: null,
+    };
     const html = render(v);
-    expect(html).toMatch(/kuma db<\/dt><dd[^>]*>-</);
-    expect(html).toMatch(/kuma<\/dt><dd[^>]*>-</);
+    expect(html).not.toContain(">kuma</dt>");
+    expect(html).toContain("All <em");
     expect(html).toContain("No infrastructure facts yet");
     const empty: SiteView = { ...v, sections: [], unsectioned: [], activity: [] };
     const bare = render(empty);

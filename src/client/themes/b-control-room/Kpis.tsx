@@ -1,20 +1,19 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { BeatBar, Sparkline, StateDot } from "@/client/kit";
-import type { Level, ServiceView, SiteView } from "@/shared/view";
-import { isNewer } from "@/shared/view";
+import { highlightSlots, type Level, type ServiceView, type SiteView } from "@/shared/view";
 import {
   allServices,
   beatsText,
   combinedBeats,
   cx,
   DASH,
-  fact,
-  factText,
   hhmm,
+  isFigure,
   kumaStale,
   monthDay,
   pct,
   quality,
+  splitUnit,
 } from "./format";
 import { Chip, Micro } from "./ui";
 
@@ -37,9 +36,11 @@ export function Kpis({ view }: { view: SiteView }) {
   const days = combinedBeats(services);
   const known = days.filter((d) => d.uptime !== null);
   const mean90 = known.length ? known.reduce((a, d) => a + d.uptime!, 0) / known.length : null;
-  const version = factText(view, "kuma.version");
-  const latest = fact(view, "kuma.latestVersion");
-  const [dbValue, dbUnit] = factText(view, "kuma.dbSize").split(" ");
+  const slots = highlightSlots(view.highlights);
+  // Four fixed cells, one per highlight slot, then the wide 90-day cell.
+  const columns = {
+    "--b-kpi-cols": `repeat(${4 + slots.length},minmax(0,1fr)) minmax(0,2.3fr)`,
+  } as CSSProperties;
   const trend = meanSpark(services);
   const asOf = stale && (
     <span className="ml-1.5 text-[10.5px] text-degraded">as of {hhmm(view.generatedAt)}</span>
@@ -48,8 +49,9 @@ export function Kpis({ view }: { view: SiteView }) {
   return (
     <section
       aria-label="Summary"
+      style={columns}
       className={cx(
-        "relative flex snap-x snap-mandatory gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none] min-[1100px]:grid min-[1100px]:grid-cols-[repeat(6,minmax(0,1fr))_minmax(0,2.3fr)] min-[1100px]:gap-0 min-[1100px]:overflow-hidden min-[1100px]:rounded-[14px] min-[1100px]:border min-[1100px]:border-hair min-[1100px]:pb-0 min-[1100px]:shadow-[inset_0_1px_0_var(--b-hair2),0_1px_2px_var(--b-shadow)]",
+        "relative flex snap-x snap-mandatory gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none] min-[1100px]:grid min-[1100px]:grid-cols-(--b-kpi-cols) min-[1100px]:gap-0 min-[1100px]:overflow-hidden min-[1100px]:rounded-[14px] min-[1100px]:border min-[1100px]:border-hair min-[1100px]:pb-0 min-[1100px]:shadow-[inset_0_1px_0_var(--b-hair2),0_1px_2px_var(--b-shadow)]",
         stale
           ? "min-[1100px]:bg-panel min-[1100px]:after:pointer-events-none min-[1100px]:after:absolute min-[1100px]:after:inset-0 min-[1100px]:after:bg-[repeating-linear-gradient(135deg,var(--b-hatch)_0_6px,transparent_6px_14px)]"
           : "min-[1100px]:bg-[linear-gradient(180deg,var(--b-tile-top),var(--b-tile-bottom))] min-[1100px]:backdrop-blur-md",
@@ -105,22 +107,34 @@ export function Kpis({ view }: { view: SiteView }) {
         <Sub>24h {s.uptime24h === null ? DASH : `${(s.uptime24h * 100).toFixed(2)}%`}</Sub>
       </Cell>
 
-      <Cell label="Kuma DB">
-        <Value unit={dbUnit}>{dbValue}</Value>
-        <Sub>{factText(view, "kuma.host")}</Sub>
-      </Cell>
-
-      <Cell label="Uptime Kuma">
-        <Value>{version}</Value>
-        <Sub>
-          {latest &&
-            (!isNewer(latest.display, version) ? (
-              <Chip level="ok">latest</Chip>
+      {slots.map((slot) => {
+        const [value, unit] = splitUnit(slot.rows[0].display);
+        return (
+          <Cell key={slot.label} label={slot.label}>
+            {isFigure(slot.rows[0].display) ? (
+              <Value unit={unit ?? undefined}>{value}</Value>
             ) : (
-              <Chip level="maint">{latest.display} available</Chip>
-            ))}
-        </Sub>
-      </Cell>
+              <div className="truncate font-mono text-[17px] leading-[1.55] font-medium">
+                {slot.rows[0].display}
+              </div>
+            )}
+            <Sub>
+              {/* An update or other notice reads in the maintenance colour, not as a warning. */}
+              {slot.note && (
+                <Chip level={slot.note.level === "warn" ? "maint" : slot.note.level}>{slot.note.text}</Chip>
+              )}
+              {(slot.rows.length > 1 || !slot.note) && (
+                <span className="truncate">
+                  {slot.rows
+                    .slice(1)
+                    .map((r) => r.display)
+                    .join(" · ") || DASH}
+                </span>
+              )}
+            </Sub>
+          </Cell>
+        );
+      })}
 
       <Cell label={null} wide>
         <div className="flex items-center justify-between gap-2">
