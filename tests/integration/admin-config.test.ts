@@ -5,9 +5,10 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { exportSiteConfig, type SiteConfig } from "@/shared/config";
 import { ConfigErrorResponse, ConfigState, ImportResult, RevisionList } from "@/shared/schemas/admin";
-import { createDb, schema } from "@/worker/db";
+import { schema } from "@/worker/db";
 import { configKey, resetConfigCache } from "@/worker/engine/config-store";
 import demo from "../../sites/demo.json";
+import { testPlatform } from "../support/platform";
 import { admin, adminCookie, adminEnv, handle, json, ORIGIN } from "./admin-app";
 
 const FILE = exportSiteConfig(demo as never);
@@ -42,7 +43,7 @@ describe("admin config API", () => {
     const state = await getState();
     expect(state).toMatchObject({ version: 1, savedBy: "seed" });
     expect(exportSiteConfig(state.config)).toBe(FILE);
-    const rows = await createDb(adminEnv.DB).select().from(schema.siteConfigs);
+    const rows = await testPlatform().db.select().from(schema.siteConfigs);
     expect(rows.map((r) => [r.site, r.version, r.savedBy])).toEqual([["demo", 1, "seed"]]);
   });
 

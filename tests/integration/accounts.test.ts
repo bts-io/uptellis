@@ -17,11 +17,12 @@ import {
   UserList,
   UserSummary,
 } from "@/shared/schemas/auth";
-import { createDb, schema } from "@/worker/db";
+import { schema } from "@/worker/db";
 import { resetConfigCache } from "@/worker/engine/config-store";
-import { admin, adminEnv, handle, json, OWNER, send, sessionCookie, signIn, testEmail } from "./admin-app";
+import { testPlatform } from "../support/platform";
+import { admin, handle, json, OWNER, send, sessionCookie, signIn, testEmail } from "./admin-app";
 
-const db = createDb(adminEnv.DB);
+const { db } = testPlatform();
 
 const me = async (cookie?: string) =>
   Me.parse(await json(await handle("/api/me", cookie ? { headers: { cookie } } : {})));

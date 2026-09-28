@@ -5,17 +5,19 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import type { SiteView } from "@/shared/view";
 import { BUCKET_MS, downsample } from "@/worker/cron";
-import { createDb, schema } from "@/worker/db";
+import { schema } from "@/worker/db";
 import { ROLLUP_BUCKET_MS } from "@/worker/db/history";
 import { D1Store } from "@/worker/engine/d1-store";
 import { resetSiteSourceSync } from "@/worker/engine/sites";
 import { loadFixture } from "../fixtures";
 import { factsPayloadFrom, kumaSnapshotFrom } from "../support/fixture-payloads";
-import { json, pipeline, workerEnv } from "../support/worker-pipeline";
+import { testPlatform } from "../support/platform";
+import { json, pipeline } from "../support/worker-pipeline";
 
 const NOW = new Date("2026-09-27T23:58:00Z");
 const { signed, send, get } = pipeline(NOW);
-const db = createDb(workerEnv.DB);
+const platform = testPlatform();
+const db = platform.db;
 const DAY = 86_400_000;
 const at = (iso: string) => Date.parse(iso);
 
@@ -137,7 +139,7 @@ describe("GET /api/sites/:site/view", () => {
     expect(
       (await send(await signed("kuma", "collector-1", kumaSnapshotFrom(loadFixture("incident"))))).status,
     ).toBe(202);
-    const store = new D1Store(db);
+    const store = new D1Store(platform);
     const before = await store.loadHistory("demo", NOW.toISOString());
     await downsample(db, NOW.getTime());
     const after = await store.loadHistory("demo", NOW.toISOString());

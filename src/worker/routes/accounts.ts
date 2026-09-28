@@ -21,7 +21,8 @@ import {
   type SetupStatus,
   type UserList,
 } from "@/shared/schemas/auth";
-import { type AuthEnv, authError, principalOf, requirePermission } from "../auth/context";
+import type { AppEnv } from "../app-env";
+import { authError, principalOf, requirePermission } from "../auth/context";
 import { authProviders, userCount } from "../auth/instance";
 import {
   claimInvite,
@@ -36,7 +37,7 @@ import { changeRole, getUser, listUsers, removeUser, setRole, userByEmail, userS
 import { toIso } from "../db/util";
 import { isSameOrigin } from "../middleware/same-origin";
 
-type Ctx = Context<AuthEnv>;
+type Ctx = Context<AppEnv>;
 
 const MAX_BODY_BYTES = 16 * 1024;
 
@@ -105,7 +106,7 @@ async function signedIn(c: Ctx, userId: string, headers: Headers) {
 const crossSite = (c: Ctx) => authError(c, 403, "forbidden", "Cross-site request");
 
 export function accountRoutes() {
-  const app = new Hono<AuthEnv>();
+  const app = new Hono<AppEnv>();
 
   // Mounted at `/api`: a `*` middleware here would also run for every other `/api` route.
   for (const path of ["/me", "/setup", "/invites/*"]) {
@@ -189,7 +190,7 @@ const actorId = (c: Ctx) => {
 
 /** Users and invites under `/api/admin` (`users.manage`). */
 export function userRoutes() {
-  const app = new Hono<AuthEnv>();
+  const app = new Hono<AppEnv>();
   for (const path of ["/users", "/users/*", "/invites", "/invites/*"])
     app.use(path, requirePermission("users.manage"));
 

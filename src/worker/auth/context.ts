@@ -8,6 +8,7 @@ import type { Context, MiddlewareHandler } from "hono";
 import { createMiddleware } from "hono/factory";
 import { can, type Permission, type Principal } from "@/shared/auth";
 import type { AuthErrorResponse } from "@/shared/schemas/auth";
+import type { AppEnv } from "../app-env";
 import { type Auth, type AuthPlatform, baseUrl, createAuth } from "./instance";
 import { ANONYMOUS, resolvePrincipal } from "./principal";
 
@@ -18,9 +19,6 @@ export interface Accounts {
   /** Better Auth for this request, built on first use; null without `BETTER_AUTH_SECRET`. */
   auth(): Auth | null;
 }
-
-export type AuthVariables = { principal: Principal; accounts: Accounts };
-export type AuthEnv = { Bindings: Env; Variables: AuthVariables };
 
 export function accountsFor(platform: AuthPlatform, requestUrl: string): Accounts {
   let auth: Auth | null | undefined;
@@ -34,15 +32,13 @@ export function accountsFor(platform: AuthPlatform, requestUrl: string): Account
   };
 }
 
-/** Sets `accounts` and `principal` for every request below it. */
-export function withPrincipal(platformOf: (c: Context<AuthEnv>) => AuthPlatform): MiddlewareHandler<AuthEnv> {
-  return createMiddleware<AuthEnv>(async (c, next) => {
-    const accounts = accountsFor(platformOf(c), c.req.url);
-    c.set("accounts", accounts);
-    c.set("principal", await resolvePrincipal(accounts.platform, accounts.auth, c.req.raw));
-    await next();
-  });
-}
+/** Sets `accounts` and `principal` (over `c.var.platform`) for every request below it. */
+export const withPrincipal: MiddlewareHandler<AppEnv> = createMiddleware<AppEnv>(async (c, next) => {
+  const accounts = accountsFor(c.var.platform, c.req.url);
+  c.set("accounts", accounts);
+  c.set("principal", await resolvePrincipal(accounts.platform, accounts.auth, c.req.raw));
+  await next();
+});
 
 /** The request's principal (anonymous when the middleware did not run). */
 export const principalOf = (c: Context): Principal =>
@@ -60,8 +56,8 @@ export const authError = (
 ) => c.json({ error, message, issues } satisfies AuthErrorResponse, status, { "cache-control": "no-store" });
 
 /** 401 JSON when signed out, 403 when the principal lacks `permission`. */
-export function requirePermission(permission: Permission): MiddlewareHandler<AuthEnv> {
-  return createMiddleware<AuthEnv>(async (c, next) => {
+export function requirePermission(permission: Permission): MiddlewareHandler<AppEnv> {
+  return createMiddleware<AppEnv>(async (c, next) => {
     const principal = principalOf(c);
     if (principal.kind === "anonymous") return authError(c, 401, "unauthorized", "Sign in first");
     if (!can(principal, permission)) return authError(c, 403, "forbidden", "Not allowed");

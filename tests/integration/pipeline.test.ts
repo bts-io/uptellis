@@ -6,10 +6,11 @@
  */
 import { asc, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { createDb, schema } from "@/worker/db";
+import { schema } from "@/worker/db";
 import { resetSiteSourceSync } from "@/worker/engine/sites";
 import { loadFixture } from "../fixtures";
 import { factsPayloadFrom, kumaSnapshotFrom } from "../support/fixture-payloads";
+import { testPlatform } from "../support/platform";
 import { json, pipeline, workerEnv } from "../support/worker-pipeline";
 
 const NOW = new Date("2026-09-27T23:58:00Z");
@@ -91,7 +92,7 @@ describe("ingest -> D1Store + KvModelCache -> read routes", () => {
     ]);
 
     // Store-side effects the ingest service owns: config intervals synced, every accepted payload kept raw.
-    const db = createDb(workerEnv.DB);
+    const { db } = testPlatform();
     const rows = await db.select().from(schema.sources).where(eq(schema.sources.site, "demo"));
     expect(Object.fromEntries(rows.map((r) => [r.id, r.expectedIntervalS]))).toEqual({
       "kuma:watch-1": 60,

@@ -1,14 +1,15 @@
-import { env } from "cloudflare:test";
 import { and, asc, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CRON_DAILY, CRON_EVERY_5_MIN, runCron } from "@/worker/cron";
-import { createDb, schema } from "@/worker/db";
+import { runJob } from "@/worker/cron";
+import { schema } from "@/worker/db";
 import { D1Store } from "@/worker/engine/d1-store";
 import { KvModelCache } from "@/worker/engine/kv-cache";
+import { testPlatform } from "../support/platform";
 import { beat, delta, service } from "./storage-helpers";
 
-const db = createDb(env.DB);
-const store = new D1Store(env.DB);
+const platform = testPlatform();
+const db = platform.db;
+const store = new D1Store(platform);
 const at = (iso: string) => Date.parse(iso);
 const buckets = (site: string) =>
   db
@@ -35,9 +36,9 @@ describe("cron: five-minute job", () => {
         ],
       }),
     );
-    const event = { cron: CRON_EVERY_5_MIN, scheduledTime: at(t("00:12:00")) };
-    const r = await runCron(env, event);
-    expect(r.job).toBe("five-minute");
+    const scheduledTime = at(t("00:12:00"));
+    const r = await runJob(platform, "fiveMinute", scheduledTime);
+    expect(r.job).toBe("fiveMinute");
     expect(r.downsampled).toEqual({ from: at(t("00:10:00")) - 2 * 3600_000, to: at(t("00:10:00")) });
 
     const expected = [
@@ -68,14 +69,14 @@ describe("cron: five-minute job", () => {
     ];
     expect(await buckets(site)).toEqual(expected);
 
-    await runCron(env, event);
+    await runJob(platform, "fiveMinute", scheduledTime);
     expect(await buckets(site)).toEqual(expected);
 
     // A late beat in an already folded window is picked up on the next run.
     await store.applyDelta(
       delta(site, t("00:13:00"), { heartbeats: [beat(site, "kuma:1", t("00:03:00"), "up", 200)] }),
     );
-    await runCron(env, { cron: CRON_EVERY_5_MIN, scheduledTime: at(t("00:15:00")) });
+    await runJob(platform, "fiveMinute", at(t("00:15:00")));
     const after = await buckets(site);
     expect(after[0]).toMatchObject({ total: 5, up: 2, pingAvg: (100 + 50 + 200) / 3, pingMax: 200 });
     expect(after.map((b) => b.bucket)).toEqual([at(t("00:00:00")), at(t("00:05:00")), at(t("00:10:00"))]);
@@ -84,16 +85,12 @@ describe("cron: five-minute job", () => {
   it("sweeps staleness for every site and refreshes latest:<site>", async () => {
     const site = "t-cronstale";
     await store.applyDelta(delta(site, "2026-09-21T10:00:00Z", { services: [service(site, "1", "up")] }));
-    const r = await runCron(env, { cron: CRON_EVERY_5_MIN, scheduledTime: at("2026-09-21T10:10:00Z") });
+    const r = await runJob(platform, "fiveMinute", at("2026-09-21T10:10:00Z"));
     expect(r.opened?.filter((i) => i.site === site).map((i) => i.id)).toEqual([
       "kuma:watch-1:2026-09-21T10:05:00Z",
     ]);
-    const cached = await new KvModelCache(env.CACHE).get(site);
+    const cached = await new KvModelCache(platform.kv).get(site);
     expect(cached?.openIncidents.map((i) => i.kind)).toEqual(["stale"]);
-  });
-
-  it("ignores an unknown trigger", async () => {
-    expect((await runCron(env, { cron: "0 0 * * *", scheduledTime: 0 })).job).toBe("unknown");
   });
 });
 
@@ -103,7 +100,7 @@ describe("cron: daily prune", () => {
     const now = at("2026-09-27T03:17:00Z");
     const h = 3600_000;
     const d = 24 * h;
-    await db.batch([
+    await platform.batch([
       db.insert(schema.heartbeats).values([
         { site, serviceId: "kuma:1", ts: now - 27 * h, status: "up" },
         { site, serviceId: "kuma:1", ts: now - 25 * h, status: "up" },
@@ -138,6 +135,11 @@ describe("cron: daily prune", () => {
         { nonce: "t-prune-old", expiresAt: now - 1 },
         { nonce: "t-prune-new", expiresAt: now + h },
       ]),
+      db.insert(schema.kv).values([
+        { key: "t-prune-expired", value: "1", expiresAt: now - 1 },
+        { key: "t-prune-live", value: "1", expiresAt: now + h },
+        { key: "t-prune-forever", value: "1", expiresAt: null },
+      ]),
       db.insert(schema.incidents).values(
         [
           { id: "kuma:1:old-closed", startedAt: now - 400 * d, endedAt: now - 399 * d },
@@ -147,7 +149,7 @@ describe("cron: daily prune", () => {
       ),
     ]);
 
-    const r = await runCron(env, { cron: CRON_DAILY, scheduledTime: now });
+    const r = await runJob(platform, "daily", now);
     expect(r.job).toBe("daily");
     expect(r.pruned?.heartbeats).toBeGreaterThanOrEqual(1);
 
@@ -162,6 +164,8 @@ describe("cron: daily prune", () => {
     const nonces = await db.select().from(schema.ingestNonces);
     expect(nonces.map((n) => n.nonce)).toContain("t-prune-new");
     expect(nonces.map((n) => n.nonce)).not.toContain("t-prune-old");
+    const kv = await db.select().from(schema.kv).orderBy(asc(schema.kv.key));
+    expect(kv.map((k) => k.key)).toEqual(["t-prune-forever", "t-prune-live"]);
     const inc = await db
       .select()
       .from(schema.incidents)

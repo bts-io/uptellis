@@ -1,36 +1,40 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { RATE_LIMIT_BINDINGS } from "@/platform/cloudflare/bindings";
+import { RATE_LIMITERS, type RateLimiter, type RateLimiterName } from "@/platform/types";
 import { INGEST_HEADERS } from "@/shared/signing";
 import { notFound } from "@/worker/middleware/auth-gate";
 import {
-  type Limiter,
+  type Limiters,
   limitBeforeGates,
   limitGateRejection,
-  type RateLimitEnv,
   RETRY_AFTER_S,
 } from "@/worker/middleware/rate-limit";
 
-/** A fake binding: allows `limit` requests per key, records every key it was asked about. */
-function fakeLimiter(limit: number): Limiter & { keys: string[] } {
+/** A fake limiter: allows `limit` requests per key, records every key it was asked about. */
+function fakeLimiter(limit: number): RateLimiter & { keys: string[] } {
   const counts = new Map<string, number>();
   const keys: string[] = [];
   return {
     keys,
-    async limit({ key }) {
+    async limit(key) {
       keys.push(key);
       const n = (counts.get(key) ?? 0) + 1;
       counts.set(key, n);
-      return { success: n <= limit };
+      return n <= limit;
     },
   };
 }
 
-const fakes = (limit = 2) => ({
-  INGEST_RATE_LIMIT: fakeLimiter(limit),
-  GATE_RATE_LIMIT: fakeLimiter(limit),
-  ADMIN_WRITE_RATE_LIMIT: fakeLimiter(limit),
-});
+/** A platform with a fake limiter per name. */
+const fakes = (limit = 2) => {
+  const limiters = { ingest: fakeLimiter(limit), gate: fakeLimiter(limit), adminWrite: fakeLimiter(limit) };
+  return { ...limiters, rateLimiter: (name: RateLimiterName) => limiters[name] };
+};
+
+/** A platform without limiters. */
+const none: Limiters = { rateLimiter: () => null };
 
 // Client addresses are opaque strings to the limiter; names keep address literals out of the repo.
 const req = (path: string, init: RequestInit = {}, client = "client-a") =>
@@ -42,20 +46,20 @@ const req = (path: string, init: RequestInit = {}, client = "client-a") =>
 const ingest = (keyId: string, client = "client-a") =>
   req("/api/ingest/kuma", { method: "POST", body: "{}", headers: { [INGEST_HEADERS.keyId]: keyId } }, client);
 
-async function statuses(env: RateLimitEnv, make: () => Request, n: number): Promise<(number | null)[]> {
+async function statuses(env: Limiters, make: () => Request, n: number): Promise<(number | null)[]> {
   const out: (number | null)[] = [];
   for (let i = 0; i < n; i++) out.push((await limitBeforeGates(make(), env))?.status ?? null);
   return out;
 }
 
 describe("rate limits before the gates", () => {
-  it("are a no-op without bindings", async () => {
+  it("are a no-op without limiters", async () => {
     for (const r of [
       ingest("collector-1"),
       req("/api/auth/sign-in/email", { method: "POST" }),
       req("/api/admin/x", { method: "PUT" }),
     ]) {
-      expect(await limitBeforeGates(r, {})).toBeNull();
+      expect(await limitBeforeGates(r, none)).toBeNull();
     }
   });
 
@@ -65,7 +69,7 @@ describe("rate limits before the gates", () => {
     // Another producer, and the same key id from another address, have their own budgets.
     expect(await limitBeforeGates(ingest("facts-1"), env)).toBeNull();
     expect(await limitBeforeGates(ingest("collector-1", "client-b"), env)).toBeNull();
-    expect(env.INGEST_RATE_LIMIT.keys).toEqual([
+    expect(env.ingest.keys).toEqual([
       "collector-1|client-a",
       "collector-1|client-a",
       "collector-1|client-a",
@@ -83,7 +87,7 @@ describe("rate limits before the gates", () => {
     const env = fakes(5);
     await limitBeforeGates(ingest("NOT A KEY"), env);
     await limitBeforeGates(req("/api/ingest/facts", { method: "POST" }), env);
-    expect(env.INGEST_RATE_LIMIT.keys).toEqual(["-|client-a", "-|client-a"]);
+    expect(env.ingest.keys).toEqual(["-|client-a", "-|client-a"]);
   });
 
   it("limit sign-in attempts per client IP, before the credential is checked", async () => {
@@ -120,9 +124,9 @@ describe("rate limits before the gates", () => {
       expect(await limitBeforeGates(req(path), env), path).toBeNull();
     }
     expect(await limitBeforeGates(req("/api/ingest/kuma"), env)).toBeNull();
-    expect(env.GATE_RATE_LIMIT.keys).toEqual([]);
-    expect(env.ADMIN_WRITE_RATE_LIMIT.keys).toEqual([]);
-    expect(env.INGEST_RATE_LIMIT.keys).toEqual([]);
+    expect(env.gate.keys).toEqual([]);
+    expect(env.adminWrite.keys).toEqual([]);
+    expect(env.ingest.keys).toEqual([]);
   });
 });
 
@@ -153,12 +157,12 @@ describe("rate limit on gate rejections", () => {
       refused,
     );
     expect(await limitGateRejection(req("/api/ingest/kuma", { method: "POST" }), env, refused)).toBe(refused);
-    expect(env.GATE_RATE_LIMIT.keys).toEqual([]);
+    expect(env.gate.keys).toEqual([]);
   });
 
-  it("is a no-op without the binding", async () => {
+  it("is a no-op without the limiter", async () => {
     const gated = notFound("/");
-    expect(await limitGateRejection(req("/"), {}, gated)).toBe(gated);
+    expect(await limitGateRejection(req("/"), none, gated)).toBe(gated);
   });
 });
 
@@ -170,7 +174,7 @@ describe("wrangler.jsonc rate limits", () => {
     .join("\n");
   const block = /"ratelimits":\s*(\[[^\]]*\])/.exec(text)?.[1];
 
-  it("binds the three limiters the middleware reads, over the period retry-after names", () => {
+  it("binds one limiter per RATE_LIMITERS entry with its budget, over the period retry-after names", () => {
     expect(block).toBeDefined();
     const limits = JSON.parse(block!) as {
       name: string;
@@ -178,11 +182,11 @@ describe("wrangler.jsonc rate limits", () => {
       simple: { limit: number; period: number };
     }[];
     const byName = Object.fromEntries(limits.map((l) => [l.name, l]));
-    expect(Object.keys(byName).sort()).toEqual([
-      "ADMIN_WRITE_RATE_LIMIT",
-      "GATE_RATE_LIMIT",
-      "INGEST_RATE_LIMIT",
-    ] satisfies (keyof RateLimitEnv)[]);
+    expect(Object.keys(byName).sort()).toEqual(Object.values(RATE_LIMIT_BINDINGS).sort());
+    for (const [name, budget] of Object.entries(RATE_LIMITERS)) {
+      const { simple } = byName[RATE_LIMIT_BINDINGS[name as RateLimiterName]]!;
+      expect({ limit: simple.limit, periodS: simple.period }).toEqual(budget);
+    }
     expect(new Set(limits.map((l) => l.namespace_id)).size).toBe(3);
     for (const l of limits) expect(l.simple.period).toBe(RETRY_AFTER_S);
     // The collector posts once a minute and backs off from 5 s after a failure; ingest must leave room.

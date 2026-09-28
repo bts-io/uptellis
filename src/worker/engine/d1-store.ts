@@ -1,8 +1,9 @@
 import { and, asc, desc, eq, getTableColumns, gte, isNull, or, sql } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
+import type { Platform } from "@/platform/types";
 import { type Incident, type Service, type Source, type SourceKind, sourceKindOf } from "@/shared/model";
 import type { ModelDelta } from "@/shared/schemas";
-import { createDb, type Db, schema } from "@/worker/db";
+import { type Db, schema } from "@/worker/db";
 import { countsFromRow, DAY_MS, foldHistory, HISTORY_DAYS, ROLLUP_BUCKET_MS } from "@/worker/db/history";
 import {
   factToRow,
@@ -64,12 +65,15 @@ const FACT_ROWS = rowsPerInsert(12);
 const SAMPLE_ROWS = rowsPerInsert(5);
 const INCIDENT_ROWS = rowsPerInsert(10);
 
-/** `Store` on D1. Reads run before the write batch; every write of one call lands in a single `db.batch`. */
+/**
+ * `Store` on the platform's SQL database (D1 or SQLite). Reads run before the write batch; every write of
+ * one call lands in a single `platform.batch`.
+ */
 export class D1Store implements Store {
   readonly db: Db;
 
-  constructor(db: Db | D1Database) {
-    this.db = "batch" in db && "select" in db ? (db as Db) : createDb(db as D1Database);
+  constructor(private readonly platform: Pick<Platform, "db" | "batch">) {
+    this.db = platform.db;
   }
 
   async applyDelta(delta: ModelDelta): Promise<ApplyResult> {
@@ -223,7 +227,7 @@ export class D1Store implements Store {
     const incidentStart = rest.length;
     rest.push(...this.incidentStatements(site, transitions, now));
 
-    const results = (await db.batch([head, ...rest])) as unknown[];
+    const results = (await this.platform.batch([head, ...rest])) as unknown[];
     const out = results.slice(1);
     const count = (from: number, to: number) =>
       out.slice(from, to).reduce<number>((n, r) => n + (Array.isArray(r) ? r.length : 0), 0);
@@ -348,7 +352,7 @@ export class D1Store implements Store {
     const stmts = this.incidentStatements(site, transitions, Date.now());
     if (stmts.length === 0) return empty();
     const [first, ...others] = stmts as [Stmt, ...Stmt[]];
-    const results = (await this.db.batch([first, ...others])) as unknown[];
+    const results = (await this.platform.batch([first, ...others])) as unknown[];
     return { ...empty(), ...this.confirmed(transitions, results) };
   }
 
@@ -378,7 +382,7 @@ export class D1Store implements Store {
         }),
     );
     const [first, ...others] = stmts;
-    if (first) await this.db.batch([first, ...others]);
+    if (first) await this.platform.batch([first, ...others]);
   }
 
   /** Keeps a raw accepted payload for 7 days (debugging). */

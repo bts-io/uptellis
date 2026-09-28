@@ -1,13 +1,14 @@
-import { env } from "cloudflare:test";
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Principal } from "@/shared/auth";
 import { findForbiddenLiterals } from "@/shared/model";
+import { type AppEnv, platformContext } from "@/worker/app-env";
 import type { ConfigSource } from "@/worker/engine/sites";
 import { seedConfig, seedConfigs } from "@/worker/engine/sites";
 import type { SiteModel } from "../../src/worker/engine/store";
 import { readRoutes } from "../../src/worker/routes/read";
 import { loadFixture } from "../fixtures";
+import { fetchWith } from "../support/platform";
 import { MemoryModelCache, MemoryStore } from "../support/read-memory-store";
 
 // The read sub-app as src/worker/index.ts mounts it, with the principal the accounts middleware would
@@ -43,7 +44,7 @@ beforeEach(() => {
   cache = new MemoryModelCache();
   principal = { kind: "anonymous" };
   configs = seedConfigs;
-  const app = new Hono<{ Bindings: Env; Variables: { principal: Principal } }>();
+  const app = new Hono<AppEnv>().use(platformContext);
   app.use("*", async (c, next) => {
     c.set("principal", principal);
     await next();
@@ -53,7 +54,7 @@ beforeEach(() => {
     readRoutes(() => ({ store, cache, configs }), { now: () => NOW }),
   );
   app.notFound((c) => c.json({ error: "not_found", message: "Not found" }, 404));
-  handle = async (path, init) => app.fetch(new Request(`https://example.com${path}`, init), env);
+  handle = async (path, init) => fetchWith(app, new Request(`https://example.com${path}`, init));
 });
 
 describe("read API and site visibility", () => {

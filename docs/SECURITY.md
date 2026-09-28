@@ -20,7 +20,7 @@ Out of scope: an attacker with access to your Cloudflare account, your repositor
 
 ## Request path
 
-Every request runs through the same steps in `src/server.ts`. Assets under `/assets/*` and `/fonts/*` are served by Workers Static Assets and never reach the Worker (`run_worker_first` in `wrangler.jsonc`).
+Every request runs through the same steps in `src/worker/serve.ts` (both runtimes). Assets under `/assets/*` and `/fonts/*` are served by Workers Static Assets and never reach the Worker (`run_worker_first` in `wrangler.jsonc`).
 
 ```mermaid
 flowchart TD
