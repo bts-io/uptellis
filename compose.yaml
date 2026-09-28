@@ -1,0 +1,33 @@
+# Uptellis in Docker: one container, its SQLite file in a named volume. Copy docker.env.example to
+# docker.env (gitignored), fill it in, then:  docker compose up -d
+# Secrets can also come from files: set NAME_FILE=/run/secrets/<name> instead of NAME (docs/OPERATIONS.md).
+name: uptellis
+
+services:
+  uptellis:
+    image: ghcr.io/bts-io/uptellis:latest
+    build: .
+    restart: unless-stopped
+    ports:
+      # The host port (UPTELLIS_PORT from the shell or a .env file next to this file, default 3000).
+      - "${UPTELLIS_PORT:-3000}:3000"
+    env_file:
+      - docker.env
+    volumes:
+      - uptellis-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    # SIGTERM lets running requests, jobs and Discord cards finish before the database closes.
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  uptellis-data:

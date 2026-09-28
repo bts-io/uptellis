@@ -1,27 +1,36 @@
-import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { randomNonce, signRequest } from "@/shared/signing";
-import { CRON_EVERY_5_MIN, runCron } from "@/worker/cron";
-import { createDb, schema } from "@/worker/db";
+import { type AppEnv, platformContext } from "@/worker/app-env";
+import { runJob } from "@/worker/cron";
+import { schema } from "@/worker/db";
 import { D1Store } from "@/worker/engine/d1-store";
 import { seedConfigs } from "@/worker/engine/sites";
-import { d1Backend } from "@/worker/index";
+import { appBackend } from "@/worker/index";
 import { ingestRoutes } from "@/worker/ingest/routes";
 import { StaleNotifier } from "@/worker/notify";
 import type { DiscordCard } from "@/worker/notify/card";
+import { fetchWith, testPlatform, workerEnv } from "../support/platform";
 import { adminCookie, adminEnv, handle } from "./admin-app";
 import { beat, delta, service } from "./storage-helpers";
 
 // Never a real webhook: every request to it goes to the mocked fetch below.
 const HOOK = "https://discord.test/api/webhooks/1/test";
-const workerEnv = { ...(env as unknown as Env), DISCORD_WEBHOOK_URL: HOOK } as Env;
-const db = createDb(env.DB);
+const platform = testPlatform();
+const hooked = testPlatform({ DISCORD_WEBHOOK_URL: HOOK });
+const db = platform.db;
 const T = (hms: string) => `2026-09-27T${hms}Z`;
 const at = (hms: string) => Date.parse(T(hms));
 
 afterEach(() => vi.restoreAllMocks());
+
+/** The five-minute job with the webhook set, once its cards were sent. */
+async function sweep(scheduledTime: number) {
+  const r = await runJob(hooked, "fiveMinute", scheduledTime);
+  await hooked.drain();
+  return r;
+}
 
 /** Mocks Discord: records each card posted to HOOK and answers `status`. */
 function discord(status = 200) {
@@ -47,7 +56,7 @@ const rows = (site: string) =>
 describe("stale notifications from the 5-minute sweep", () => {
   it("posts one card when a source goes stale and none on the next sweeps", async () => {
     const site = "t-notify-sweep";
-    const store = new D1Store(env.DB);
+    const store = new D1Store(platform);
     await store.applyDelta(delta(site, T("10:00:00"), { services: [service(site, "1", "up")] }));
     await store.applyDelta({
       site,
@@ -59,7 +68,7 @@ describe("stale notifications from the 5-minute sweep", () => {
     });
     const { cards } = discord();
 
-    const first = await runCron(workerEnv, { cron: CRON_EVERY_5_MIN, scheduledTime: at("10:06:00") });
+    const first = await sweep(at("10:06:00"));
     expect(first.opened?.filter((i) => i.site === site).map((i) => i.sourceId)).toEqual(["kuma:watch-1"]);
     const mine = ofSite(cards, site);
     expect(mine).toHaveLength(1);
@@ -69,8 +78,8 @@ describe("stale notifications from the 5-minute sweep", () => {
     expect(text(mine[0]!)).toContain("**Still reporting:** facts:app-1");
 
     // A retried or later sweep sees the incident already open: no second card.
-    await runCron(workerEnv, { cron: CRON_EVERY_5_MIN, scheduledTime: at("10:06:00") });
-    await runCron(workerEnv, { cron: CRON_EVERY_5_MIN, scheduledTime: at("10:11:00") });
+    await sweep(at("10:06:00"));
+    await sweep(at("10:11:00"));
     expect(ofSite(cards, site)).toHaveLength(1);
     expect(await rows(site)).toEqual([
       expect.objectContaining({ kind: "open", status: "sent", error: null, sentAt: expect.any(Number) }),
@@ -79,7 +88,7 @@ describe("stale notifications from the 5-minute sweep", () => {
 
   it("claims each transition once, even when handed the same incident twice", async () => {
     const site = "t-notify-claim";
-    const store = new D1Store(env.DB);
+    const store = new D1Store(platform);
     await store.applyDelta(delta(site, T("10:00:00"), {}));
     const r = await store.sweepStaleness(site, T("10:06:00"));
     const { cards } = discord();
@@ -96,10 +105,10 @@ describe("stale notifications from the 5-minute sweep", () => {
 
   it("records a failed send without throwing", async () => {
     const site = "t-notify-fail";
-    const store = new D1Store(env.DB);
+    const store = new D1Store(platform);
     await store.applyDelta(delta(site, T("10:00:00"), {}));
     const { cards } = discord(500);
-    const r = await runCron(workerEnv, { cron: CRON_EVERY_5_MIN, scheduledTime: at("10:06:00") });
+    const r = await sweep(at("10:06:00"));
     expect(r.opened?.some((i) => i.site === site)).toBe(true);
     expect(ofSite(cards, site)).toHaveLength(1);
     expect(await rows(site)).toEqual([
@@ -109,7 +118,7 @@ describe("stale notifications from the 5-minute sweep", () => {
 
   it("posts nothing for service down and up incidents", async () => {
     const site = "t-notify-down";
-    const store = new D1Store(env.DB);
+    const store = new D1Store(platform);
     const down = await store.applyDelta(
       delta(site, T("10:00:00"), {
         services: [service(site, "1", "down")],
@@ -133,9 +142,9 @@ describe("stale notifications from the 5-minute sweep", () => {
 
   it("does nothing without the webhook secret", async () => {
     const site = "t-notify-off";
-    await new D1Store(env.DB).applyDelta(delta(site, T("10:00:00"), {}));
+    await new D1Store(platform).applyDelta(delta(site, T("10:00:00"), {}));
     const { spy } = discord();
-    const r = await runCron(env, { cron: CRON_EVERY_5_MIN, scheduledTime: at("10:06:00") });
+    const r = await runJob(platform, "fiveMinute", at("10:06:00"));
     expect(r.opened?.some((i) => i.site === site)).toBe(true);
     expect(spy).not.toHaveBeenCalled();
   });
@@ -144,8 +153,8 @@ describe("stale notifications from the 5-minute sweep", () => {
 describe("recovery at ingest", () => {
   const ORIGIN = "https://worker.example.net";
   let now = new Date(T("10:00:00"));
-  const app = new Hono<{ Bindings: Env }>();
-  app.route("/api/ingest", ingestRoutes<Env>(d1Backend, { now: () => now }));
+  const app = new Hono<AppEnv>().use(platformContext);
+  app.route("/api/ingest", ingestRoutes(appBackend, { now: () => now }));
 
   /** A signed Kuma snapshot from the collector at `now`, with one monitor and these beats. */
   async function kuma(beats: { ts: string; status: 0 | 1 }[]) {
@@ -191,18 +200,15 @@ describe("recovery at ingest", () => {
       now,
       randomNonce(),
     );
-    const ctx = createExecutionContext();
-    const res = await app.fetch(
+    return fetchWith(
+      app,
       new Request(`${ORIGIN}${path}`, {
         method: "POST",
         body,
         headers: { "content-type": "application/json", ...headers },
       }),
-      workerEnv,
-      ctx,
+      { DISCORD_WEBHOOK_URL: HOOK },
     );
-    await waitOnExecutionContext(ctx);
-    return res;
   }
 
   it("posts the recovered card with the gap and the backfilled beats, and nothing for down/up", async () => {
@@ -211,7 +217,7 @@ describe("recovery at ingest", () => {
     expect((await kuma([{ ts: T("09:59:30"), status: 0 }])).status).toBe(202);
     expect(cards).toHaveLength(0);
 
-    await runCron(workerEnv, { cron: CRON_EVERY_5_MIN, scheduledTime: at("10:06:00") });
+    await sweep(at("10:06:00"));
     expect(ofSite(cards, "demo").map((c) => c.components[0].accent_color)).toEqual([0x7f1d1d]);
 
     // Back at 10:12:30 with the beats Kuma kept while the collector was silent (one a minute).
@@ -255,7 +261,7 @@ describe("POST /api/admin/notify/test", () => {
   const hookEnv = { ...adminEnv, DISCORD_WEBHOOK_URL: HOOK } as Env;
 
   async function seed() {
-    const store = new D1Store(env.DB);
+    const store = new D1Store(platform);
     await store.syncSources("demo", [
       { id: "kuma:watch-1", kind: "kuma", expectedIntervalS: 60 },
       { id: "facts:app-1", kind: "facts", expectedIntervalS: 900 },

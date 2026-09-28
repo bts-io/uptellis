@@ -12,7 +12,7 @@ bun run collector:install
 bun run dev
 ```
 
-`bun run verify` runs Biome, the typechecks, the unit, integration and SSR tests and the collector tests. CI runs exactly this.
+`bun run verify` runs Biome, the typechecks, the unit, integration and SSR tests, the Docker adapter tests (`bun run test:docker`) and the collector tests. CI runs exactly this. Changes to the Docker image are checked with `bun run docker:smoke` (needs Docker; builds and runs the image).
 
 ## Branches
 

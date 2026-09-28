@@ -1,27 +1,25 @@
 /**
- * The every-minute probe job end to end in workerd: `runCron` reads the probes of sites/demo.json (seeded
+ * The every-minute probe job end to end in workerd: `runJob` reads the probes of sites/demo.json (seeded
  * into D1 as version 1), checks them through a mocked fetch, and applies the result through the ingest
  * engine into the migrated D1 and KV, where the read routes see it like any other source.
  */
-import {
-  createExecutionContext,
-  createScheduledController,
-  env,
-  waitOnExecutionContext,
-} from "cloudflare:test";
+import { createExecutionContext, createScheduledController, waitOnExecutionContext } from "cloudflare:test";
 import { and, asc, eq } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CRON_EVERY_MINUTE, runCron } from "@/worker/cron";
-import { createDb, schema } from "@/worker/db";
+import { scheduled } from "@/platform/cloudflare/scheduled";
+import { JOBS } from "@/platform/types";
+import { runJob } from "@/worker/cron";
+import { schema } from "@/worker/db";
 import { KvModelCache } from "@/worker/engine/kv-cache";
-import { scheduled } from "@/worker/scheduled";
+import { testPlatform, workerEnv } from "../support/platform";
 import { json, pipeline } from "../support/worker-pipeline";
 
 const HEALTH = "https://example.com/api/healthz";
 const WEB = "https://example.com/";
 const T0 = Date.parse("2026-09-28T01:00:00Z");
 const minute = (n: number) => T0 + n * 60_000;
-const db = createDb(env.DB);
+const platform = testPlatform();
+const db = platform.db;
 
 /** A fetch answering each configured URL with its current status; any other URL fails the test. */
 function edge(statuses: Record<string, number>) {
@@ -33,7 +31,7 @@ function edge(statuses: Record<string, number>) {
 }
 
 const run = (n: number, fetch: ReturnType<typeof edge>) =>
-  runCron(env, { cron: CRON_EVERY_MINUTE, scheduledTime: minute(n) }, undefined, {
+  runJob(platform, "probes", minute(n), {
     fetch,
     sleep: async () => {},
     now: () => new Date(minute(n) + 4_000),
@@ -93,7 +91,7 @@ describe("cron: every-minute probes", () => {
       { id: "probe:web-app", kind: "http", target: "example.com/" },
     ]);
 
-    const cached = await new KvModelCache(env.CACHE).get("demo");
+    const cached = await new KvModelCache(platform.kv).get("demo");
     expect(cached?.services.map((s) => [s.id, s.status]).sort()).toEqual([
       ["probe:api-health", "up"],
       ["probe:web-app", "up"],
@@ -119,11 +117,7 @@ describe("cron: every-minute probes", () => {
     const logs: string[] = [];
     vi.spyOn(console, "log").mockImplementation((...a: unknown[]) => void logs.push(a.map(String).join(" ")));
     const ctx = createExecutionContext();
-    scheduled(
-      createScheduledController({ cron: CRON_EVERY_MINUTE, scheduledTime: minute(20) }),
-      env as unknown as Env,
-      ctx,
-    );
+    scheduled(createScheduledController({ cron: JOBS.probes, scheduledTime: minute(20) }), workerEnv, ctx);
     await waitOnExecutionContext(ctx);
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(logs.map((l) => JSON.parse(l))).toEqual([

@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": { "lib": ["ES2023", "DOM", "DOM.Iterable"], "types": ["bun"] },
+  // The Docker adapter and server (Bun) and their tests; the app code they import is checked here too, against Bun's types.
+  "include": ["src/platform/docker", "src/globals.d.ts", "tests/docker"]
+}

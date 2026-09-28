@@ -19,7 +19,7 @@ const env: ViewerEnv = {
 const ORIGIN = "https://status.example";
 const req = (path: string, init?: RequestInit) => new Request(`${ORIGIN}${path}`, init);
 
-/** Both gates in the order src/server.ts runs them. */
+/** Both gates in the order src/worker/serve.ts runs them. */
 const gates = async (request: Request, e: ViewerEnv = env, at = nowMs) =>
   (await adminGate(request, e, at)) ?? (await viewerGate(request, e, at));
 

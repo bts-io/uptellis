@@ -37,6 +37,23 @@ export const routeAllows = (route: IngestRoute, source: SourceId) =>
 /** `collector-1` -> `INGEST_KEY_COLLECTOR_1`. */
 export const ingestSecretName = (keyId: string) => `INGEST_KEY_${keyId.toUpperCase().replace(/-/g, "_")}`;
 
+/**
+ * The `INGEST_KEY_*` secrets of the runtime (Worker secrets, or Docker env vars and files), as the entry
+ * points read them. They are not `Platform` secrets: their names depend on the key ids.
+ */
+export type EnvIngestKeys = Readonly<Record<string, string>>;
+
+const INGEST_SECRET_RE = /^INGEST_KEY_[A-Z0-9_]+$/;
+
+/** The `INGEST_KEY_*` string values of an env object (everything else is left out). */
+export function envIngestKeys(env: object): EnvIngestKeys {
+  return Object.fromEntries(
+    Object.entries(env).filter(
+      (e): e is [string, string] => INGEST_SECRET_RE.test(e[0]) && typeof e[1] === "string",
+    ),
+  );
+}
+
 const envValue = (v: unknown) => (typeof v === "string" && v.trim().length > 0 ? v.trim() : null);
 
 /**
@@ -45,14 +62,16 @@ const envValue = (v: unknown) => (typeof v === "string" && v.trim().length > 0 ?
  * secret stored with a trailing newline (`wrangler secret put < file`) still verifies. The HMAC key is the
  * UTF-8 bytes of the trimmed text on both sides.
  */
-export function envSecrets(env: object, keyId: string): { current: string | null; next: string | null } {
-  const vars = env as Record<string, unknown>;
+export function envSecrets(
+  env: EnvIngestKeys,
+  keyId: string,
+): { current: string | null; next: string | null } {
   const name = ingestSecretName(keyId);
-  return { current: envValue(vars[name]), next: envValue(vars[`${name}_NEXT`]) };
+  return { current: envValue(env[name]), next: envValue(env[`${name}_NEXT`]) };
 }
 
 /** The env secrets for a key id, current first then next. */
-export function secretsFor(env: object, keyId: string): string[] {
+export function secretsFor(env: EnvIngestKeys, keyId: string): string[] {
   const { current, next } = envSecrets(env, keyId);
   return [current, next].filter((v): v is string => v !== null);
 }
@@ -79,7 +98,7 @@ export interface StoredKeys {
 /** Resolves a key id: its D1 row if there is one, else its env binding and secrets, else null. */
 export async function resolveKey(
   keyId: string,
-  env: object,
+  env: EnvIngestKeys,
   bindings: KeyBindings,
   stored?: StoredKeys,
 ): Promise<ResolvedKey | null> {

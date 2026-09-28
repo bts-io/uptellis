@@ -54,7 +54,7 @@ flowchart LR
   visitor["Visitors"] --> ssr
 ```
 
-One Worker serves everything: Hono owns `/api/*`, TanStack Start (React 19) renders every page on the server, and page loaders call the API in-process. Data lives in D1 through Drizzle, the assembled model is cached in KV, and every payload is validated with Zod.
+One app, two runtimes: a Cloudflare Worker (D1, KV, Cron Triggers) or a Docker container (Bun, one SQLite file, a built-in scheduler), behind one platform interface. Hono owns `/api/*`, TanStack Start (React 19) renders every page on the server, and page loaders call the API in-process. Data lives in SQL through Drizzle, the assembled model is cached, and every payload is validated with Zod.
 
 ## Install
 
@@ -63,7 +63,7 @@ Both install paths are **coming in v1.0**.
 - **Deploy to Cloudflare** (coming in v1.0): a one-click button that creates the Worker, D1 database and KV namespace in your Cloudflare account.
 - **Docker image** (coming in v1.0): `ghcr.io/bts-io/uptellis`, multi-arch, signed with cosign, with an SBOM and provenance attestation.
 
-Until then, run it from source as described below.
+Until then, run it from source as described below, or build and run the Docker image from a checkout: copy `docker.env.example` to `docker.env`, then `docker compose up -d --build` ([OPERATIONS.md](docs/OPERATIONS.md#docker)).
 
 ## Develop
 
@@ -79,10 +79,10 @@ bun run dev                      # open the printed URL; /api/health answers JSO
 Before every push:
 
 ```sh
-bun run verify   # Biome, typecheck, unit + integration + SSR tests, collector tests
+bun run verify   # Biome, typecheck, unit + integration + SSR tests, Docker adapter tests, collector tests
 ```
 
-More in [docs/](docs): [THEMES.md](docs/THEMES.md) (themes and the view model), [SECURITY.md](docs/SECURITY.md) (threat model, gates, rate limits) and [OPERATIONS.md](docs/OPERATIONS.md) (secrets, rotation, restoring a revision).
+More in [docs/](docs): [THEMES.md](docs/THEMES.md) (themes and the view model), [SECURITY.md](docs/SECURITY.md) (threat model, gates, rate limits) and [OPERATIONS.md](docs/OPERATIONS.md) (Cloudflare and Docker deploys, secrets, rotation, backups, restoring a revision).
 
 ## Branches and releases
 

@@ -21,7 +21,7 @@ export interface PageData {
 }
 
 /**
- * The Start request context src/server.ts passes. Read untyped here: registering it on `Register` makes the
+ * The Start request context src/worker/serve.ts passes. Read untyped here: registering it on `Register` makes the
  * router type depend on this function's context type, a cycle TypeScript resolves to `undefined`.
  */
 type RequestContext = { siteDefault?: string } | undefined;

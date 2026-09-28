@@ -1,0 +1,14 @@
+# Build context of the root Dockerfile: only what the build needs (collector/Dockerfile has its own list).
+*
+!package.json
+# Tailwind skips what .gitignore lists (node_modules, build output) when it scans for classes.
+!.gitignore
+!bun.lock
+!vite.config.ts
+!tsconfig*.json
+!wrangler.jsonc
+!src/**
+!public/**
+!sites/**
+!migrations/**
+src/client/routeTree.gen.ts

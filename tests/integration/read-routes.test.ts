@@ -1,14 +1,15 @@
-import { env } from "cloudflare:test";
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it } from "vitest";
 import { findForbiddenLiterals } from "@/shared/model";
+import { type AppEnv, platformContext } from "@/worker/app-env";
 import type { SiteModel } from "../../src/worker/engine/store";
 import { type ViewerEnv, viewerGate } from "../../src/worker/middleware/viewer-key";
 import { readRoutes } from "../../src/worker/routes/read";
 import { loadFixture } from "../fixtures";
+import { fetchWith, workerEnv } from "../support/platform";
 import { MemoryModelCache, MemoryStore } from "../support/read-memory-store";
 
-// The read sub-app mounted exactly as the lead mounts it, behind the same viewer gate src/server.ts runs
+// The read sub-app mounted exactly as the lead mounts it, behind the same viewer gate src/worker/serve.ts runs
 // first. VIEWER_KEY comes from vitest.config.ts, so the gate is armed.
 const KEY = "test-viewer-key";
 const fx = loadFixture("default");
@@ -29,7 +30,7 @@ beforeEach(() => {
     },
   });
   cache = new MemoryModelCache();
-  const app = new Hono<{ Bindings: Env }>();
+  const app = new Hono<AppEnv>().use(platformContext);
   app.route(
     "/api/sites",
     readRoutes(() => ({ store, cache }), { now: () => NOW }),
@@ -37,7 +38,7 @@ beforeEach(() => {
   app.notFound((c) => c.json({ error: "not_found", message: "Not found" }, 404));
   handle = async (path, init) => {
     const req = new Request(`https://example.com${path}`, { redirect: "manual", ...init });
-    return (await viewerGate(req, env as unknown as ViewerEnv, NOW)) ?? app.fetch(req, env);
+    return (await viewerGate(req, workerEnv as unknown as ViewerEnv, NOW)) ?? fetchWith(app, req);
   };
 });
 

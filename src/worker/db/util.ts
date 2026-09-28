@@ -2,7 +2,7 @@ import { type SQL, sql } from "drizzle-orm";
 import { toSnakeCase } from "drizzle-orm/casing";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 
-/** D1 binds at most 100 parameters per statement. */
+/** D1 binds at most 100 parameters per statement (SQLite allows more; the smaller budget serves both). */
 export const MAX_BOUND_PARAMS = 100;
 
 /** Rows per INSERT for a table with `columns` bound values per row. */
@@ -33,3 +33,14 @@ export const canonicalIso = (iso: string): string => toIso(toMs(iso));
  */
 export const excluded = (column: SQLiteColumn): SQL =>
   sql.raw(`excluded."${column.keyAsName ? toSnakeCase(column.name) : column.name}"`);
+
+/**
+ * Rows a write changed, from a `run` result of either driver: D1 reports `meta.changes`, `bun:sqlite`
+ * reports `changes`.
+ */
+export function changesOf(result: unknown): number {
+  if (typeof result !== "object" || result === null) return 0;
+  const r = result as { changes?: unknown; meta?: { changes?: unknown } };
+  const n = r.meta?.changes ?? r.changes;
+  return typeof n === "number" ? n : 0;
+}

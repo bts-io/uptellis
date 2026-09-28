@@ -1,6 +1,6 @@
 /**
  * Security headers on every response the Worker sends: pages, the API, gate redirects and 404s, 429s and
- * errors. src/server.ts applies them last, so they replace whatever an inner layer set (Hono's
+ * errors. src/worker/serve.ts applies them last, so they replace whatever an inner layer set (Hono's
  * `secureHeaders` in src/worker/index.ts sets a few of the same names with other values). Files under
  * `/assets/*` and `/fonts/*` are served by Workers Static Assets without running the Worker.
  *

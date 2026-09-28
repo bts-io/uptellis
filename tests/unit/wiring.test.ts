@@ -1,25 +1,17 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { JOBS } from "@/platform/types";
 import { isOpenPath } from "@/worker/middleware/viewer-key";
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(`../../${rel}`, import.meta.url)), "utf8");
 
-/** The trigger strings src/worker/cron.ts dispatches on (read as text: it imports Worker-only types). */
-const cronConst = (name: string) =>
-  new RegExp(`export const ${name} = "([^"]+)"`).exec(read("src/worker/cron.ts"))?.[1];
-
 describe("Phase 1 wiring", () => {
-  it("wrangler.jsonc enables exactly the cron triggers runCron dispatches on", () => {
-    // An active (uncommented) triggers line; runCron picks the job by these exact strings.
+  it("wrangler.jsonc enables exactly the cron triggers of JOBS", () => {
+    // An active (uncommented) triggers line; the scheduled handler maps these exact strings to their jobs.
     const m = /^\s*"triggers":\s*\{\s*"crons":\s*(\[[^\]]*\])\s*\}/m.exec(read("wrangler.jsonc"));
     expect(m).not.toBeNull();
-    expect(JSON.parse(m![1]!)).toEqual([
-      cronConst("CRON_EVERY_5_MIN"),
-      cronConst("CRON_DAILY"),
-      cronConst("CRON_EVERY_MINUTE"),
-    ]);
-    expect(cronConst("CRON_EVERY_5_MIN")).toBe("*/5 * * * *");
+    expect(JSON.parse(m![1]!).sort()).toEqual(Object.values(JOBS).sort());
   });
 
   it("the viewer gate leaves only /api/ingest/* and /api/health open", () => {

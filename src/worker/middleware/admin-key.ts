@@ -1,6 +1,6 @@
 /**
  * Admin gate: guards `/admin`, `/admin/*` and `/api/admin/*` with `ADMIN_KEY`, the same way the viewer gate
- * guards the dashboard (./viewer-key.ts). src/server.ts runs it before the viewer gate.
+ * guards the dashboard (./viewer-key.ts). src/worker/serve.ts runs it before the viewer gate.
  *
  * - `ADMIN_KEY` and `VIEWER_KEY` both unset (local dev): admin is open.
  * - `?admin=<ADMIN_KEY>` on a GET (any path): sets a signed `uptellis_admin` cookie for 30 days (SameSite=Lax: Strict would be withheld on the redirect after a link from another site, e.g. a README, and admin would 404; writes are guarded by the same-origin check)

@@ -4,7 +4,7 @@ import { AdminLayout } from "../lib/admin/Layout";
 import { adminSite } from "../lib/admin/site";
 
 /**
- * `/admin` for the site this host serves. The admin gate in src/server.ts guards the page; the data comes
+ * `/admin` for the site this host serves. The admin gate in src/worker/serve.ts guards the page; the data comes
  * from `/api/admin/*` through `api()`, which the same gate guards on client-side navigation too.
  */
 export const Route = createFileRoute("/admin")({

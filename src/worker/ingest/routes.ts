@@ -13,12 +13,15 @@
  * Responses carry ids and counts only; logs carry reason codes, ids and counts, never payloads.
  */
 import { Hono } from "hono";
+import type { Platform } from "@/platform/types";
 import { MAX_BODY_BYTES, verifyRequest } from "@/shared/signing";
+import type { AppEnv } from "@/worker/app-env";
 import { readCapped, TooLarge } from "@/worker/read-capped";
 import { isoSeconds } from "../adapters/common";
 import { type IngestBackend, ingestPayload } from "../engine/ingest-service";
 import { PayloadRejected } from "./issues";
 import {
+  type EnvIngestKeys,
   INGEST_KEY_BINDINGS,
   type IngestRoute,
   type KeyBindings,
@@ -49,28 +52,17 @@ const keyWarn = (step: string, keyId: string, err: unknown) =>
 const reject = (status: 400 | 401 | 403 | 409 | 413 | 422, error: string, extra: object = {}) =>
   Response.json({ error, ...extra }, { status, headers: { "cache-control": "no-store" } });
 
-type WaitUntil = Pick<ExecutionContext, "waitUntil">;
-
-/** The request's `ExecutionContext`, or undefined where there is none (Hono's getter throws then). */
-function executionCtx(c: { executionCtx: WaitUntil }): WaitUntil | undefined {
-  try {
-    return c.executionCtx;
-  } catch {
-    return undefined;
-  }
-}
+/** Builds the store, cache and keys for a request's platform and env ingest keys. */
+export type IngestBackendResolver = (platform: Platform, envKeys: EnvIngestKeys) => IngestBackend;
 
 /**
- * The ingest sub-app. `backend` builds the store and cache for a request's env and execution context (the
- * D1 + KV implementation in the Worker, the in-memory one in tests).
+ * The ingest sub-app. `backend` builds the store and cache for the request (the SQL + KV implementation in
+ * the app, the in-memory one in tests).
  */
-export function ingestRoutes<E extends object = Record<string, unknown>>(
-  backend: (env: E, ctx?: WaitUntil) => IngestBackend,
-  options: IngestRouteOptions = {},
-) {
+export function ingestRoutes(backend: IngestBackendResolver, options: IngestRouteOptions = {}) {
   const bindings = options.bindings ?? INGEST_KEY_BINDINGS;
   const clock = options.now ?? (() => new Date());
-  const app = new Hono<{ Bindings: E }>();
+  const app = new Hono<AppEnv>();
 
   const handle = (route: IngestRoute) =>
     app.post(`/${route}`, async (c) => {
@@ -85,7 +77,8 @@ export function ingestRoutes<E extends object = Record<string, unknown>>(
       }
 
       const path = new URL(c.req.url).pathname;
-      const deps = backend(c.env, executionCtx(c));
+      const envKeys = c.var.envIngestKeys;
+      const deps = backend(c.var.platform, envKeys);
       const { store, keys } = deps;
       let resolved: ResolvedKey | null = null;
       const verified = await verifyRequest({
@@ -95,7 +88,7 @@ export function ingestRoutes<E extends object = Record<string, unknown>>(
         body,
         now,
         keysFor: async (keyId) => {
-          resolved = await resolveKey(keyId, c.env, bindings, keys);
+          resolved = await resolveKey(keyId, envKeys, bindings, keys);
           return resolved?.candidates.map((k) => k.secret) ?? null;
         },
       });
