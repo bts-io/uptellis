@@ -59,10 +59,10 @@ describe("managing API keys", () => {
 
     const res = await api.get("/sites/demo/api-keys");
     const text = await res.text();
-    expect(text).not.toContain(key.key.split("_").pop());
+    expect(text).not.toContain(key.key.slice(key.prefix.length + 1));
     expect(ApiKeyList.parse(JSON.parse(text)).keys.map((k) => k.id)).toContain(key.id);
     const [row] = await db.select().from(schema.apiKeys).where(eq(schema.apiKeys.id, key.id));
-    expect(JSON.stringify(row)).not.toContain(key.key.split("_").pop());
+    expect(JSON.stringify(row)).not.toContain(key.key.slice(key.prefix.length + 1));
   });
 
   it("validates scopes and the site", async () => {
