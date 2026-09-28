@@ -4,8 +4,8 @@
  * unknown name, no ICMP permission). Only runtimes whose transport has `ping` run these monitors; a
  * transport without it answers `not supported` rather than throwing.
  */
-import type { CheckTransport } from "@/shared/monitors/check";
-import type { MonitorConfig } from "@/shared/monitors/schema";
+import type { CheckTransport } from "../shared/monitors/check";
+import type { MonitorConfig } from "../shared/monitors/schema";
 import { type Attempt, down } from "./attempt";
 
 type Ping = Extract<MonitorConfig, { type: "ping" }>;

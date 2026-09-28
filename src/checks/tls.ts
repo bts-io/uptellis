@@ -5,8 +5,8 @@
  * the name (`certificate invalid`). Otherwise the days left decide: under `minDays` is `degraded`, else up,
  * both with the message `12 days left`. The certificate summary rides along whenever one was read.
  */
-import type { CheckTransport } from "@/shared/monitors/check";
-import type { MonitorConfig } from "@/shared/monitors/schema";
+import type { CheckTransport } from "../shared/monitors/check";
+import type { MonitorConfig } from "../shared/monitors/schema";
 import { type Attempt, down, failureMessage } from "./attempt";
 
 type Tls = Extract<MonitorConfig, { type: "tls" }>;

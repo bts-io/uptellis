@@ -9,6 +9,7 @@ import { schema } from "@/worker/db";
 import { envIngestKeys } from "@/worker/ingest/keys";
 import type { KeyValue, Platform, RateLimiter, SecretName, SettingName } from "../types";
 import { RATE_LIMIT_BINDINGS } from "./bindings";
+import { createCloudflareCheckTransport } from "./check-transport";
 
 /** Drizzle over a D1 binding, with the app's schema and column casing. */
 export function createD1Db(d1: D1Database) {
@@ -58,6 +59,7 @@ export function createCloudflarePlatform(env: Env, ctx: Pick<ExecutionContext, "
     setting: (name: SettingName) => envString(env, name),
     waitUntil: (work) => ctx.waitUntil(work),
     now: () => Date.now(),
+    checkTransport: createCloudflareCheckTransport(),
   };
 }
 

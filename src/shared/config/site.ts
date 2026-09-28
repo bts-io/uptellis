@@ -60,7 +60,7 @@ const SecretName = z.string().regex(/^[A-Z][A-Z0-9_]{0,63}$/, "Expected a secret
 
 const SectionId = z.string().regex(/^[a-z0-9][a-z0-9-]{0,31}$/);
 
-/** The one source every probe of a site reports as (the Worker's own edge checks). */
+/** The source the builtin runner reports as on Cloudflare (`runnerSourceId`); implied, never required. */
 export const PROBE_SOURCE_ID = "probe:cf";
 
 /** Suffixes of names that only resolve inside a LAN or tailnet; probes check public URLs only. */
@@ -206,13 +206,6 @@ export const SiteConfig = z
       (i) => ["probes", i, "id"],
       "probe",
     );
-    if (c.probes.length > 0 && !c.sources.some((s) => s.id === PROBE_SOURCE_ID)) {
-      ctx.addIssue({
-        code: "custom",
-        message: `Probes need the source ${PROBE_SOURCE_ID}`,
-        path: ["sources"],
-      });
-    }
     dup(
       c.monitors,
       (m) => m.id,

@@ -16,7 +16,7 @@ import { can } from "@/shared/auth";
 import type { AppEnv } from "@/worker/app-env";
 import { principalOf } from "../auth/context";
 import { buildSourcesReport, type ReadDeps, readSiteModel, readSiteView } from "../engine/read-service";
-import { getSiteConfig, seedConfigs } from "../engine/sites";
+import { getSiteConfig, seedConfigs, siteSources } from "../engine/sites";
 
 export type ReadDepsResolver = (platform: Platform) => ReadDeps;
 
@@ -40,11 +40,16 @@ export function readRoutes(resolve: ReadDepsResolver, opts: ReadRoutesOptions = 
   /** Keeps a cache warm-up alive after the response. */
   const defer = (c: Context<AppEnv>, p: Promise<void>) => c.var.platform.waitUntil(p);
 
-  /** The request's deps and the config of its `:site`, or null for an unknown or hidden site. */
+  /**
+   * The request's deps and the config of its `:site`, or null for an unknown or hidden site. Its `sources`
+   * are the effective ones on this runtime (`siteSources`: configured plus the implied monitor runners), so
+   * the page and the sources report list exactly what the staleness sweep watches.
+   */
   const siteOf = async (c: Context<AppEnv>) => {
     const deps = resolve(c.var.platform);
     const config = await getSiteConfig(deps.configs ?? seedConfigs, c.req.param("site") ?? "");
-    return config && can(principalOf(c), "page.view", config) ? { deps, config } : null;
+    if (!config || !can(principalOf(c), "page.view", config)) return null;
+    return { deps, config: { ...config, sources: siteSources(config, c.var.platform.runtime) } };
   };
 
   app.get("/", async (c) => {

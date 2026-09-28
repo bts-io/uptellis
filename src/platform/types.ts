@@ -7,6 +7,7 @@
 
 import type { BatchItem } from "drizzle-orm/batch";
 import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
+import type { CheckTransport } from "@/shared/monitors/check";
 import type * as schema from "@/worker/db/schema";
 
 export type Runtime = "cloudflare" | "docker";
@@ -71,4 +72,9 @@ export interface Platform {
   waitUntil(work: Promise<unknown>): void;
   /** Wall clock in epoch milliseconds (injectable in tests). */
   now(): number;
+  /**
+   * Network primitives for the builtin runner's checks (src/checks): fetch and `cloudflare:sockets` on
+   * Cloudflare, fetch, `node:net`, `node:tls` and the system `ping` in Docker. Added in Phase 6.
+   */
+  checkTransport: CheckTransport;
 }

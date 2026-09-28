@@ -11,11 +11,11 @@
  * This module is runtime-neutral (Workers, Bun). The Bun transport is in ./bun-transport.ts and the
  * Workers one in src/platform/cloudflare/check-transport.ts; neither is imported here.
  */
-import { ShortMessage } from "@/shared/model/common";
-import { CertSummary } from "@/shared/model/service";
-import type { CheckResult } from "@/shared/monitors/api";
-import { type CheckOptions, RETRY_DELAY_MS, type RunCheck } from "@/shared/monitors/check";
-import type { MonitorConfig } from "@/shared/monitors/schema";
+import { ShortMessage } from "../shared/model/common";
+import { CertSummary } from "../shared/model/service";
+import type { CheckResult } from "../shared/monitors/api";
+import { type CheckOptions, RETRY_DELAY_MS, type RunCheck } from "../shared/monitors/check";
+import type { MonitorConfig } from "../shared/monitors/schema";
 import { type Attempt, down } from "./attempt";
 import { httpAttempt } from "./http";
 import { pingAttempt } from "./ping";

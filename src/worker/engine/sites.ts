@@ -63,11 +63,11 @@ export const MIN_RUNNER_INTERVAL_S = 60;
  * that runner would never report them.
  */
 export function siteSources(config: SiteConfig, runtime: Runtime): SourceSpec[] {
-  const out: SourceSpec[] = config.sources.map((s) => ({
-    id: s.id,
-    kind: s.kind,
-    expectedIntervalS: s.expectedIntervalS,
-  }));
+  // A listed builtin source of the other runtime (`probe:cf` in Docker) would never report: left out.
+  const foreign = runnerSourceId(BUILTIN_RUNNER, runtime === "docker" ? "cloudflare" : "docker");
+  const out: SourceSpec[] = config.sources
+    .filter((s) => s.id !== foreign)
+    .map((s) => ({ id: s.id, kind: s.kind, expectedIntervalS: s.expectedIntervalS }));
   const listed = new Set(out.map((s) => s.id));
   const implied = new Map<string, number>();
   for (const m of monitorsOf(config)) {

@@ -5,6 +5,7 @@
  * (src/platform/docker/scheduler.ts); both call `runJob` through `runScheduledJob` (./scheduled.ts).
  */
 import { lt, sql } from "drizzle-orm";
+import { runCheck } from "@/checks";
 import type { JobName, Platform } from "@/platform/types";
 import type { Incident } from "@/shared/model";
 import { type Db, schema } from "@/worker/db";
@@ -14,9 +15,8 @@ import { D1Store } from "@/worker/engine/d1-store";
 import { KvModelCache } from "@/worker/engine/kv-cache";
 import { syncSiteSources } from "@/worker/engine/sites";
 import { type BuiltinRun, type BuiltinRunOptions, runBuiltin } from "@/worker/monitors/builtin";
-import { legacyRunCheck, legacyTransport } from "@/worker/monitors/legacy-check";
 import { SqlRunnerStates } from "@/worker/monitors/runner-state";
-import { staleNotifier } from "@/worker/notify";
+import { incidentNotifier } from "@/worker/notify";
 import pkg from "../../package.json";
 
 const MIN_MS = 60 * 1000;
@@ -123,12 +123,11 @@ export async function runJob(
         runtime: platform.runtime,
         runners: new SqlRunnerStates(platform),
         // A probe source coming back resolves its stale incident here: that recovery gets its card too.
-        notifier: staleNotifier(platform, configs, { now: () => now }),
+        notifier: incidentNotifier(platform, configs, { now: () => now }),
       };
       const probes = await runBuiltin(backend, platform.runtime, now, {
-        // TODO(p6-integration): switch to src/checks (`runCheck` and the runtime's `CheckTransport`).
-        runCheck: legacyRunCheck,
-        transport: legacyTransport,
+        runCheck,
+        transport: platform.checkTransport,
         version: pkg.version,
         ...probeOptions,
       });
@@ -138,7 +137,7 @@ export async function runJob(
       const downsampled = await downsample(db, now);
       const opened: Incident[] = [];
       const resolved: Incident[] = [];
-      const notifier = staleNotifier(platform, configs, { now: () => now });
+      const notifier = incidentNotifier(platform, configs, { now: () => now });
       // Configured sites get their sources (expected intervals) written before the sweep reads them.
       for (const site of await configs.slugs()) {
         await syncSiteSources(store, configs, site, platform.runtime).catch((err: unknown) =>

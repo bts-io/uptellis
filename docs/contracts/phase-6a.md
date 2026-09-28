@@ -47,8 +47,13 @@ flowchart LR
 - **Results** apply in time order per (monitor, runner). A result that is not newer than the last applied
   one, older than 24 h, more than 60 s in the future, or for a monitor not assigned to that runner is
   `ignored`. The agent never resends ignored results.
-- **Heartbeats.** Each applied result writes one heartbeat for the service with the verdict, at the result's
-  `ts`. A heartbeat on the same second overwrites the earlier one.
+- **Heartbeats.** Each applied result writes one heartbeat for the service with the verdict at the result's
+  `ts`. When two runners report the same second, the first stored heartbeat stays (the store is
+  idempotent); the service row and incidents still see every result.
+- **Degraded closes an outage.** When confirmed downs fall below the quorum again, the service is
+  `degraded`, which answers: the `down` incident resolves and the up card is sent.
+- **Sources.** A config never has to list runner sources. A listed builtin source of the other runtime
+  (`probe:cf` in Docker) is left out, so it never goes stale.
 - **Cards** come from `down` incidents opening and resolving, through the existing notifier. No second
   transition path exists.
 

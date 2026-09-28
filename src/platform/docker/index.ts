@@ -8,6 +8,7 @@ import { Database } from "bun:sqlite";
 import type { BatchItem } from "drizzle-orm/batch";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { migrate } from "drizzle-orm/bun-sqlite/migrator";
+import { createBunTransport } from "@/checks/bun-transport";
 import { schema } from "@/worker/db";
 import { type Platform, SECRET_NAMES, SETTING_NAMES, type SecretName, type SettingName } from "../types";
 import { type EnvSource, readEnv } from "./env";
@@ -81,6 +82,7 @@ export function createDockerPlatform(opts: DockerPlatformOptions): DockerPlatfor
       pending.add(tracked);
     },
     now,
+    checkTransport: createBunTransport(),
     async drain() {
       while (pending.size > 0) await Promise.allSettled([...pending]);
     },

@@ -4,8 +4,8 @@
  * else `timeout` or `connection failed`. Latency is the time to the open connection, as the transport
  * measures it.
  */
-import type { CheckTransport } from "@/shared/monitors/check";
-import type { MonitorConfig } from "@/shared/monitors/schema";
+import type { CheckTransport } from "../shared/monitors/check";
+import type { MonitorConfig } from "../shared/monitors/schema";
 import { type Attempt, down, failureMessage } from "./attempt";
 
 type Tcp = Extract<MonitorConfig, { type: "tcp" }>;

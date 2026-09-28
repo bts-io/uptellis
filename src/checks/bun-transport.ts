@@ -16,8 +16,8 @@
 import { execFile } from "node:child_process";
 import net from "node:net";
 import tls from "node:tls";
-import type { CertSummary } from "@/shared/model/service";
-import type { CheckTransport, TcpProbe, TlsProbe } from "@/shared/monitors/check";
+import type { CertSummary } from "../shared/model/service";
+import type { CheckTransport, TcpProbe, TlsProbe } from "../shared/monitors/check";
 import { timeoutError } from "./attempt";
 
 export interface BunTransportOptions {

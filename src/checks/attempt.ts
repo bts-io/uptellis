@@ -5,8 +5,8 @@
  * fixed words (`timeout`, `connection refused`, `connection failed`).
  */
 
-import type { CertSummary } from "@/shared/model/service";
-import type { CheckStatus } from "@/shared/monitors/api";
+import type { CertSummary } from "../shared/model/service";
+import type { CheckStatus } from "../shared/monitors/api";
 
 export interface Attempt {
   status: CheckStatus;

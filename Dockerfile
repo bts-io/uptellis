@@ -26,6 +26,10 @@ LABEL org.opencontainers.image.title="Uptellis" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${GITHUB_SHA}"
+# iputils ping for ping monitors run by the builtin runner. As the non-root user it opens an unprivileged
+# ICMP socket, which needs net.ipv4.ping_group_range to cover the user (compose.yaml sets it). Without that
+# sysctl, ping needs CAP_NET_RAW.
+RUN apk add --no-cache iputils
 WORKDIR /app
 COPY migrations ./migrations
 COPY src/platform/docker/main.ts ./src/platform/docker/main.ts

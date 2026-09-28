@@ -18,7 +18,12 @@ services:
     read_only: true
     tmpfs:
       - /tmp:size=16m
+    # Unprivileged ICMP for ping monitors (every group may open an ICMP echo socket inside the container).
+    sysctls:
+      net.ipv4.ping_group_range: "0 2147483647"
     cap_drop: [ALL]
+    # Where the sysctl above is not allowed, ping needs raw sockets instead:
+    # cap_add: [NET_RAW]
     security_opt:
       - no-new-privileges:true
     # SIGTERM lets running requests, jobs and Discord cards finish before the database closes.

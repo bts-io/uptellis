@@ -1,13 +1,11 @@
 /**
  * The builtin runner over memory: the schedule, bounded concurrency, which monitors run on which runtime,
- * the legacy probes as monitors (same service ids, `probe:cf` on Cloudflare), implied runner sources, and
- * the temporary legacy check adapter.
+ * the legacy probes as monitors (same service ids, `probe:cf` on Cloudflare), and implied runner sources.
  */
 import { describe, expect, it, vi } from "vitest";
 import type { CheckResult, RunCheck } from "@/shared/monitors";
 import { resetSiteSourceSync, siteSources } from "@/worker/engine/sites";
 import { runBuiltin } from "@/worker/monitors/builtin";
-import { legacyRunCheck } from "@/worker/monitors/legacy-check";
 import { isDue, mapBounded } from "@/worker/monitors/schedule";
 import { memoryMonitors, monitorSite } from "../support/monitors";
 
@@ -197,58 +195,14 @@ describe("implied runner sources", () => {
       { id: "probe:cf", kind: "probe", expectedIntervalS: 90 },
     ]);
   });
-});
 
-describe("legacy check adapter (until src/checks lands)", () => {
-  const http = { id: "web", name: "Web", type: "http", url: "https://example.com/" } as const;
-
-  it("checks http through the edge checker and stamps the start second", async () => {
-    const fetch = vi.fn(async () => new Response(null, { status: 503 }));
-    const r = await legacyRunCheck(
-      {
-        ...http,
-        method: "HEAD",
-        expectStatus: { min: 200, max: 399 },
-        keywordAbsent: false,
-        intervalS: 60,
-        timeoutS: 5,
-        retries: 0,
-        runners: ["builtin"],
-        enabled: true,
-      },
-      {
-        transport: { fetch, tcp: vi.fn() } as never,
-        version: "t",
-        sleep: async () => {},
-        now: () => T0 + 1_500,
-      },
-    );
-    expect(r).toEqual({
-      monitorId: "web",
-      ts: iso(T0 + 1_000),
-      status: "down",
-      latencyMs: expect.any(Number),
-      message: "HTTP 503",
+  it("leaves out a listed builtin source of the other runtime", () => {
+    const listed = monitorSite({
+      sources: [{ id: "probe:cf", kind: "probe", expectedIntervalS: 90 }],
+      probes: [probe("web")],
     });
-    expect(fetch).toHaveBeenCalledTimes(2);
-  });
-
-  it("reports other types as not supported", async () => {
-    const r = await legacyRunCheck(
-      {
-        id: "p",
-        name: "P",
-        type: "tcp",
-        host: "example.org",
-        port: 22,
-        intervalS: 60,
-        timeoutS: 5,
-        retries: 0,
-        runners: ["builtin"],
-        enabled: true,
-      },
-      { transport: {} as never, version: "t", now: () => T0 },
-    );
-    expect(r).toMatchObject({ status: "down", message: "not supported", latencyMs: null });
+    expect(siteSources(listed, "docker")).toEqual([
+      { id: "probe:server", kind: "probe", expectedIntervalS: 60 },
+    ]);
   });
 });

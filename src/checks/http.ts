@@ -6,8 +6,8 @@
  * read and searched (case-sensitive) and the rest is cancelled; without one the body is cancelled unread.
  * Latency is the time to the response headers.
  */
-import { KEYWORD_BODY_LIMIT } from "@/shared/monitors/check";
-import type { MonitorConfig } from "@/shared/monitors/schema";
+import { KEYWORD_BODY_LIMIT } from "../shared/monitors/check";
+import type { MonitorConfig } from "../shared/monitors/schema";
 import { type Attempt, down, failureMessage } from "./attempt";
 
 type Http = Extract<MonitorConfig, { type: "http" }>;

@@ -68,7 +68,7 @@ describe("SiteConfig probes", () => {
     }
   });
 
-  it("rejects bad fields, duplicate ids and probes without the probe source", () => {
+  it("rejects bad fields and duplicate ids, and needs no listed probe source", () => {
     const bad: [string, SiteConfigInput][] = [
       ["method", withProbe({ method: "POST" })],
       ["id", withProbe({ id: "Home Page" })],
@@ -79,9 +79,10 @@ describe("SiteConfig probes", () => {
       ["interval", withProbe({ intervalS: 90 })],
       ["short interval", withProbe({ intervalS: 30 })],
       ["duplicate", { ...withProbe({}), probes: [...withProbe({}).probes!, ...withProbe({}).probes!] }],
-      ["no source", { ...withProbe({}), sources: [] }],
     ];
     for (const [what, input] of bad) expect(SiteConfig.safeParse(input).success, what).toBe(false);
+    // The builtin runner's source is implied (src/worker/engine/sites.ts), so it need not be listed.
+    expect(SiteConfig.safeParse({ ...withProbe({}), sources: [] }).success).toBe(true);
   });
 
   it("round-trips byte-identically with probes, after sources", () => {
