@@ -1,7 +1,7 @@
 /**
- * The scheduled jobs (`JOBS` in src/platform/types.ts): `probes` every minute, `fiveMinute` every 5
- * minutes, `daily` once a day. Cloudflare maps each Cron Trigger to its job
- * (src/platform/cloudflare/scheduled.ts), Docker runs them from its own scheduler
+ * The scheduled jobs (`JOBS` in src/platform/types.ts): `probes` every minute (the builtin monitor runner,
+ * src/worker/monitors/builtin.ts), `fiveMinute` every 5 minutes, `daily` once a day. Cloudflare maps each
+ * Cron Trigger to its job (src/platform/cloudflare/scheduled.ts), Docker runs them from its own scheduler
  * (src/platform/docker/scheduler.ts); both call `runJob` through `runScheduledJob` (./scheduled.ts).
  */
 import { lt, sql } from "drizzle-orm";
@@ -13,8 +13,11 @@ import { D1ConfigStore } from "@/worker/engine/config-store";
 import { D1Store } from "@/worker/engine/d1-store";
 import { KvModelCache } from "@/worker/engine/kv-cache";
 import { syncSiteSources } from "@/worker/engine/sites";
+import { type BuiltinRun, type BuiltinRunOptions, runBuiltin } from "@/worker/monitors/builtin";
+import { legacyRunCheck, legacyTransport } from "@/worker/monitors/legacy-check";
+import { SqlRunnerStates } from "@/worker/monitors/runner-state";
 import { staleNotifier } from "@/worker/notify";
-import { type ProbeRun, type ProbeRunOptions, runProbes } from "@/worker/probes/scheduler";
+import pkg from "../../package.json";
 
 const MIN_MS = 60 * 1000;
 const HOUR_MS = 60 * MIN_MS;
@@ -41,8 +44,11 @@ export interface CronResult {
   opened?: Incident[];
   resolved?: Incident[];
   pruned?: Record<string, number>;
-  probes?: ProbeRun;
+  probes?: BuiltinRun;
 }
+
+/** What the `probes` job checks with; each defaults to the runtime's own. */
+export type ProbeJobOptions = Partial<BuiltinRunOptions>;
 
 /**
  * Folds the finished 5-minute windows in `[end - lookback, end)` into `heartbeat_5m`, where `end` is the
@@ -100,7 +106,7 @@ export async function runJob(
   platform: Platform,
   job: JobName,
   scheduledTime: number,
-  probeOptions: ProbeRunOptions = {},
+  probeOptions: ProbeJobOptions = {},
 ): Promise<CronResult> {
   const { db } = platform;
   const now = scheduledTime;
@@ -114,10 +120,19 @@ export async function runJob(
         store,
         cache,
         configs,
+        runtime: platform.runtime,
+        runners: new SqlRunnerStates(platform),
         // A probe source coming back resolves its stale incident here: that recovery gets its card too.
         notifier: staleNotifier(platform, configs, { now: () => now }),
       };
-      return { job, probes: await runProbes(backend, now, probeOptions) };
+      const probes = await runBuiltin(backend, platform.runtime, now, {
+        // TODO(p6-integration): switch to src/checks (`runCheck` and the runtime's `CheckTransport`).
+        runCheck: legacyRunCheck,
+        transport: legacyTransport,
+        version: pkg.version,
+        ...probeOptions,
+      });
+      return { job, probes };
     }
     case "fiveMinute": {
       const downsampled = await downsample(db, now);
@@ -126,7 +141,7 @@ export async function runJob(
       const notifier = staleNotifier(platform, configs, { now: () => now });
       // Configured sites get their sources (expected intervals) written before the sweep reads them.
       for (const site of await configs.slugs()) {
-        await syncSiteSources(store, configs, site).catch((err: unknown) =>
+        await syncSiteSources(store, configs, site, platform.runtime).catch((err: unknown) =>
           console.warn(
             JSON.stringify({
               evt: "cron",

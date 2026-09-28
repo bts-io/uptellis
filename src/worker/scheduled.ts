@@ -1,7 +1,7 @@
 /**
  * One scheduled run as both runtimes perform it: the job (./cron.ts) and one log line with its name and
- * counts only (for probes also the number of checks, down results and failed sites; never a response).
- * A failure propagates to the caller (the Workers runtime, or the Docker scheduler, which logs its name).
+ * counts only (for the builtin monitor runner also the sites and checks it ran, the checks that were down
+ * and the sites that failed; never a response). A failure propagates to the caller (the Workers runtime, or the Docker scheduler, which logs its name).
  */
 import type { JobName, Platform } from "@/platform/types";
 import { runJob } from "./cron";

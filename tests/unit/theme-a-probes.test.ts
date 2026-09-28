@@ -5,44 +5,35 @@ import { aSysStatus } from "@/client/themes/a-sys-status";
 import { PROBE_SOURCE_ID } from "@/shared/config";
 import { findForbiddenLiterals } from "@/shared/model";
 import { buildSiteView } from "@/shared/view";
-import { normalizeProbes } from "@/worker/adapters/probe";
+import { applyResults } from "@/worker/monitors/apply";
 import { fixtureConfig, fixtureInput } from "../fixtures/view";
+import { memoryMonitors } from "../support/monitors";
 
-// The fixtures hold Kuma and facts data only; this adds what one probe run writes for sites/demo.json.
-function withProbes() {
+// The fixtures hold Kuma and facts data only; this adds what one builtin run writes for sites/demo.json
+// (its legacy probes, as monitors on `probe:cf`).
+async function withProbes() {
   const input = fixtureInput("default");
   const now = new Date(input.now as string);
-  const at = new Date(now.getTime() - 20_000);
-  const [health, web] = fixtureConfig.probes;
-  const delta = normalizeProbes(
+  const ts = new Date(now.getTime() - 20_000).toISOString().replace(".000Z", "Z");
+  const { backend, store } = memoryMonitors(fixtureConfig);
+  await applyResults(
+    backend,
+    { site: "demo", runner: "builtin", runtime: "cloudflare" },
     [
-      { probe: health!, result: { status: "up", latencyMs: 140, message: "HTTP 200" } },
-      { probe: web!, result: { status: "down", latencyMs: 95, message: "HTTP 503" } },
+      { monitorId: "api-health", ts, status: "up", latencyMs: 140, message: "HTTP 200" },
+      { monitorId: "web-app", ts, status: "down", latencyMs: 95, message: "HTTP 503" },
     ],
-    PROBE_SOURCE_ID,
-    "demo",
-    at,
     now,
   );
-  input.model.sources = [
-    ...input.model.sources,
-    {
-      id: PROBE_SOURCE_ID,
-      site: "demo",
-      kind: "probe",
-      expectedIntervalS: 60,
-      lastSeenAt: delta.source.seenAt,
-      lastOkAt: delta.source.seenAt,
-    },
-  ];
-  input.model.services = [...input.model.services, ...delta.services];
-  input.model.recentHeartbeats = [...input.model.recentHeartbeats, ...delta.heartbeats];
+  input.model.sources = [...input.model.sources, store.sources.get(PROBE_SOURCE_ID)!];
+  input.model.services = [...input.model.services, ...store.services.values()];
+  input.model.recentHeartbeats = [...input.model.recentHeartbeats, ...store.heartbeats.values()];
   return input;
 }
 
 describe("probe services in the view and theme A", () => {
-  it("are ordinary services of the web section, after the Kuma ones", () => {
-    const v = buildSiteView(withProbes());
+  it("are ordinary services of the web section, after the Kuma ones", async () => {
+    const v = buildSiteView(await withProbes());
     const web = v.sections.find((s) => s.id === "web")!;
     expect(web.services.map((s) => [s.id, s.name, s.state])).toEqual([
       ["kuma:1", "API health", "up"],
@@ -55,9 +46,9 @@ describe("probe services in the view and theme A", () => {
     expect(v.unsectioned).toEqual([]);
   });
 
-  it("render in theme A without address, email or token literals", () => {
+  it("render in theme A without address, email or token literals", async () => {
     const html = renderToStaticMarkup(
-      createElement(aSysStatus.Page, { view: buildSiteView(withProbes()), commit: "cbe27a13" }),
+      createElement(aSysStatus.Page, { view: buildSiteView(await withProbes()), commit: "cbe27a13" }),
     );
     expect(html).toContain("API health (edge)");
     expect(html).toContain("Web app (edge)");

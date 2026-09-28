@@ -1,7 +1,8 @@
 /**
- * The every-minute probe job end to end in workerd: `runJob` reads the probes of sites/demo.json (seeded
- * into D1 as version 1), checks them through a mocked fetch, and applies the result through the ingest
- * engine into the migrated D1 and KV, where the read routes see it like any other source.
+ * The every-minute probe job (the builtin monitor runner) end to end in workerd: `runJob` reads the legacy
+ * probes of sites/demo.json (seeded into D1 as version 1) as monitors, checks them through a mocked fetch,
+ * and applies the results through `applyResults` and the ingest engine into the migrated D1 and KV, where
+ * the read routes see them like any other source. Runner states land in `monitor_runners`.
  */
 import { createExecutionContext, createScheduledController, waitOnExecutionContext } from "cloudflare:test";
 import { and, asc, eq } from "drizzle-orm";
@@ -32,9 +33,9 @@ function edge(statuses: Record<string, number>) {
 
 const run = (n: number, fetch: ReturnType<typeof edge>) =>
   runJob(platform, "probes", minute(n), {
-    fetch,
+    transport: { fetch: fetch as unknown as typeof globalThis.fetch, tcp: vi.fn() },
     sleep: async () => {},
-    now: () => new Date(minute(n) + 4_000),
+    now: () => minute(n) + 4_000,
   });
 
 const beats = (serviceId: string) =>
@@ -65,14 +66,14 @@ describe("cron: every-minute probes", () => {
     expect(second.probes).toMatchObject({
       checks: 2,
       down: 1,
-      opened: ["probe:web-app:2026-09-28T01:01:00Z"],
+      opened: ["probe:web-app:2026-09-28T01:01:04Z"],
       resolved: [],
     });
     // The failing check was retried once before it counted as down.
     expect(down.mock.calls.filter(([url]) => String(url) === WEB)).toHaveLength(2);
 
     const third = await run(2, up);
-    expect(third.probes).toMatchObject({ opened: [], resolved: ["probe:web-app:2026-09-28T01:01:00Z"] });
+    expect(third.probes).toMatchObject({ opened: [], resolved: ["probe:web-app:2026-09-28T01:01:04Z"] });
 
     expect((await beats("probe:web-app")).map((b) => [b.status, b.message])).toEqual([
       ["up", "HTTP 200"],
@@ -80,6 +81,18 @@ describe("cron: every-minute probes", () => {
       ["up", "HTTP 200"],
     ]);
     expect(await beats("probe:api-health")).toHaveLength(3);
+    // Heartbeats at the check's start second.
+    expect((await beats("probe:web-app")).map((b) => b.ts)).toEqual([0, 1, 2].map((n) => minute(n) + 4_000));
+
+    const states = await db
+      .select()
+      .from(schema.monitorRunners)
+      .where(eq(schema.monitorRunners.site, "demo"))
+      .orderBy(asc(schema.monitorRunners.monitorId));
+    expect(states.map((r) => [r.monitorId, r.runner, r.lastTs, r.lastStatus, r.consecutiveDown])).toEqual([
+      ["api-health", "builtin", minute(2) + 4_000, "up", 0],
+      ["web-app", "builtin", minute(2) + 4_000, "up", 0],
+    ]);
 
     const services = await db
       .select({ id: schema.services.id, kind: schema.services.kind, target: schema.services.targetDisplay })
@@ -102,7 +115,7 @@ describe("cron: every-minute probes", () => {
     expect(report.sources.find((s: { id: string }) => s.id === "probe:cf")).toMatchObject({
       kind: "probe",
       expectedIntervalS: 60,
-      lastSeenAt: "2026-09-28T01:02:00Z",
+      lastSeenAt: "2026-09-28T01:02:04Z",
       freshness: "fresh",
     });
     setNow(new Date(minute(10)));

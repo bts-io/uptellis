@@ -1,11 +1,11 @@
-/** When a probe is due and how many run at once (pure, no Worker bindings). */
-import type { ProbeConfig } from "@/shared/config";
+/** When a monitor is due and how many checks run at once (pure, no Worker bindings). */
+import type { MonitorConfig } from "@/shared/monitors";
 
 const MINUTE_MS = 60_000;
 
-/** A probe runs on the minutes that are a multiple of its interval (every minute at 60 s). */
-export const isDue = (probe: ProbeConfig, scheduledMs: number) =>
-  Math.floor(scheduledMs / MINUTE_MS) % (probe.intervalS / 60) === 0;
+/** A monitor runs on the minutes that are a multiple of its interval (every minute at 60 s). */
+export const isDue = (monitor: Pick<MonitorConfig, "intervalS">, scheduledMs: number) =>
+  Math.floor(scheduledMs / MINUTE_MS) % (monitor.intervalS / 60) === 0;
 
 /** Maps `items` through `fn` with at most `limit` calls in flight, keeping the input order. */
 export async function mapBounded<T, R>(
