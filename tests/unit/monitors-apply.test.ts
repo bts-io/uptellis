@@ -278,3 +278,70 @@ describe("applyResults: maintenance and certificates", () => {
     expect(store.services.get("probe:cert")).toMatchObject({ kind: "tls", status: "degraded", cert });
   });
 });
+
+describe("applyResults: two runners reporting in the same second", () => {
+  const pair = { ...web, retries: 0, runners: ["office-1", "office-2"] };
+  const two = [...agents, { id: "office-2", name: "Office 2" }];
+  const office2 = { site: "demo", runner: "office-2", runtime: "cloudflare" } as const;
+
+  /** Holds each request's first state load until both requests have loaded (the race agents cause). */
+  const bothLoadFirst = (runners: ReturnType<typeof memoryMonitors>["runners"]) => {
+    const load = runners.load.bind(runners);
+    const held: (() => void)[] = [];
+    let armed = true;
+    runners.load = async (site, ids) => {
+      const snapshot = await load(site, ids);
+      if (armed) {
+        await new Promise<void>((release) => {
+          held.push(release);
+          if (held.length === 2) {
+            armed = false;
+            for (const r of held) r();
+          }
+        });
+      }
+      return snapshot;
+    };
+  };
+
+  it("converges on down with one incident when both confirm at once, and back on up", async () => {
+    const { backend, store, runners } = memoryMonitors(monitorSite({ monitors: [pair], agents: two }));
+    await applyResults(backend, office, [result("web", min(-3), "up")], new Date(min(-3)));
+    await applyResults(backend, office2, [result("web", min(-3), "up")], new Date(min(-3)));
+
+    bothLoadFirst(runners);
+    const [a, b] = await Promise.all([
+      applyResults(backend, office, [result("web", min(-2), "down")], new Date(min(-2) + 1_000)),
+      applyResults(backend, office2, [result("web", min(-2), "down")], new Date(min(-2) + 1_000)),
+    ]);
+    expect(store.services.get("probe:web")?.status).toBe("down");
+    expect([...a.incidents.opened, ...b.incidents.opened]).toHaveLength(1);
+
+    bothLoadFirst(runners);
+    const [c, d] = await Promise.all([
+      applyResults(backend, office, [result("web", min(-1), "up")], new Date(min(-1) + 1_000)),
+      applyResults(backend, office2, [result("web", min(-1), "up")], new Date(min(-1) + 1_000)),
+    ]);
+    expect(store.services.get("probe:web")?.status).toBe("up");
+    expect([...c.incidents.resolved, ...d.incidents.resolved]).toHaveLength(1);
+  });
+});
+
+describe("applyResults: the site's maintenance windows by default", () => {
+  it("confirms maintenance inside a configured window without an injected rule", async () => {
+    const window = {
+      kind: "once",
+      id: "upgrade",
+      title: "Upgrade",
+      services: ["probe:web"],
+      start: iso(min(-10)),
+      end: iso(min(10)),
+    };
+    const { backend, store } = memoryMonitors(
+      monitorSite({ monitors: [{ ...web, retries: 0 }], maintenance: [window] }),
+    );
+    const out = await applyResults(backend, cf, [result("web", min(-1), "down")], new Date(min(-1)));
+    expect(out.incidents.opened).toEqual([]);
+    expect(store.services.get("probe:web")?.status).toBe("maintenance");
+  });
+});

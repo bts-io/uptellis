@@ -14,7 +14,10 @@
  * 4. each touched monitor becomes its Service `probe:<id>` with the verdict as of `now`, and everything
  *    goes in as ONE `ModelDelta` through `applyIngestDelta`, so heartbeats, `down` incidents, source
  *    freshness, `latest:<site>` and cards move exactly as for any ingest;
- * 5. the runner states are written (one batch) after the delta.
+ * 5. the runner states are written (one batch) after the delta;
+ * 6. convergence: the other runners' states are read again and the touched monitors confirmed once more;
+ *    where the verdict differs from the one just written, one small correction delta (the Service and a
+ *    heartbeat at `now`) follows.
  *
  * Sources. A monitor's Service keeps the source of its FIRST runner (`runnerSourceId`), so its freshness on
  * the page follows that runner. The delta, though, is applied for the REPORTING runner's source: its
@@ -24,6 +27,15 @@
  * accepted, and the delta's `generatedAt` is `now`, never a result's `ts`, so a flushed agent buffer is
  * never "outdated" for its own source. A call whose results were all ignored still touches the source:
  * the runner is alive.
+ *
+ * Concurrency: agents align their checks to the minute, so two runners of one monitor usually report in
+ * the same second. Each request confirms with the other runner's state as it was loaded, which can be one
+ * result behind (both requests see "only me confirmed" and write `degraded` while both are down). Step 6
+ * fixes that within the request: runner states are saved one row per runner and D1 / SQLite apply writes
+ * in order, so whichever request saves second reads both states and writes the verdict they agree on.
+ *
+ * Maintenance defaults to the site's windows (`inMaintenance` from src/shared/monitors), so a service in a
+ * window confirms as `maintenance` and never opens an incident.
  *
  * Ordering and failure: the delta is written before the runner states. If the state write fails, a resend
  * applies the same results again from the same states (heartbeats and incidents are idempotent), so
@@ -49,6 +61,7 @@ import {
   type RunnerRuntime,
   type RunnerState,
   runnerSourceId,
+  inMaintenance as siteInMaintenance,
 } from "@/shared/monitors";
 import type { ModelDelta } from "@/shared/schemas";
 import { isoSeconds } from "../adapters/common";
@@ -62,7 +75,7 @@ export type InMaintenance = (config: SiteConfig, serviceId: string, nowMs: numbe
 export interface MonitorsBackend extends IngestBackend {
   configs: ConfigSource;
   runners: RunnerStateStore;
-  /** Defaults to never in maintenance. */
+  /** Defaults to the site's maintenance windows (`inMaintenance` from src/shared/monitors). */
   inMaintenance?: InMaintenance;
 }
 
@@ -93,7 +106,7 @@ export const runnerCanRun = (runner: string, type: MonitorConfig["type"], runtim
 const unsupportedOf = (m: MonitorConfig, runtime: ApplyContext["runtime"]) =>
   new Set(m.runners.filter((r) => !runnerCanRun(r, m.type, runtime)));
 
-const never: InMaintenance = () => false;
+const siteWindows: InMaintenance = (config, serviceId, nowMs) => siteInMaintenance(config, serviceId, nowMs);
 
 export async function applyResults(
   backend: MonitorsBackend,
@@ -123,7 +136,7 @@ export async function applyResults(
       }),
     ),
   );
-  const inMaintenance = backend.inMaintenance ?? never;
+  const inMaintenance = backend.inMaintenance ?? siteWindows;
 
   // 1. Eligible results, oldest first (stable for equal timestamps).
   const byId = new Map(monitorsOf(config).map((m) => [m.id, m]));
@@ -215,7 +228,45 @@ export async function applyResults(
   outcome.incidents = ingest.incidents;
 
   // 5. The runner states, after the delta (see the header).
-  if (savedStates.length > 0) await backend.runners.save(site, savedStates);
+  if (savedStates.length === 0) return outcome;
+  await backend.runners.save(site, savedStates);
+
+  // 6. Converge with runners that saved in between (see the header).
+  const fresh = await backend.runners.load(site, [...applied.keys()]);
+  const fixes: Service[] = [];
+  const beats: Heartbeat[] = [];
+  for (const [id, done] of applied) {
+    const monitor = byId.get(id)!;
+    const written = services.find((s) => s.id === monitorServiceId(id));
+    const verdict = confirmMonitor(monitor, fresh.get(id) ?? [], {
+      nowMs,
+      inMaintenance: inMaintenance(config, monitorServiceId(id), nowMs),
+      unsupported: unsupportedOf(monitor, runtime),
+    });
+    if (!written || verdict.status === written.status) continue;
+    fixes.push(serviceOf(site, monitor, verdict, done, previous.get(monitorServiceId(id)), runtime));
+    beats.push({
+      site,
+      serviceId: monitorServiceId(id),
+      ts: at,
+      status: verdict.status,
+      latencyMs: verdict.latencyMs,
+      message: verdict.message,
+      important: true,
+    });
+  }
+  if (fixes.length > 0) {
+    const again = await applyIngestDelta(
+      backend,
+      { site, source },
+      { ...delta, services: fixes, heartbeats: beats },
+      now,
+    );
+    outcome.incidents = {
+      opened: [...outcome.incidents.opened, ...again.incidents.opened],
+      resolved: [...outcome.incidents.resolved, ...again.incidents.resolved],
+    };
+  }
   return outcome;
 }
 
