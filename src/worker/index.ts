@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { secureHeaders } from "hono/secure-headers";
 import type { Platform } from "@/platform/types";
+import { AGENT_API_PREFIX } from "@/shared/monitors";
 import pkg from "../../package.json";
 import { type AppEnv, platformContext } from "./app-env";
 import { authError, withPrincipal } from "./auth/context";
@@ -12,17 +13,20 @@ import { KeyStore } from "./engine/key-store";
 import { KvModelCache } from "./engine/kv-cache";
 import type { EnvIngestKeys } from "./ingest/keys";
 import { ingestRoutes } from "./ingest/routes";
+import { SqlRunnerStates } from "./monitors/runner-state";
 import { staleNotifier } from "./notify";
 import { accountRoutes, userRoutes } from "./routes/accounts";
 import { adminRoutes } from "./routes/admin";
+import { agentRoutes } from "./routes/agent";
 import { readRoutes } from "./routes/read";
 
 /**
  * The Hono app: owns /api/* and /embed/*. src/worker/serve.ts dispatches to it with the request's
  * `AppBindings` (./app-env.ts), and SSR loaders call it in-process. Every `/api/*` request but health first
  * gets its principal (session, API key or anonymous); then ingest (`/api/ingest/*`, HMAC-signed or an API
- * key), Better Auth (`/api/auth/*`), the account routes (`/api/me`, `/api/setup`, `/api/invites/*`), read
- * (`/api/sites/*`, `page.view` per site) and admin (`/api/admin/*`, a permission per route).
+ * key), the agent API (`/api/agent/v1/*`, an API key with the `agent` scope), Better Auth (`/api/auth/*`),
+ * the account routes (`/api/me`, `/api/setup`, `/api/invites/*`), read (`/api/sites/*`, `page.view` per
+ * site) and admin (`/api/admin/*`, a permission per route).
  */
 const app = new Hono<AppEnv>();
 
@@ -46,8 +50,15 @@ export const appBackend = (platform: Platform, envKeys: EnvIngestKeys = {}) => {
     configs,
     keys: new KeyStore(platform, envKeys),
     notifier: staleNotifier(platform, configs),
+    runtime: platform.runtime,
   };
 };
+
+/** `appBackend` plus the monitors' runner states (the agent API). */
+export const monitorsBackend = (platform: Platform) => ({
+  ...appBackend(platform),
+  runners: new SqlRunnerStates(platform),
+});
 
 app.use("/api/*", withPrincipal);
 
@@ -57,6 +68,7 @@ app.on(["GET", "POST"], "/api/auth/*", (c) => {
 });
 
 app.route("/api/ingest", ingestRoutes(appBackend));
+app.route(AGENT_API_PREFIX, agentRoutes(monitorsBackend));
 app.route("/api", accountRoutes());
 app.route("/api/sites", readRoutes(appBackend));
 app.route("/api/admin", adminRoutes());
