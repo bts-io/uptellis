@@ -23,6 +23,7 @@ Uptellis collects health data from the tools you already run, keeps it in one no
 - **Other sources**: an Uptime Kuma collector, infrastructure facts pushed by a script on your hosts, and signed webhooks.
 - **Maintenance windows**: one-off or weekly, in any time zone; covered services show maintenance, open no incident and page nobody.
 - **Incidents**: a service going down opens an incident and recovery resolves it; a source that stops reporting is flagged stale. The page shows 90 days of history.
+- **Public status**: an allow-listed `summary.json` (CORS), shields-style badges for the site and each service, and a widget to embed with a script or an iframe; off until a site turns it on, and each part shared only when allowed ([public.md](docs/public.md)).
 - **Discord alerts**: a card when a service goes down and when it comes back, and when a source goes silent and recovers; each sent once, never inside a maintenance window.
 - **Admin with revisions**: edit the site as a form or raw JSON, see a diff before saving, restore any earlier revision, import and export the site config.
 - **Accounts and roles**: sign-in with email and password, optionally GitHub or Google (Better Auth); owner, admin and viewer roles; the first account becomes the owner and everyone else joins by a one-time invite. Each site is public or private.
@@ -89,7 +90,7 @@ Before every push:
 bun run verify   # Biome, typecheck, unit + integration + SSR tests, Docker adapter tests, collector tests
 ```
 
-More in [docs/](docs): [THEMES.md](docs/THEMES.md) (themes and the view model), [profiles.md](docs/profiles.md) (what facts mean: built-in profiles and writing one), [SECURITY.md](docs/SECURITY.md) (threat model, accounts, roles, API keys, rate limits) and [OPERATIONS.md](docs/OPERATIONS.md) (first run, OAuth, Cloudflare and Docker deploys, secrets, rotation, backups, restoring a revision).
+More in [docs/](docs): [THEMES.md](docs/THEMES.md) (themes and the view model), [profiles.md](docs/profiles.md) (what facts mean: built-in profiles and writing one), [public.md](docs/public.md) (summary, badges and the widget), [SECURITY.md](docs/SECURITY.md) (threat model, accounts, roles, API keys, rate limits) and [OPERATIONS.md](docs/OPERATIONS.md) (first run, OAuth, Cloudflare and Docker deploys, secrets, rotation, backups, restoring a revision).
 
 ## Branches and releases
 

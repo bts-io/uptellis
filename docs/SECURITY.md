@@ -146,10 +146,11 @@ The collector posts once a minute and backs off from 5 s after a failed send, th
 | `Referrer-Policy` | `no-referrer` |
 | `Permissions-Policy` | accelerometer, camera, geolocation, gyroscope, magnetometer, microphone, payment and usb all off |
 | `Cross-Origin-Opener-Policy` | `same-origin` |
-| `X-Frame-Options` | `DENY`; `SAMEORIGIN` on `/` |
-| `Content-Security-Policy` | `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'` (`'self'` on `/`) |
+| `X-Frame-Options` | `DENY`; `SAMEORIGIN` on `/`; absent on the widget page `/embed/<site>` |
+| `Content-Security-Policy` | `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'` (`'self'` on `/`, `*` on `/embed/<site>`) |
+| `Cross-Origin-Resource-Policy` | `cross-origin` on the public endpoints only (`/api/public/*`, `/badge/*`, `/embed/*`, `/embed.js`) |
 
-`/` may be framed by this origin because the admin theme previews load `/?theme=<id>` in iframes. `script-src` allows inline scripts because TanStack Start streams its hydration data as inline `<script>` tags; a per-request nonce needs the router to be created with `ssr: { nonce }`. Pages, gate responses and every API route but `/api/health` are also `Cache-Control: no-store`.
+`/` may be framed by this origin because the admin theme previews load `/?theme=<id>` in iframes. `script-src` allows inline scripts because TanStack Start streams its hydration data as inline `<script>` tags; a per-request nonce needs the router to be created with `ssr: { nonce }`. Pages, gate responses and every API route but `/api/health` and the public endpoints are also `Cache-Control: no-store`. The public endpoints ([public.md](public.md)) are made for other sites: the widget page may be framed by any origin, and summaries, badges and the script may be loaded cross-origin; they only ever show a published site's allow-listed summary, and are cached for 30 to 60 seconds (the script for an hour).
 
 ## Logs and errors
 
