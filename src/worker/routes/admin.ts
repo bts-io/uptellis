@@ -2,7 +2,7 @@
  * Admin API, mounted at `/api/admin` (contracts: src/shared/schemas/admin.ts, and src/shared/schemas/auth.ts
  * for API keys). Every route needs a signed-in user with the route's permission (src/shared/auth.ts):
  * `config.edit` for config, revisions, import and the notification test, `sources.manage` for sources, ingest
- * keys and API keys; 401 when signed out, 403 without the permission. Writes must be same-origin (403).
+ * keys and API keys, `instance.manage` for creating a site (`POST /sites`, the first-run setup uses it); 401 when signed out, 403 without the permission. Writes must be same-origin (403).
  *
  * Config routes read D1 directly (never a cache) so the editor always sees the stored version. Errors use
  * `ConfigErrorResponse`: 400 `invalid` with flattened `issues`, 404 `not_found`, 409 `conflict` with
@@ -21,6 +21,7 @@ import { sourceKindOf } from "@/shared/model";
 import {
   type ConfigErrorResponse,
   type ConfigIssue,
+  CreateSiteRequest,
   CreateSourceRequest,
   type ImportResult,
   type IssuedKey,
@@ -118,6 +119,7 @@ export function adminRoutes() {
     await next();
     c.res.headers.set("cache-control", "no-store");
   });
+  app.use("/sites", requirePermission("instance.manage"));
   for (const path of ["/sites/:site/config", "/sites/:site/config/*", "/notify/*"]) {
     app.use(path, requirePermission("config.edit"));
   }
@@ -129,6 +131,17 @@ export function adminRoutes() {
   ]) {
     app.use(path, requirePermission("sources.manage"));
   }
+
+  app.post("/sites", async (c) => {
+    const read = await readJson(c);
+    if (!read.ok) return fail(c, 400, "invalid", read.message);
+    const req = CreateSiteRequest.safeParse(read.body);
+    if (!req.success) return fail(c, 400, "invalid", "Config is invalid", { issues: flatten(req.error) });
+    if (!(await configs(c.env).create(req.data.config))) {
+      return fail(c, 409, "conflict", `The site ${req.data.config.slug} exists already`);
+    }
+    return c.json({ version: 1, diff: [] } satisfies SaveConfigResponse, 201);
+  });
 
   app.get("/sites/:site/config", async (c) => {
     const state = await configs(c.env).load(c.req.param("site"));

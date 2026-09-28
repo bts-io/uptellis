@@ -15,6 +15,8 @@ import {
   useShellKeys,
 } from "@/client/shell";
 import { registeredThemes } from "@/client/themes";
+import { PERMISSIONS } from "@/shared/auth";
+import type { Me } from "@/shared/schemas/auth";
 import { buildSiteView } from "@/shared/view";
 import { fixtureInput } from "../fixtures/view";
 
@@ -22,6 +24,24 @@ import { fixtureInput } from "../fixtures/view";
 
 const view = buildSiteView(fixtureInput("default"));
 const themes = registeredThemes();
+
+const OWNER_EMAIL = ["owner", "example.com"].join("@");
+const providers = { emailPassword: true, github: false, google: false } as const;
+const OWNER: Me = {
+  user: {
+    id: "u1",
+    name: "Pat Owner",
+    email: OWNER_EMAIL,
+    image: null,
+    role: "owner",
+    createdAt: "2026-09-01T00:00:00Z",
+  },
+  permissions: [...PERMISSIONS],
+  providers,
+  setupNeeded: false,
+};
+const VIEWER: Me = { ...OWNER, user: { ...OWNER.user!, role: "viewer" }, permissions: ["page.view"] };
+const ANONYMOUS: Me = { user: null, permissions: [], providers, setupNeeded: false };
 
 let root: Root | null = null;
 let host: HTMLElement;
@@ -55,7 +75,7 @@ const key = (target: EventTarget, init: KeyboardEventInit) =>
 
 describe("palette items", () => {
   it("lists every service to jump to and to copy, in page order", () => {
-    const items = paletteItems({ view, themes, siteTheme: undefined, admin: false });
+    const items = paletteItems({ view, themes, siteTheme: undefined, me: null });
     const services = pageServices(view);
     expect(services.length).toBeGreaterThan(0);
     expect(items.filter((i) => i.group === "service").map((i) => i.label)).toEqual(
@@ -74,7 +94,7 @@ describe("palette items", () => {
   it("offers every other registered theme, and the way back during a preview", () => {
     const others = themes.filter((t) => t.module.id !== view.theme).map((t) => t.module.id);
     expect(others.length).toBeGreaterThan(0);
-    const plain = paletteItems({ view, themes, siteTheme: undefined, admin: false });
+    const plain = paletteItems({ view, themes, siteTheme: undefined, me: null });
     expect(plain.filter((i) => i.group === "theme").map((i) => i.action)).toEqual(
       others.map((theme) => ({ kind: "theme", theme })),
     );
@@ -82,7 +102,7 @@ describe("palette items", () => {
       view: { ...view, theme: others[0]! },
       themes,
       siteTheme: view.theme,
-      admin: true,
+      me: OWNER,
     });
     const entries = previewing.filter((i) => i.group === "theme");
     expect(entries.map((i) => i.id)).not.toContain(`theme:${others[0]}`);
@@ -90,11 +110,30 @@ describe("palette items", () => {
       label: "Back to sys.status",
       hint: "site theme",
     });
-    expect(previewing.at(-1)).toMatchObject({ group: "admin", action: { kind: "admin" } });
+    expect(previewing.find((i) => i.group === "admin")).toMatchObject({ action: { kind: "admin" } });
+  });
+
+  it("offers admin by permission, account and sign-out when signed in, sign-in when not", () => {
+    const entries = (me: Me | null) =>
+      paletteItems({ view, themes, siteTheme: undefined, me })
+        .filter((i) => i.group === "admin" || i.group === "account")
+        .map((i) => [i.label, i.hint]);
+    expect(entries(null)).toEqual([]);
+    expect(entries(OWNER)).toEqual([
+      ["Open admin", null],
+      ["Account", "Pat Owner"],
+      ["Sign out", OWNER_EMAIL],
+    ]);
+    expect(entries(VIEWER)).toEqual([
+      ["Account", "Pat Owner"],
+      ["Sign out", OWNER_EMAIL],
+    ]);
+    expect(entries(ANONYMOUS)).toEqual([["Sign in", null]]);
+    expect(entries({ ...ANONYMOUS, setupNeeded: true })).toEqual([]);
   });
 
   it("filters on every word, case-insensitively, across label, hint and group", () => {
-    const items = paletteItems({ view, themes, siteTheme: undefined, admin: true });
+    const items = paletteItems({ view, themes, siteTheme: undefined, me: OWNER });
     const name = pageServices(view)[0]!.name;
     const word = name.split(/\s+/)[0]!.toUpperCase();
     expect(filterItems(items, "").length).toBe(items.length);
@@ -110,7 +149,7 @@ describe("palette items", () => {
 });
 
 describe("command palette", () => {
-  const items = paletteItems({ view, themes, siteTheme: undefined, admin: true });
+  const items = paletteItems({ view, themes, siteTheme: undefined, me: OWNER });
   const options = () => [...document.querySelectorAll<HTMLElement>('[role="option"]')];
 
   it("renders nothing while closed", () => {
@@ -205,6 +244,7 @@ describe("palette actions", () => {
     preview: vi.fn<(theme: string | null) => void>(),
     say: vi.fn<(t: string) => void>(),
     reducedMotion: true,
+    signOut: vi.fn<() => void>(),
   });
 
   it("scrolls to and focuses the service's card once the dialog has let go of focus", async () => {
@@ -239,5 +279,17 @@ describe("palette actions", () => {
     expect(d.preview.mock.calls).toEqual([["c-session"], [null]]);
     runAction({ kind: "admin" }, d);
     expect(d.go).toHaveBeenCalledWith("/admin");
+  });
+
+  it("opens the account page, signs in back to this page, and signs out", () => {
+    const d = deps();
+    runAction({ kind: "account" }, d);
+    runAction({ kind: "signIn" }, d);
+    expect(d.go.mock.calls).toEqual([
+      ["/account"],
+      [`/sign-in?next=${encodeURIComponent(location.pathname)}`],
+    ]);
+    runAction({ kind: "signOut" }, d);
+    expect(d.signOut).toHaveBeenCalledTimes(1);
   });
 });

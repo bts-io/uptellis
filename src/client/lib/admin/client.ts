@@ -30,6 +30,10 @@ export const saveConfig = async (site: string, config: unknown, baseVersion: num
     }),
   );
 
+/** Creates a site with `config` as its version 1 (409 when the slug exists). */
+export const createSite = async (config: unknown) =>
+  SaveConfigResponse.parse(await api("/api/admin/sites", { method: "POST", json: { config } }));
+
 /** The `sites/<slug>.json` download (a plain link: the browser saves the attachment). */
 export const exportHref = (site: string) => `${base(site)}/config/export`;
 

@@ -83,7 +83,11 @@ export type SetupStatus = z.infer<typeof SetupStatus>;
 export const SetupRequest = z.object({ name: DisplayName, email: Email, password: Password });
 export type SetupRequest = z.infer<typeof SetupRequest>;
 
-export const UserList = z.object({ users: z.array(UserSummary) });
+/** A user in the admin list: when they last signed in (their newest session on record; null for none). */
+export const UserListEntry = UserSummary.extend({ lastSignInAt: Iso.nullable() });
+export type UserListEntry = z.infer<typeof UserListEntry>;
+
+export const UserList = z.object({ users: z.array(UserListEntry) });
 export type UserList = z.infer<typeof UserList>;
 
 export const ChangeRoleRequest = z.object({ role: Role });

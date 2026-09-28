@@ -225,7 +225,7 @@ describe("sources and the one-time secret", () => {
     });
     const dialog = document.querySelector('[role="dialog"]')!;
     expect(dialog.textContent).toContain("This secret is shown once");
-    expect((document.getElementById("issued-secret") as HTMLInputElement).value).toBe(SECRET);
+    expect((field("Secret") as HTMLInputElement).value).toBe(SECRET);
 
     act(() => button("Copy secret").click());
     await settle();
@@ -258,6 +258,6 @@ describe("sources and the one-time secret", () => {
       path: "/api/admin/sites/demo/sources",
       body: { keyId: "edge-2", source: "kuma:edge-2", kind: "kuma", expectedIntervalS: 60 },
     });
-    expect((document.getElementById("issued-secret") as HTMLInputElement).value).toBe(SECRET);
+    expect((field("Secret") as HTMLInputElement).value).toBe(SECRET);
   });
 });

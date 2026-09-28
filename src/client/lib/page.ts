@@ -3,10 +3,11 @@
  * from the API. `loadSitePage` is a server function, so the host lookup always runs in the Worker (with
  * `SITE_DEFAULT` from the request context) and the loader behaves the same during SSR and on a client refresh.
  */
-import { notFound } from "@tanstack/react-router";
+import { notFound, redirect } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestUrl } from "@tanstack/react-start/server";
 import type { ThemeId } from "@/shared/config";
+import { AUTH_PAGES, Me } from "@/shared/schemas/auth";
 import type { SiteView, VerdictView } from "@/shared/view";
 import { themeFor } from "../themes";
 import { ApiError, api } from "./api";
@@ -26,13 +27,25 @@ export interface PageData {
  */
 type RequestContext = { siteDefault?: string } | undefined;
 
+/**
+ * What a site page the read API would not show becomes: a fresh instance goes to setup, a signed-out
+ * visitor to sign-in (the site may be private), a signed-in user without access sees the 404 page, which
+ * says nothing about whether the site exists.
+ */
+async function hiddenSite() {
+  const me = Me.parse(await api("/api/me"));
+  if (me.setupNeeded) return redirect({ href: AUTH_PAGES.setup });
+  if (!me.user) return redirect({ href: `${AUTH_PAGES.signIn}?next=%2F` });
+  return notFound();
+}
+
 export const loadSitePage = createServerFn({ method: "GET" }).handler(
   async ({ context }): Promise<PageData> => {
     const site = await siteForHost(getRequestUrl().hostname, (context as RequestContext)?.siteDefault);
     if (!site) throw notFound();
     const [view, commit] = await Promise.all([
-      api<SiteView>(`/api/sites/${encodeURIComponent(site)}/view`).catch((err: unknown) => {
-        if (err instanceof ApiError && err.status === 404) throw notFound();
+      api<SiteView>(`/api/sites/${encodeURIComponent(site)}/view`).catch(async (err: unknown) => {
+        if (err instanceof ApiError && err.status === 404) throw await hiddenSite();
         throw err;
       }),
       api<{ commit?: string }>("/api/health").then(

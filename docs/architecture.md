@@ -153,6 +153,7 @@ flowchart LR
 
 | Route | What it does |
 | --- | --- |
+| `POST /sites` | create a site with its version 1 (owner only; first-run setup uses it) |
 | `GET`, `PUT /sites/:site/config` | read the current config, save a new revision |
 | `GET /sites/:site/config/export`, `POST .../import` | export, import (with a dry run) |
 | `GET .../revisions`, `POST .../revisions/:version/restore` | list revisions, restore one |

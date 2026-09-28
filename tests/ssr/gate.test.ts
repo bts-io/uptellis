@@ -109,7 +109,7 @@ describe("built worker", () => {
     expect((await send("/", { headers: { cookie: viewer } })).status).toBe(200);
   });
 
-  it("answers 404 for a private site's page and read API unless signed in", async () => {
+  it("sends a signed-out visitor of a private site to sign-in, and its read API answers 404", async () => {
     const state = (await (
       await send("/api/admin/sites/demo/config", { headers: { cookie: owner } })
     ).json()) as {
@@ -125,7 +125,8 @@ describe("built worker", () => {
     expect(saved.status).toBe(200);
 
     const page = await send("/");
-    expect(page.status).toBe(404);
+    expect(page.status).toBe(307);
+    expect(page.headers.get("location")).toBe("/sign-in?next=%2F");
     expect(await page.text()).not.toContain("DEMO");
     for (const path of ["/api/sites/demo/view", "/api/sites/demo/model", "/api/sites/demo/sources"]) {
       const res = await send(path);

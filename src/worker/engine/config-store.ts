@@ -171,6 +171,30 @@ export class D1ConfigStore implements ConfigSource {
     return { ok: true, version, diff };
   }
 
+  /**
+   * Creates a site that neither D1 nor the committed files know, with `config` as its version 1. False when
+   * the slug is taken (a committed site, a saved one, or a concurrent create that won the key).
+   */
+  async create(config: SiteConfig): Promise<boolean> {
+    const slug = config.slug;
+    if (seedConfig(slug) || (await this.latestRow(slug))) return false;
+    const createdAt = Date.now();
+    const [inserted] = await this.db.batch([
+      this.db
+        .insert(siteConfigs)
+        .values({ site: slug, version: 1, body: config, savedBy: "admin", createdAt })
+        .onConflictDoNothing()
+        .returning({ version: siteConfigs.version }),
+      this.upsertSite(config, 1),
+    ]);
+    if (inserted.length === 0) return false;
+    const state: ConfigState = { config, version: 1, savedAt: toIso(createdAt), savedBy: "admin" };
+    memory.set(slug, { state, until: Date.now() + CONFIG_MEMORY_TTL_MS });
+    knownSlugs = null;
+    await this.putKv(slug, state);
+    return true;
+  }
+
   /** Every revision, newest first, each with its number of changed fields against the one before. */
   async revisions(slug: string): Promise<RevisionList | null> {
     const cur = await this.load(slug);
