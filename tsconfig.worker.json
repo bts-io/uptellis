@@ -4,6 +4,8 @@
     "lib": ["ES2023"],
     "types": ["./worker-configuration.d.ts", "@cloudflare/vitest-pool-workers/types"]
   },
+  // The Docker adapter runs on Bun: tsconfig.docker.json checks it.
+  "exclude": ["src/platform/docker"],
   "include": [
     "src/worker",
     "src/shared",
