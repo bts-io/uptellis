@@ -7,7 +7,7 @@ import {
   type TopologyView,
 } from "@/shared/view";
 import { Block, DataAge } from "./Block";
-import { cx, DASH, LEVEL_TEXT, probeStale } from "./format";
+import { cx, DASH, isMeasure, LEVEL_TEXT, levelState, probeStale } from "./format";
 import { KeyValues } from "./KeyValues";
 
 type Node = TopologyView["nodes"][number];
@@ -90,7 +90,8 @@ function NodeBox({ node, stale }: { node: Node; stale: boolean }) {
   const serving = node.note === "serving";
   const role = node.roles[0] ?? "node";
   const mark = role === "primary" ? "◆" : role === "standby" ? "◇" : "";
-  // The profiles' rows for this node, `forgejo serving · postgres primary · disk 16%`; failures in colour.
+  // The profiles' rows for this node, `forgejo serving · postgres primary · wal lag 0 s`: failures in their
+  // colour, a fine measure (`lag 0 s`, `16%`) in green as the original's `HTTP 200`, words in the muted text.
   const detail = node.details.length
     ? node.details.map((d, i) => (
         <span key={d.label}>
@@ -101,7 +102,12 @@ function NodeBox({ node, stale }: { node: Node; stale: boolean }) {
               !stale && d.state === "degraded" && "text-degraded",
             )}
           >
-            {d.label} {d.value}
+            {d.label}{" "}
+            {!stale && d.state === "up" && isMeasure(d.value) ? (
+              <span className="text-up">{d.value}</span>
+            ) : (
+              d.value
+            )}
           </span>
         </span>
       ))
@@ -174,7 +180,8 @@ function EdgeLine({ edge, stale }: { edge: Edge; stale: boolean }) {
 }
 
 function FenceStamp({ fence, stale }: { fence: NonNullable<TopologyView["fence"]>; stale: boolean }) {
-  const detail = fence.reason;
+  // `peer is a standby · tl 1/1`: the reason, then the profile's stamp detail (the timelines compared).
+  const detail = [fence.reason, fence.detail].filter(Boolean).join(" · ");
   const tone = stale
     ? "border-muted/45 text-muted"
     : fence.level === "crit"
@@ -198,7 +205,10 @@ function FenceStamp({ fence, stale }: { fence: NonNullable<TopologyView["fence"]
   );
 }
 
-/** One line per fact group: a gauge when a row is a percentage, then the profile's summary (else its rows). */
+/**
+ * One line per fact group: a gauge when a row is a percentage, then the profile's summary in coloured parts
+ * (else its rows); a first part without a colour of its own (`16.0.5`, `2 of 2 online`) takes the group's dot.
+ */
 function InfraFacts({ groups, stale }: { groups: FactGroupView[]; stale: boolean }) {
   return (
     <KeyValues
@@ -206,17 +216,20 @@ function InfraFacts({ groups, stale }: { groups: FactGroupView[]; stale: boolean
       items={groups.map((g) => {
         const gauge = g.rows.find((r) => r.percent !== null);
         const tone = !stale && (g.level === "warn" || g.level === "crit") ? LEVEL_TEXT[g.level] : undefined;
+        const [lead] = g.summaryParts;
         return {
           label: g.title.toLowerCase(),
           value: (
             <span className="[&>*]:mr-2 md:inline-flex md:items-center md:gap-2 md:[&>*]:mr-0">
-              {gauge?.percent != null && (
+              {gauge?.percent != null ? (
                 <Gauge
                   value={gauge.percent}
                   cells={18}
                   level={stale ? "info" : (gauge.level ?? undefined)}
                   label={gauge.label}
                 />
+              ) : (
+                lead?.level === null && <StateDot state={stale ? "stale" : levelState(g.level)} />
               )}
               {g.summaryParts.length ? (
                 <SummaryParts parts={g.summaryParts} stale={stale} className={tone} />

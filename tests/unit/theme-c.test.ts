@@ -90,6 +90,34 @@ describe("theme C page", () => {
     expect(html).not.toContain("No open incidents");
   });
 
+  it("stamps the fence with the timelines and colours a fine measure on the pair", () => {
+    const html = render(view("default"));
+    expect(html).toContain("peer is a standby · tl 1/1</span>");
+    expect(html).toContain('wal <span class="text-up">lag 0 s</span>');
+    expect(html).toContain("postgres replica");
+  });
+
+  it("shows a status highlight with its dot and colour, and dots a plain infra line", () => {
+    const html = render(view("default"));
+    expect(html).toMatch(
+      /watchdog<\/dt><dd[^>]*><span data-status="ok" class="[^"]*"><span[^>]*data-state="up"[^>]*><\/span><span class="text-up">reachable \(HTTP 200\)</,
+    );
+    const infra = html.match(/<section id="infra"[\s\S]*?<\/section>/)?.[0] ?? "";
+    const line = (label: string) => {
+      const at = infra.indexOf(`>${label}</dt>`);
+      return infra.slice(at, infra.indexOf("</dd>", at));
+    };
+    expect(line("runners")).toMatch(/<dd[^>]*><span[^>]*><span[^>]*data-state="up"/);
+    expect(line("forgejo")).toMatch(/<dd[^>]*><span[^>]*><span[^>]*data-state="up"/);
+    expect(line("replication")).not.toMatch(/data-state=/);
+    expect(line("disk")).toContain('role="meter"');
+    expect(line("disk")).not.toMatch(/data-state=/);
+    const stale = render(view("stale"));
+    expect(stale).toMatch(
+      /watchdog<\/dt><dd[^>]*><span data-status="ok"[^>]*><span[^>]*data-state="stale"[^>]*><\/span><span>reachable/,
+    );
+  });
+
   it("survives a site without facts, topology or services", () => {
     const v: SiteView = {
       ...view("default"),

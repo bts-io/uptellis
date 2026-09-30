@@ -115,3 +115,6 @@ export function activityRows(view: SiteView, rows: number) {
     .slice(0, rows);
   return { events, checks };
 }
+
+/** A value that carries a figure (`lag 0 s`, `16%`) rather than only words (`serving`, `replica`). */
+export const isMeasure = (value: string) => /\d/.test(value);

@@ -2,7 +2,18 @@ import type { ReactNode } from "react";
 import { StateDot } from "@/client/kit";
 import { highlightSlots, type SiteView } from "@/shared/view";
 import { Block, DataAge, kumaSeenAt } from "./Block";
-import { allServices, cx, DASH, failing, hhmmss, isStale, LEVEL_TEXT, pct, splitUnit } from "./format";
+import {
+  allServices,
+  cx,
+  DASH,
+  failing,
+  hhmmss,
+  isStale,
+  LEVEL_TEXT,
+  levelState,
+  pct,
+  splitUnit,
+} from "./format";
 
 /** One sentence that says whether anything needs you, then the stat strip. */
 export function SummaryBlock({ view }: { view: SiteView }) {
@@ -45,7 +56,18 @@ export function SummaryBlock({ view }: { view: SiteView }) {
         </Stat>
         <Stat label="maintenance">{s.maintenance}</Stat>
         {highlightSlots(view.highlights).map((slot) => {
-          const [value, unit] = splitUnit(slot.rows[0].display);
+          const [row] = slot.rows;
+          // A lone value with a level and no badge or detail reads as a status: its dot, in its colour.
+          if (row.level !== null && row.level !== "info" && !slot.note && slot.rows.length === 1)
+            return (
+              <Stat key={slot.label} label={slot.label}>
+                <span data-status={row.level} className="inline-flex items-center gap-2">
+                  <StateDot state={stale ? "stale" : levelState(row.level)} />
+                  <span className={stale ? undefined : LEVEL_TEXT[row.level]}>{slot.texts[0]}</span>
+                </span>
+              </Stat>
+            );
+          const [value, unit] = splitUnit(row.display);
           return (
             <Stat key={slot.label} label={slot.label}>
               {value}
