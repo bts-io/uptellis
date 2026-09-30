@@ -1,4 +1,87 @@
-/* Editorial theme tokens (Phase 7b), scoped to [data-theme="e"]. */
+/*
+ * Theme E "Editorial" (mockups/editorial): a status report set like a short article. Serif for reading,
+ * sans for data, colour only for state. Semantic tokens override the kit defaults under [data-theme="e"]
+ * only; `--e-*` tokens are private to this theme's components.
+ */
+
+/* Self-hosted variable fonts (public/fonts, SIL OFL 1.1). */
+@font-face {
+  font-family: "Fraunces";
+  src: url("/fonts/Fraunces-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Source Serif 4";
+  src: url("/fonts/SourceSerif4-Variable.woff2") format("woff2");
+  font-weight: 200 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Source Serif 4";
+  src: url("/fonts/SourceSerif4-Italic.woff2") format("woff2");
+  font-weight: 200 900;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/Inter-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 [data-theme="e"] {
   --color-base: #fbf8f3;
+  --color-panel: #f3eee5;
+  --color-line: #d9d1c4;
+  --color-ink: #1c1a17;
+  --color-muted: #676055;
+  --color-accent: #1c1a17;
+  /* State text colours, dark enough for body text on paper (the bars use the lighter `--e-tick-*`). */
+  --color-up: #1d6b43;
+  --color-degraded: #95560a;
+  --color-down: #b0261d;
+  --color-maint: #2c5a9e;
+  --color-stale: #6d665b;
+  --gradient-brand: linear-gradient(90deg, #1c1a17 0%, #4a453e 100%);
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --color-faint: #a39a8c;
+  --color-raised: #fffdf9;
+  --color-hair: #d9d1c4;
+  --color-frame: #1c1a17;
+
+  --e-ink-2: #4a453e;
+  --e-rule: #d9d1c4;
+  --e-rule-strong: #1c1a17;
+  --e-tick-up: #3f9a6b;
+  --e-tick-degraded: #d99a2b;
+  --e-tick-down: #c8372d;
+  --e-tick-maintenance: #4f7fc4;
+  --e-tick-none: #e4ddd1;
+  --e-stale-a: #fbf1df;
+  --e-stale-b: #f7e8cc;
+  --e-serif-display: "Fraunces", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --e-serif: "Source Serif 4", "Iowan Old Style", Georgia, serif;
+
+  color-scheme: light;
+}
+
+/* The headline and standfirst rise into place once (skipped under reduced motion). */
+@keyframes e-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
