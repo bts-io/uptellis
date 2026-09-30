@@ -14,6 +14,7 @@ import {
 import type { TopologyTileProps } from "@/client/kit/props";
 import {
   type DisplayState,
+  edgeState,
   type FactGroupView,
   highlightedGroups,
   type SiteView,
@@ -31,10 +32,11 @@ export function InfraPanel({ view }: { view: SiteView }) {
   // Infra is only as stale as its own probe: a silent Kuma collector does not age fresh facts.
   const stale = probeStale(view);
   const replication = view.topology?.edges.find((e) => e.kind === "replication");
+  // Only a replication the data says stopped fails the panel; one nothing reports on does not.
   const failing =
     groups.some((g) => g.level === "crit") ||
     view.topology?.fence?.level === "crit" ||
-    (replication !== undefined && !replication.live);
+    (replication !== undefined && edgeState(replication, view.topology!.nodes) === "stopped");
 
   return (
     <Panel

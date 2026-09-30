@@ -1,6 +1,8 @@
 import { EmptyState, Gauge, StateDot, SummaryParts } from "@/client/kit";
 import {
   type DisplayState,
+  type EdgeState,
+  edgeState,
   type FactGroupView,
   highlightedGroups,
   type SiteView,
@@ -27,10 +29,12 @@ export function TopologyBlock({ view }: { view: SiteView }) {
         .map((id) => topo!.nodes.find((n) => n.id === id))
         .filter((n) => n !== undefined)
     : [];
+  const pairState = pairEdge && edgeState(pairEdge, topo!.nodes);
+  // Only a replication the data says stopped fails the block; one nothing reports on does not.
   const failing =
     view.factGroups.some((g) => g.level === "crit") ||
     topo?.fence?.level === "crit" ||
-    (pairEdge !== undefined && !pairEdge.live);
+    pairState === "stopped";
   const shown = (state: DisplayState): DisplayState => (stale ? "stale" : state);
   const pairDrawn = pairEdge !== undefined && pair.length === 2;
   // The summary block shows the highlighted groups, and the drawn pair the groups it carries (replication
@@ -57,7 +61,7 @@ export function TopologyBlock({ view }: { view: SiteView }) {
         <div className="flex flex-col items-stretch min-[981px]:flex-row min-[981px]:items-center">
           <div className="flex flex-col items-stretch md:flex-row md:items-center">
             <NodeBox node={pair[0]!} stale={stale} />
-            <EdgeLine edge={pairEdge} stale={stale} />
+            <EdgeLine edge={pairEdge} state={pairState!} stale={stale} />
             <NodeBox node={pair[1]!} stale={stale} />
           </div>
           {topo?.fence && <FenceStamp fence={topo.fence} stale={stale} />}
@@ -142,16 +146,29 @@ function NodeBox({ node, stale }: { node: Node; stale: boolean }) {
   );
 }
 
-/** The replication link: a dashed line that flows while live (never stale, never under reduced motion), else broken. */
-function EdgeLine({ edge, stale }: { edge: Edge; stale: boolean }) {
-  const tone = stale ? "text-faint" : edge.live ? "text-up" : "text-down";
-  const label = edge.live
-    ? [edge.label ?? "streaming", edge.detail].filter(Boolean).join(" · ")
-    : ["stopped", edge.detail].filter(Boolean).join(" · ");
+/**
+ * The replication link: a dashed line that flows while live (never stale, never under reduced motion), broken
+ * when stopped, a still muted dotted one reading "no data" when nothing reports on it.
+ */
+function EdgeLine({ edge, state, stale }: { edge: Edge; state: EdgeState; stale: boolean }) {
+  const tone = stale
+    ? "text-faint"
+    : state === "unknown"
+      ? "text-muted"
+      : state === "live"
+        ? "text-up"
+        : "text-down";
+  const label =
+    state === "live"
+      ? [edge.label ?? "streaming", edge.detail].filter(Boolean).join(" · ")
+      : state === "stopped"
+        ? ["stopped", edge.detail].filter(Boolean).join(" · ")
+        : "no data";
   return (
     <div
       data-edge={`${edge.from}-${edge.to}`}
       data-live={edge.live}
+      data-state={state}
       className={cx(
         "flex min-w-0 items-center justify-center gap-3 py-2.5 md:w-[300px] md:max-w-[300px] md:min-w-[150px] md:flex-col md:gap-1.5 md:px-2.5 md:py-0",
         tone,
@@ -159,14 +176,14 @@ function EdgeLine({ edge, stale }: { edge: Edge; stale: boolean }) {
     >
       <span className="font-mono text-[11.5px] leading-none whitespace-nowrap max-md:order-2">{label}</span>
       <span aria-hidden="true" className="relative block h-[52px] w-0.5 md:h-0.5 md:w-full">
-        {edge.live ? (
+        {state === "live" ? (
           <span
             className={cx(
               "absolute inset-0 bg-[repeating-linear-gradient(180deg,currentColor_0_7px,transparent_7px_12px)] bg-size-[2px_12px] md:bg-[repeating-linear-gradient(90deg,currentColor_0_7px,transparent_7px_12px)] md:bg-size-[12px_2px]",
               !stale && "motion-safe:animate-kit-flow-y md:motion-safe:animate-kit-flow-x",
             )}
           />
-        ) : (
+        ) : state === "stopped" ? (
           <>
             <span className="absolute inset-x-0 top-0 h-[40%] bg-current md:inset-y-0 md:right-auto md:left-0 md:h-full md:w-[41%]" />
             <span className="absolute inset-x-0 bottom-0 h-[40%] bg-[repeating-linear-gradient(180deg,currentColor_0_3px,transparent_3px_8px)] opacity-50 md:inset-y-0 md:right-0 md:left-auto md:h-full md:w-[41%] md:bg-[repeating-linear-gradient(90deg,currentColor_0_3px,transparent_3px_8px)]" />
@@ -174,6 +191,8 @@ function EdgeLine({ edge, stale }: { edge: Edge; stale: boolean }) {
               ×
             </span>
           </>
+        ) : (
+          <span className="absolute inset-0 bg-[repeating-linear-gradient(180deg,currentColor_0_3px,transparent_3px_8px)] opacity-60 md:bg-[repeating-linear-gradient(90deg,currentColor_0_3px,transparent_3px_8px)]" />
         )}
         <span className="absolute -bottom-1 -left-[4px] border-x-[5px] border-t-[8px] border-x-transparent border-t-current md:top-[-4px] md:-right-1 md:bottom-auto md:left-auto md:border-y-[5px] md:border-r-0 md:border-l-[8px] md:border-y-transparent md:border-l-current" />
       </span>

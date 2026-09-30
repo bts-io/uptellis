@@ -1,6 +1,13 @@
 import type { ReactNode } from "react";
 import { EmptyState, Icon, StateDot } from "@/client/kit";
-import type { DisplayState, ServiceView, SiteView, TopologyView } from "@/shared/view";
+import {
+  type DisplayState,
+  type EdgeState,
+  edgeState,
+  type ServiceView,
+  type SiteView,
+  type TopologyView,
+} from "@/shared/view";
 import {
   allServices,
   cx,
@@ -20,14 +27,15 @@ type Edge = TopologyView["edges"][number];
 
 /**
  * The failover pair on a dot grid: the public endpoint and the watchdog above, the two nodes joined by the
- * replication link (flowing only while live, broken when not), the fence stamp, a legend and a row of facts.
+ * replication link (flowing only while live, broken when stopped, muted when nothing reports on it), the fence
+ * stamp, a legend and a row of facts.
  * Everything here ages with the facts probe; the per-node service rows age with their Kuma monitors.
  */
 export function Topology({ view }: { view: SiteView }) {
   const topo = view.topology;
   const stale = probeStale(view);
   const edge = topo?.edges.find((e) => e.kind === "replication");
-  const live = edge?.live ?? false;
+  const state = edge && topo ? edgeState(edge, topo.nodes) : undefined;
 
   return (
     <Tile id="infra" aria-label="Topology" stale={stale} className="flex flex-1 flex-col">
@@ -37,12 +45,14 @@ export function Topology({ view }: { view: SiteView }) {
           <span className="hidden text-faint sm:inline">/</span>
           <span className="hidden truncate text-[13px] text-muted sm:inline">{pairCaption(topo)}</span>
         </div>
-        {edge && (live ? <Chip level="ok">streaming</Chip> : <Chip level="crit">replication stopped</Chip>)}
+        {state === "live" && <Chip level="ok">streaming</Chip>}
+        {state === "stopped" && <Chip level="crit">replication stopped</Chip>}
+        {state === "unknown" && <Chip>no data</Chip>}
       </TileHead>
 
       <div className="m-3 flex flex-1 flex-col justify-center rounded-[10px] border border-(--b-hair2) bg-(--b-canvas) bg-[radial-gradient(var(--b-dotgrid)_1px,transparent_1.2px)] bg-size-[16px_16px] bg-position-[8px_8px] p-[18px] pb-4 max-md:p-3.5">
         {topo && edge && drawsPair(topo) ? (
-          <Pair view={view} topo={topo} edge={edge} stale={stale} />
+          <Pair view={view} topo={topo} edge={edge} state={state!} stale={stale} />
         ) : (
           <EmptyState
             title="No infrastructure facts yet"
@@ -51,7 +61,7 @@ export function Topology({ view }: { view: SiteView }) {
         )}
       </div>
 
-      <FactsRow topo={topo} edge={edge} />
+      <FactsRow topo={topo} edge={edge} state={state} />
     </Tile>
   );
 }
@@ -60,11 +70,13 @@ function Pair({
   view,
   topo,
   edge,
+  state,
   stale,
 }: {
   view: SiteView;
   topo: TopologyView;
   edge: Edge;
+  state: EdgeState;
   stale: boolean;
 }) {
   const byId = (id: string) => topo.nodes.find((n) => n.id === id);
@@ -120,7 +132,7 @@ function Pair({
 
       <div className="grid grid-cols-1 items-stretch md:grid-cols-[minmax(0,1fr)_104px_minmax(0,1fr)] md:items-center">
         <NodeCard view={view} node={primary} stale={stale} />
-        <Link edge={edge} stale={stale} />
+        <Link edge={edge} state={state} stale={stale} />
         <NodeCard view={view} node={standby} stale={stale} />
       </div>
 
@@ -141,7 +153,10 @@ function Pair({
         </div>
       )}
 
-      <div className="mt-6 flex flex-wrap justify-center gap-x-4 gap-y-1 font-mono text-[10.5px] text-muted">
+      <div
+        data-legend
+        className="mt-6 flex flex-wrap justify-center gap-x-4 gap-y-1 font-mono text-[10.5px] text-muted"
+      >
         <LegendItem>
           <span className="h-0.5 w-[18px] bg-[repeating-linear-gradient(90deg,var(--color-up)_0_4px,transparent_4px_7px)]" />
           streaming
@@ -153,6 +168,10 @@ function Pair({
         <LegendItem>
           <span className="font-bold text-down">-×-</span>
           stopped
+        </LegendItem>
+        <LegendItem>
+          <span className="h-0.5 w-[18px] bg-[repeating-linear-gradient(90deg,var(--color-muted)_0_2px,transparent_2px_5px)]" />
+          no data
         </LegendItem>
         <LegendItem>
           <span className="size-3 rounded-[3px] border-gradient-brand [--kit-fill:var(--b-node)]" />
@@ -269,40 +288,44 @@ function Bar({ percent, className }: { percent: number; className: string }) {
   );
 }
 
+const LINK_TONE: Record<EdgeState, string> = { live: "text-up", stopped: "text-down", unknown: "text-muted" };
+
 /**
  * The replication link: a dashed line flowing toward the standby while live (still under reduced motion or
- * stale facts), broken with a cross when not. Horizontal from md, vertical on phones.
+ * stale facts), broken with a cross when stopped, a still muted dotted line reading "no data" when nothing
+ * reports on it. Horizontal from md, vertical on phones.
  */
-function Link({ edge, stale }: { edge: Edge; stale: boolean }) {
-  const tone = edge.live ? "text-up" : "text-down";
-  const flow = edge.live && !stale;
+function Link({ edge, state, stale }: { edge: Edge; state: EdgeState; stale: boolean }) {
+  const live = state === "live";
+  const flow = live && !stale;
   const label = (
     <span className="rounded bg-base/85 px-1.5 py-px font-mono text-[10.5px] tracking-[.06em] whitespace-nowrap uppercase">
-      {edge.live ? "WAL stream" : "replication"}
+      {live ? "WAL stream" : "replication"}
     </span>
   );
   const detail = (
     <span
       className={cx(
         "rounded bg-base/85 px-1.5 py-px font-mono text-[10.5px] tracking-[.06em] whitespace-nowrap uppercase",
-        edge.live ? "text-muted" : "text-down",
+        live ? "text-muted" : LINK_TONE[state],
       )}
     >
-      {edge.live ? (edge.detail ?? "streaming") : "stopped"}
+      {live ? (edge.detail ?? "streaming") : state === "stopped" ? "stopped" : "no data"}
     </span>
   );
   return (
     <div
       data-edge={`${edge.from}-${edge.to}`}
       data-live={edge.live}
+      data-state={state}
       className={cx(
         "relative flex h-[88px] items-center justify-center md:h-full md:flex-col md:gap-1",
-        tone,
+        LINK_TONE[state],
       )}
     >
       <span className="hidden md:inline">{label}</span>
       <span aria-hidden="true" className="relative h-full w-0.5 md:h-0.5 md:w-[92px]">
-        {edge.live ? (
+        {live ? (
           <>
             <span className="absolute -inset-[2px] rounded-full bg-current/25" />
             <span
@@ -313,13 +336,15 @@ function Link({ edge, stale }: { edge: Edge; stale: boolean }) {
             />
             <span className="absolute -bottom-1 -left-1 border-x-[5px] border-t-[7px] border-x-transparent border-t-current md:top-[-4px] md:-right-1 md:bottom-auto md:left-auto md:border-y-[5px] md:border-r-0 md:border-l-[7px] md:border-y-transparent md:border-l-current" />
           </>
-        ) : (
+        ) : state === "stopped" ? (
           <>
             <span className="absolute inset-0 bg-[linear-gradient(180deg,currentColor_0_36%,transparent_36%_64%,currentColor_64%_100%)] md:bg-[linear-gradient(90deg,currentColor_0_36%,transparent_36%_64%,currentColor_64%_100%)]" />
             <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-lg leading-none font-bold">
               ×
             </span>
           </>
+        ) : (
+          <span className="absolute inset-0 bg-[repeating-linear-gradient(180deg,currentColor_0_2px,transparent_2px_5px)] opacity-70 md:bg-[repeating-linear-gradient(90deg,currentColor_0_2px,transparent_2px_5px)]" />
         )}
       </span>
       <span className="hidden md:inline">{detail}</span>
@@ -332,7 +357,15 @@ function Link({ edge, stale }: { edge: Edge; stale: boolean }) {
 }
 
 /** The serving node, the fence decision and the replication link, one cell each (two by two on phones). */
-function FactsRow({ topo, edge }: { topo: TopologyView | null; edge: Edge | undefined }) {
+function FactsRow({
+  topo,
+  edge,
+  state,
+}: {
+  topo: TopologyView | null;
+  edge: Edge | undefined;
+  state: EdgeState | undefined;
+}) {
   if (!topo) return null;
   const cells: { k: string; v: ReactNode }[] = [
     { k: "Serving", v: topo.nodes.find((n) => n.note === "serving")?.label ?? DASH },
@@ -349,7 +382,15 @@ function FactsRow({ topo, edge }: { topo: TopologyView | null; edge: Edge | unde
     },
     {
       k: "Replication",
-      v: !edge ? DASH : edge.live ? (edge.detail ?? "streaming") : <span className="text-down">stopped</span>,
+      v: !edge ? (
+        DASH
+      ) : state === "unknown" ? (
+        <span className="text-muted">no data</span>
+      ) : state === "live" ? (
+        (edge.detail ?? "streaming")
+      ) : (
+        <span className="text-down">stopped</span>
+      ),
     },
   ];
   return (

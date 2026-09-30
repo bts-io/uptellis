@@ -1,4 +1,4 @@
-import type { TopologyView } from "@/shared/view";
+import { type EdgeState, edgeState, type TopologyView } from "@/shared/view";
 import { cx } from "./cx";
 import { Gauge } from "./gauge";
 import type { TopologyTileProps } from "./props";
@@ -65,32 +65,38 @@ function NodeCard({ node, rows }: { node: Node; rows: Row[] | undefined }) {
   );
 }
 
+const EDGE_TONE: Record<EdgeState, string> = { live: "text-up", stopped: "text-down", unknown: "text-muted" };
+const EDGE_WORD: Record<EdgeState, string> = { live: "streaming", stopped: "stopped", unknown: "no data" };
+
 /**
  * The replication link between the pair: a flowing dashed line while live, a broken one with a cross when
- * not. Its labels wrap inside the edge column, so a long detail grows the row instead of running into a node.
+ * stopped, a still muted dotted one reading "no data" when nothing reports on it (`edgeState`). Its labels
+ * wrap inside the edge column, so a long detail grows the row instead of running into a node.
  */
-function EdgeLink({ edge }: { edge: Edge }) {
-  const tone = edge.live ? "text-up" : "text-down";
+function EdgeLink({ edge, state }: { edge: Edge; state: EdgeState }) {
   return (
     <div
       data-edge={`${edge.from}-${edge.to}`}
       data-live={edge.live}
+      data-state={state}
       className={cx(
         "relative flex h-[74px] min-w-0 flex-row items-center justify-center gap-3 md:h-auto md:min-h-14 md:flex-col md:gap-[5px] md:px-1 md:py-1.5",
-        tone,
+        EDGE_TONE[state],
       )}
     >
       <div
         aria-hidden="true"
         className={cx(
           "relative h-full w-0.5 md:h-0.5 md:w-full",
-          edge.live
+          state === "live"
             ? "bg-[repeating-linear-gradient(180deg,currentColor_0_6px,transparent_6px_11px)] bg-size-[2px_11px] motion-safe:animate-kit-flow-y md:bg-[repeating-linear-gradient(90deg,currentColor_0_6px,transparent_6px_11px)] md:bg-size-[11px_2px] md:motion-safe:animate-kit-flow-x"
-            : "bg-[linear-gradient(180deg,currentColor_0_34%,transparent_34%_66%,currentColor_66%_100%)] md:bg-[linear-gradient(90deg,currentColor_0_38%,transparent_38%_62%,currentColor_62%_100%)]",
+            : state === "stopped"
+              ? "bg-[linear-gradient(180deg,currentColor_0_34%,transparent_34%_66%,currentColor_66%_100%)] md:bg-[linear-gradient(90deg,currentColor_0_38%,transparent_38%_62%,currentColor_62%_100%)]"
+              : "bg-[repeating-linear-gradient(180deg,currentColor_0_3px,transparent_3px_8px)] opacity-60 md:bg-[repeating-linear-gradient(90deg,currentColor_0_3px,transparent_3px_8px)]",
         )}
       >
         <span className="absolute -bottom-[3px] -left-1 border-x-[5px] border-t-[7px] border-x-transparent border-t-current md:top-[-4px] md:-right-0.5 md:bottom-auto md:left-auto md:border-y-[5px] md:border-r-0 md:border-l-[7px] md:border-y-transparent md:border-l-current" />
-        {!edge.live && (
+        {state === "stopped" && (
           <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[54%] text-[15px] font-bold">
             ×
           </span>
@@ -98,7 +104,7 @@ function EdgeLink({ edge }: { edge: Edge }) {
       </div>
       <div className="flex min-w-0 flex-col gap-0.5 md:items-center md:text-center">
         <span className="text-[10.5px] tracking-[0.02em]">
-          {edge.label ?? (edge.live ? "streaming" : "stopped")}
+          {state === "unknown" ? EDGE_WORD.unknown : (edge.label ?? EDGE_WORD[state])}
         </span>
         {edge.detail && <span className="text-[10px] leading-tight text-faint">{edge.detail}</span>}
       </div>
@@ -112,7 +118,7 @@ const byId = (nodes: Node[], id: string) => nodes.find((n) => n.id === id);
  * Topology on a dot grid: the first replication pair drawn as node, flowing edge, node (stacked on mobile)
  * with optional per-node rows, the fence decision as a double-ruled stamp naming the serving node, then the
  * remaining nodes as compact lines (with the edges they start) and any other edges. The edge animates only
- * while `live` and never under reduced motion.
+ * while `live` and never under reduced motion; one nothing reports on reads "no data" in the muted colour.
  */
 export function TopologyTile({ topology, rows, caption, fenceDetail }: TopologyTileProps) {
   const { nodes, edges, fence } = topology;
@@ -141,7 +147,7 @@ export function TopologyTile({ topology, rows, caption, fenceDetail }: TopologyT
           )}
         >
           <NodeCard node={pair[0]!} rows={rows?.[pair[0]!.id]} />
-          <EdgeLink edge={pairEdge} />
+          <EdgeLink edge={pairEdge} state={edgeState(pairEdge, nodes)} />
           <NodeCard node={pair[1]!} rows={rows?.[pair[1]!.id]} />
         </div>
       )}
