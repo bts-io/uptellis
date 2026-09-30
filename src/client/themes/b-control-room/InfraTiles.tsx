@@ -1,13 +1,14 @@
 import { StateDot, SummaryParts } from "@/client/kit";
 import type { FactGroupView, Level, SiteView } from "@/shared/view";
-import { cx, DASH, levelState, probeStale } from "./format";
+import { cx, DASH, LEVEL_TEXT, levelState, probeStale } from "./format";
 import { Chip, Kv, Micro, Tile, TileHead } from "./ui";
 
-const CHIP_TEXT: Partial<Record<Level, string>> = { warn: "warning", crit: "failing" };
+const CHIP_TEXT: Record<Level, string | null> = { ok: "ok", warn: "warning", crit: "failing", info: null };
 
 /**
- * One fact group: its title, a chip while it warns or fails, the profile's one-line summary, then every row
- * with its level dot.
+ * One fact group: its title and a chip with its level, the profile's summary in coloured parts (wrapping, a
+ * dot before a first part that has no colour of its own, `2 of 2 online`), then every row with its level dot
+ * and a warning or failure in its colour.
  */
 export function GroupTile({
   view,
@@ -20,25 +21,36 @@ export function GroupTile({
 }) {
   const stale = probeStale(view) || !group.fresh;
   const chip = CHIP_TEXT[group.level];
+  const [lead] = group.summaryParts;
   return (
     <Tile stale={stale} className={className}>
       <TileHead>
         <Micro>{group.title}</Micro>
-        {chip && <Chip level={group.level}>{chip}</Chip>}
+        {chip && <Chip level={stale ? "info" : group.level}>{chip}</Chip>}
       </TileHead>
       <div className="px-4 pt-2 pb-3.5">
-        {group.summaryParts.length > 0 && (
-          <SummaryParts
-            parts={group.summaryParts}
-            stale={stale}
-            className="block truncate font-mono text-[13px] text-ink"
-          />
+        {lead && (
+          <div className="font-mono text-[13px] leading-normal text-ink [overflow-wrap:anywhere]">
+            {lead.level === null && (
+              <span className="mr-2 inline-flex align-middle">
+                <StateDot state={stale ? "stale" : levelState(group.level)} />
+              </span>
+            )}
+            <SummaryParts parts={group.summaryParts} stale={stale} />
+          </div>
         )}
-        <div className={cx(group.summaryParts.length > 0 && "mt-2")}>
+        <div className={cx(lead && "mt-2")}>
           {group.rows.map((r) => (
             <Kv key={r.key} k={r.label.toLowerCase()}>
               {r.level && r.level !== "info" && <StateDot state={stale ? "stale" : levelState(r.level)} />}
-              {r.display || DASH}
+              <span
+                className={cx(
+                  "truncate",
+                  !stale && (r.level === "warn" || r.level === "crit") && LEVEL_TEXT[r.level],
+                )}
+              >
+                {r.display || DASH}
+              </span>
             </Kv>
           ))}
         </div>

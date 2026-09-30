@@ -101,6 +101,62 @@ describe("theme B page", () => {
     expect(html).toMatch(/aria-selected="true"[^>]*>Database</);
   });
 
+  it("captions the pair from the profile and colours the standby's lag and the fence cell", () => {
+    const html = render(view("default"));
+    expect(html).toContain(">Forgejo failover pair<");
+    // The standby's wal row reads green (a fine measure); words stay ink.
+    expect(html).toMatch(
+      /<span>wal<\/span><b[^>]*><span[^>]*data-state="up"[^>]*><\/span><span class="text-up">lag 0 s</,
+    );
+    expect(html).toMatch(/<span>postgres<\/span><b[^>]*><span[^>]*><\/span><span>replica</);
+    // The fence cell: the decision in its level's colour, the profile's timelines muted.
+    expect(html).toMatch(
+      /<span class="uppercase text-up">serve<\/span><span class="text-muted"> · tl 1\/1<\/span>/,
+    );
+    const bare = view("default");
+    bare.topology = { ...bare.topology!, nodes: bare.topology!.nodes.map((n) => ({ ...n, details: [] })) };
+    expect(render(bare)).toContain(">Failover pair<");
+  });
+
+  it("shows a status highlight in the strip with its dot and colour, and no empty detail", () => {
+    const kpis = (v: SiteView) => renderToStaticMarkup(createElement(Kpis, { view: v }));
+    const html = kpis(view("default"));
+    expect(html).toMatch(
+      /watchdog<\/span><div data-status="ok" class="[^"]*text-up[^"]*"><span[^>]*><span[^>]*data-state="up"[^>]*><\/span><\/span>reachable \(HTTP 200\)<\/div><\/div>/,
+    );
+    // The kuma slot keeps its value, badge and detail.
+    expect(html).toMatch(/>kuma<\/span>.*?2\.5\.5.*?latest.*?db 41\.2 MB/);
+    expect(kpis(view("stale"))).toMatch(
+      /data-status="ok" class="(?![^"]*text-up)[^"]*"><span[^>]*><span[^>]*data-state="stale"/,
+    );
+  });
+
+  it("wraps each group tile's summary with its dot and colours a warning row", () => {
+    const html = render(view("default"));
+    // The group tiles follow the topology, whose facts row has cells of the same names.
+    const tile = (title: string) => {
+      const at = html.lastIndexOf(`uppercase">${title}</span>`);
+      return html.slice(at, html.indexOf("</section>", at));
+    };
+    // Each tile states its level; a summary line wraps instead of truncating.
+    expect(tile("Runners")).toMatch(/text-up">ok<\/span>/);
+    expect(tile("Replication")).not.toContain("block truncate");
+    expect(tile("Replication")).toContain("[overflow-wrap:anywhere]");
+    // A line that starts plain takes the group's dot; one that starts coloured does not.
+    expect(tile("Runners")).toMatch(
+      /\[overflow-wrap:anywhere\]"><span class="mr-2 inline-flex align-middle"><span[^>]*data-state="up"/,
+    );
+    expect(tile("Forgejo")).toMatch(/\[overflow-wrap:anywhere\]"><span class="mr-2 inline-flex/);
+    expect(tile("Replication")).not.toMatch(/\[overflow-wrap:anywhere\]"><span class="mr-2 inline-flex/);
+    const inc = render(view("incident"));
+    const at = inc.lastIndexOf('uppercase">Replication</span>');
+    const repl = inc.slice(at, inc.indexOf("</section>", at));
+    expect(repl).toMatch(/text-degraded">warning</);
+    expect(repl).toMatch(
+      />state<\/span><span[^>]*><span[^>]*data-state="degraded"[^>]*><\/span><span class="truncate text-degraded">none</,
+    );
+  });
+
   it("survives a site without facts or topology", () => {
     const v: SiteView = {
       ...view("default"),

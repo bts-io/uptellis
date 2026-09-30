@@ -10,8 +10,11 @@ import {
   hhmm,
   isFigure,
   kumaStale,
+  LEVEL_TEXT,
+  levelState,
   monthDay,
   pct,
+  probeStale,
   quality,
   splitUnit,
 } from "./format";
@@ -36,6 +39,7 @@ export function Kpis({ view }: { view: SiteView }) {
   const days = combinedBeats(services);
   const known = days.filter((d) => d.uptime !== null);
   const mean90 = known.length ? known.reduce((a, d) => a + d.uptime!, 0) / known.length : null;
+  const factsStale = probeStale(view);
   const slots = highlightSlots(view.highlights);
   // Four fixed cells, one per highlight slot, then the wide 90-day cell.
   const columns = {
@@ -108,25 +112,43 @@ export function Kpis({ view }: { view: SiteView }) {
       </Cell>
 
       {slots.map((slot) => {
-        const [value, unit] = splitUnit(slot.rows[0].display);
+        const [row] = slot.rows;
+        const [value, unit] = splitUnit(row.display);
+        // A lone value with a level and no badge or detail reads as a status: its dot, in its colour.
+        const status = row.level !== null && row.level !== "info" && !slot.note && slot.rows.length === 1;
+        // A status is a fact: it greys out when either the collector or the facts probe went quiet.
+        const muted = stale || factsStale;
         return (
           <Cell key={slot.label} label={slot.label}>
-            {isFigure(slot.rows[0].display) ? (
+            {status && row.level ? (
+              <div
+                data-status={row.level}
+                className={cx(
+                  "flex items-start gap-2 font-mono text-[14px] leading-[1.35] font-medium [overflow-wrap:anywhere]",
+                  !muted && LEVEL_TEXT[row.level],
+                )}
+              >
+                <span className="mt-[5px] inline-flex">
+                  <StateDot state={muted ? "stale" : levelState(row.level)} />
+                </span>
+                {slot.texts[0]}
+              </div>
+            ) : isFigure(row.display) ? (
               <Value unit={unit ?? undefined}>{value}</Value>
             ) : (
-              <div className="truncate font-mono text-[17px] leading-[1.55] font-medium">
-                {slot.rows[0].display}
-              </div>
+              <div className="truncate font-mono text-[17px] leading-[1.55] font-medium">{slot.texts[0]}</div>
             )}
-            <Sub>
-              {/* An update or other notice reads in the maintenance colour, not as a warning. */}
-              {slot.note && (
-                <Chip level={slot.note.level === "warn" ? "maint" : slot.note.level}>{slot.note.text}</Chip>
-              )}
-              {(slot.rows.length > 1 || !slot.note) && (
-                <span className="truncate">{slot.texts.slice(1).join(" · ") || DASH}</span>
-              )}
-            </Sub>
+            {!status && (
+              <Sub>
+                {/* An update or other notice reads in the maintenance colour, not as a warning. */}
+                {slot.note && (
+                  <Chip level={slot.note.level === "warn" ? "maint" : slot.note.level}>{slot.note.text}</Chip>
+                )}
+                {(slot.rows.length > 1 || !slot.note) && (
+                  <span className="truncate">{slot.texts.slice(1).join(" · ") || DASH}</span>
+                )}
+              </Sub>
+            )}
           </Cell>
         );
       })}

@@ -1,7 +1,17 @@
 import type { ReactNode } from "react";
 import { EmptyState, Icon, StateDot } from "@/client/kit";
 import type { DisplayState, ServiceView, SiteView, TopologyView } from "@/shared/view";
-import { allServices, cx, DASH, hhmm, probeStale, targetHost } from "./format";
+import {
+  allServices,
+  cx,
+  DASH,
+  hhmm,
+  isMeasure,
+  LEVEL_TEXT,
+  pairCaption,
+  probeStale,
+  targetHost,
+} from "./format";
 import { Chip, Micro, Tile, TileHead } from "./ui";
 
 type Node = TopologyView["nodes"][number];
@@ -24,9 +34,7 @@ export function Topology({ view }: { view: SiteView }) {
         <div className="flex min-w-0 items-center gap-2.5">
           <Micro>Topology</Micro>
           <span className="hidden text-faint sm:inline">/</span>
-          <span className="hidden truncate text-[13px] text-muted sm:inline">
-            {edge ? "Failover pair" : "Machines"}
-          </span>
+          <span className="hidden truncate text-[13px] text-muted sm:inline">{pairCaption(topo)}</span>
         </div>
         {edge && (live ? <Chip level="ok">streaming</Chip> : <Chip level="crit">replication stopped</Chip>)}
       </TileHead>
@@ -206,7 +214,7 @@ function NodeCard({ view, node, stale }: { view: SiteView; node: Node; stale: bo
       {rows.map((d) => (
         <Row key={d.label} label={d.label}>
           {d.state && <StateDot state={d.state === "paused" ? "paused" : shown(d.state)} />}
-          {d.state === "down" ? <span className="text-down">{d.value}</span> : d.value}
+          <span className={rowTone(d, stale)}>{d.value}</span>
         </Row>
       ))}
       {ssh && (
@@ -223,6 +231,16 @@ function NodeCard({ view, node, stale }: { view: SiteView; node: Node; stale: bo
       ))}
     </div>
   );
+}
+
+/**
+ * A card row's colour: failures in red or amber; a fine measure (`lag 0 s` on the standby) in green, as the
+ * original's `0 s behind`; words (`serving`, `replica`) stay ink. Stale facts keep only the failure colours.
+ */
+function rowTone(d: Node["details"][number], stale: boolean): string | undefined {
+  if (d.state === "down") return "text-down";
+  if (d.state === "degraded") return "text-degraded";
+  return !stale && d.state === "up" && isMeasure(d.value) ? "text-up" : undefined;
 }
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
@@ -309,7 +327,17 @@ function FactsRow({ topo, edge }: { topo: TopologyView | null; edge: Edge | unde
   if (!topo) return null;
   const cells: { k: string; v: ReactNode }[] = [
     { k: "Serving", v: topo.nodes.find((n) => n.note === "serving")?.label ?? DASH },
-    { k: "Fence", v: topo.fence?.decision ?? DASH },
+    {
+      k: "Fence",
+      v: topo.fence ? (
+        <>
+          <span className={cx("uppercase", LEVEL_TEXT[topo.fence.level])}>{topo.fence.decision}</span>
+          {topo.fence.detail && <span className="text-muted"> · {topo.fence.detail}</span>}
+        </>
+      ) : (
+        DASH
+      ),
+    },
     {
       k: "Replication",
       v: !edge ? DASH : edge.live ? (edge.detail ?? "streaming") : <span className="text-down">stopped</span>,
