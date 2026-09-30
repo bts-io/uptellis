@@ -1,4 +1,88 @@
-/* Wallboard theme tokens (Phase 7b), scoped to [data-theme="g"]. */
+/* Barlow Semi Condensed, self-hosted static latin weights 500 to 800 (SIL OFL 1.1; no variable build exists). */
+@font-face {
+  font-family: "Barlow Semi Condensed";
+  src: url("/fonts/BarlowSemiCondensed-500.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Barlow Semi Condensed";
+  src: url("/fonts/BarlowSemiCondensed-600.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Barlow Semi Condensed";
+  src: url("/fonts/BarlowSemiCondensed-700.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Barlow Semi Condensed";
+  src: url("/fonts/BarlowSemiCondensed-800.woff2") format("woff2");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+/*
+ * Theme G "Wallboard" (mockups/wallboard): near-black, very high contrast, Barlow Semi Condensed.
+ * Semantic tokens override the kit defaults under [data-theme="g"] only; `--g-*` tokens are private to this
+ * theme's components. The root font size follows the viewport, so the rem-sized board grows on big screens.
+ */
 [data-theme="g"] {
   --color-base: #07090d;
+  --color-panel: #11151c;
+  --color-line: #2a313d;
+  --color-ink: #f4f6fa;
+  --color-muted: #b3bccb;
+  --color-accent: #6fb6ff;
+  --color-up: #34e08a;
+  --color-degraded: #ffc233;
+  --color-down: #ff4b55;
+  --color-maint: #6fb6ff;
+  --color-stale: #c9b3ff;
+  --color-faint: #5a6270;
+  --color-raised: #181d26;
+  --color-hair: rgb(255 255 255 / 0.1);
+  --color-frame: #f4f6fa;
+  --gradient-brand: linear-gradient(90deg, #f4f6fa 0%, #b3bccb 100%);
+  --font-sans: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+
+  /* Tinted surfaces per state, the down fill and its edge, the alert tag inks and the beat strip's well. */
+  --g-up-bg: #0d2a1c;
+  --g-degraded-bg: #3a2c05;
+  --g-down-fill: #d11a2a;
+  --g-down-edge: #ff8a92;
+  --g-down-ink: #ffe3e5;
+  --g-on-down: #ffffff;
+  --g-maint-bg: #0c2340;
+  --g-stale-bg: #241b3a;
+  --g-stale-bg-2: #1a1430;
+  --g-unknown: #9aa4b2;
+  --g-unknown-bg: #1b2029;
+  --g-incident-bg: #2c0a0e;
+  --g-incident-ink: #16040a;
+  --g-stale-ink: #150d26;
+  --g-maint-ink: #04142a;
+  --g-well: #05070a;
+
+  color-scheme: dark;
+}
+
+html[data-theme="g"] {
+  font-size: clamp(16px, 1.25vw, 60px);
+}
+
+/* The pager's progress bar (Board.tsx); skipped under reduced motion. */
+@keyframes g-fill {
+  to {
+    width: 100%;
+  }
 }
