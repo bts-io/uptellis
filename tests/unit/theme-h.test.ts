@@ -93,7 +93,7 @@ describe("theme H page", () => {
     expect(html.match(/<summary[^>]*>.*?Technical details<\/summary>/g)?.length).toBeGreaterThanOrEqual(8);
     expect(t).toContain("Valid for 73 more days (Example CA)");
     // Calm: no callouts, no open incidents; the past ones listed as fixed.
-    expect(html).not.toMatch(/<aside role="status" data-freshness=/);
+    expect(html).not.toMatch(/<div role="status" data-freshness=/);
     expect(t).not.toContain("What’s happening right now");
     expect(t).toContain("Earlier hiccups");
     expect(html.match(/data-incident="resolved"/g)).toHaveLength(v.incidents.recent.length);

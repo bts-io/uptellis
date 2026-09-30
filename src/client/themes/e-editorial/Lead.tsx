@@ -86,7 +86,7 @@ export function StaleNotice({ view }: { view: SiteView }) {
   if (f.state === "fresh" || f.quietForMaintenance) return null;
   const stale = f.state === "stale" || f.state === "empty";
   return (
-    <aside
+    <div
       role="status"
       data-freshness={f.state}
       className="mt-8 border-2 border-degraded bg-[repeating-linear-gradient(135deg,var(--e-stale-a)_0_10px,var(--e-stale-b)_10px_20px)] px-5 py-[1.1rem]"
@@ -109,7 +109,7 @@ export function StaleNotice({ view }: { view: SiteView }) {
           ? "Every state below is the last one we heard, shown as Stale until fresh data arrives."
           : "The picture below may lag slightly."}
       </p>
-    </aside>
+    </div>
   );
 }
 
@@ -128,7 +128,7 @@ export function MaintenanceNotices({ view }: { view: SiteView }) {
               .join(", ") || "some services"
           : "every service";
         return (
-          <aside
+          <div
             key={m.id}
             role="status"
             data-maintenance=""
@@ -141,7 +141,7 @@ export function MaintenanceNotices({ view }: { view: SiteView }) {
               <strong>{m.title}.</strong> From {shortDate(m.start)}, {clock(m.start)} to {shortDate(m.end)},{" "}
               {clock(m.end)}, covering {covered}.
             </p>
-          </aside>
+          </div>
         );
       })}
     </>

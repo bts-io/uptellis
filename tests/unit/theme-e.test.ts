@@ -92,7 +92,7 @@ describe("theme E page", () => {
     expect(t).toContain("8 of 8 operational");
     for (const s of services(v)) expect(t).toContain(s.name);
     // No notices, no developing story, the past incidents in the log.
-    expect(html).not.toMatch(/<aside role="status" data-freshness=/);
+    expect(html).not.toMatch(/<div role="status" data-freshness=/);
     expect(t).not.toContain("Developing");
     expect(html.match(/data-incident="resolved"/g)).toHaveLength(v.incidents.recent.length);
     expect(t).toContain(

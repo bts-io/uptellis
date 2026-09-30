@@ -34,7 +34,11 @@ export function Header({ view }: { view: SiteView }) {
         {["bg-(--c-win-close)", "bg-(--c-win-min)", "bg-(--c-win-max)"].map((c) => (
           <i key={c} aria-hidden="true" className={cx("block size-[11px] rounded-full opacity-85", c)} />
         ))}
-        <p className="m-0 mr-[52px] flex-1 truncate text-center font-mono text-xs leading-none tracking-[0.02em] text-muted">
+        {/* Window chrome: repeats the slug and the h1 below, so it is hidden from assistive technology. */}
+        <p
+          aria-hidden="true"
+          className="m-0 mr-[52px] flex-1 truncate text-center font-mono text-xs leading-none tracking-[0.02em] text-muted"
+        >
           {view.site.slug.toUpperCase()} · Services Status
         </p>
       </div>

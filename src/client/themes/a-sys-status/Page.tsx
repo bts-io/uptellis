@@ -65,76 +65,88 @@ export function Page({ view, commit }: ThemePageProps) {
     <div className="min-h-dvh overflow-x-hidden bg-base font-mono text-[13px] leading-[1.55] text-ink tabular-nums antialiased selection:bg-accent/25">
       <Header view={view} />
 
-      {stale && (
-        <Wrap className="mt-[22px]">
-          <StaleBanner freshness={view.freshness} now={view.now} generatedAt={view.generatedAt} />
-        </Wrap>
-      )}
+      <main>
+        {stale && (
+          <Wrap className="mt-[22px]">
+            <StaleBanner freshness={view.freshness} now={view.now} generatedAt={view.generatedAt} />
+          </Wrap>
+        )}
 
-      {!!view.maintenance?.length && (
-        <Wrap className="mt-[22px]">
-          <MaintenanceNotice windows={view.maintenance} now={view.now} />
-        </Wrap>
-      )}
+        {!!view.maintenance?.length && (
+          <Wrap className="mt-[22px]">
+            <MaintenanceNotice windows={view.maintenance} now={view.now} />
+          </Wrap>
+        )}
 
-      {view.incidents.open.map((incident) => (
-        <Wrap key={incident.id} className="mt-[34px]">
-          <Panel
-            title="incident"
-            level="crit"
-            aside={
-              <span className="inline-flex items-center gap-1.5 font-bold tracking-[.06em] text-down">
-                <StateDot state="down" pulse label="open" />
-                OPEN
-              </span>
-            }
-            className="[--kit-in:var(--a-incident)]"
-          >
-            <IncidentRail incident={incident} now={view.now} />
+        {view.incidents.open.map((incident) => (
+          <Wrap key={incident.id} className="mt-[34px]">
+            <Panel
+              title="incident"
+              level="crit"
+              aside={
+                <span className="inline-flex items-center gap-1.5 font-bold tracking-[.06em] text-down">
+                  <StateDot state="down" pulse label="open" />
+                  OPEN
+                </span>
+              }
+              className="[--kit-in:var(--a-incident)]"
+            >
+              <IncidentRail incident={incident} now={view.now} />
+            </Panel>
+          </Wrap>
+        ))}
+
+        <Wrap className="mt-[38px] flex flex-col gap-[34px]">
+          <SummaryBox view={view} />
+
+          {/* DOM order is the phone order (infra, monitors, hosts); from 1181px monitors take the left column. */}
+          <div className="grid grid-cols-1 items-start gap-[34px] min-[1181px]:grid-cols-[minmax(0,1fr)_480px] min-[1181px]:grid-rows-[auto_1fr] min-[1181px]:gap-x-6">
+            <div className="min-[1181px]:col-start-2 min-[1181px]:row-start-1">
+              <InfraPanel view={view} />
+            </div>
+            <div className="min-[1181px]:col-start-1 min-[1181px]:row-span-2 min-[1181px]:row-start-1">
+              <MonitorsPanel view={view} />
+            </div>
+            <div className="min-[1181px]:col-start-2 min-[1181px]:row-start-2">
+              <HostsPanel view={view} />
+            </div>
+          </div>
+
+          <Panel title="activity" aside="newest first · UTC" className={cx(stale && "border-dashed")}>
+            {events.length || checks.length ? (
+              <div className={cx("max-md:[&_li:nth-child(n+7)]:hidden", stale && "saturate-[.4]")}>
+                <ActivityFeed
+                  items={events}
+                  checks={checks}
+                  now={view.now}
+                  limit={ACTIVITY_ROWS}
+                  columns={2}
+                />
+              </div>
+            ) : (
+              <EmptyState
+                title="No activity yet"
+                detail="Checks, status changes and incidents show here as they happen."
+              />
+            )}
           </Panel>
         </Wrap>
-      ))}
-
-      <Wrap className="mt-[38px] flex flex-col gap-[34px]">
-        <SummaryBox view={view} />
-
-        {/* DOM order is the phone order (infra, monitors, hosts); from 1181px monitors take the left column. */}
-        <div className="grid grid-cols-1 items-start gap-[34px] min-[1181px]:grid-cols-[minmax(0,1fr)_480px] min-[1181px]:grid-rows-[auto_1fr] min-[1181px]:gap-x-6">
-          <div className="min-[1181px]:col-start-2 min-[1181px]:row-start-1">
-            <InfraPanel view={view} />
-          </div>
-          <div className="min-[1181px]:col-start-1 min-[1181px]:row-span-2 min-[1181px]:row-start-1">
-            <MonitorsPanel view={view} />
-          </div>
-          <div className="min-[1181px]:col-start-2 min-[1181px]:row-start-2">
-            <HostsPanel view={view} />
-          </div>
-        </div>
-
-        <Panel title="activity" aside="newest first · UTC" className={cx(stale && "border-dashed")}>
-          {events.length || checks.length ? (
-            <div className={cx("max-md:[&_li:nth-child(n+7)]:hidden", stale && "saturate-[.4]")}>
-              <ActivityFeed items={events} checks={checks} now={view.now} limit={ACTIVITY_ROWS} columns={2} />
-            </div>
-          ) : (
-            <EmptyState
-              title="No activity yet"
-              detail="Checks, status changes and incidents show here as they happen."
-            />
-          )}
-        </Panel>
-      </Wrap>
+      </main>
 
       <Wrap className="mt-10">
         <Footer generatedAt={view.generatedAt} collectorHost={collector} commit={commit} hints={HINTS} />
-        <p className="-mt-6 pb-[30px] text-right text-[11.5px] text-faint max-[760px]:mt-0 max-[760px]:text-left">
+        {/* After the kit footer (which is the page's contentinfo), so it is its own labelled landmark. */}
+        <aside
+          aria-label="Beat legend"
+          className="-mt-6 pb-[30px] text-right text-[11.5px] text-faint max-[760px]:mt-0 max-[760px]:text-left"
+        >
           beat legend{" "}
           {LEGEND.map((l) => (
             <span key={l.char} className="ml-2.5">
               <b className={l.className}>{l.char}</b> {l.label}
             </span>
           ))}
-        </p>
+        </aside>
       </Wrap>
     </div>
   );

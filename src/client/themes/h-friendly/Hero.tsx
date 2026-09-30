@@ -76,7 +76,7 @@ export function StaleCallout({ view }: { view: SiteView }) {
   if (f.state === "fresh" || f.quietForMaintenance) return null;
   const stale = f.state === "stale" || f.state === "empty";
   return (
-    <aside
+    <div
       role="status"
       data-freshness={f.state}
       className="mt-5 flex items-start gap-[0.9rem] rounded-[22px] border-2 border-dashed border-(--h-warn-dash) bg-(--h-warn-bg) px-[1.35rem] py-[1.1rem] text-degraded max-[560px]:flex-col max-[560px]:gap-2"
@@ -99,7 +99,7 @@ export function StaleCallout({ view }: { view: SiteView }) {
             : " Things below may be a few minutes behind."}
         </p>
       </div>
-    </aside>
+    </div>
   );
 }
 
@@ -118,7 +118,7 @@ export function MaintenanceCallouts({ view }: { view: SiteView }) {
               .join(", ") || "some services"
           : "everything";
         return (
-          <aside
+          <div
             key={m.id}
             role="status"
             data-maintenance=""
@@ -132,7 +132,7 @@ export function MaintenanceCallouts({ view }: { view: SiteView }) {
                 affects {covered}, so a short pause there is expected.
               </p>
             </div>
-          </aside>
+          </div>
         );
       })}
     </>

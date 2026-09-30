@@ -20,7 +20,7 @@ function Notice({
   children: ReactNode;
 }) {
   return (
-    <aside
+    <div
       role={role}
       {...data}
       className={cx(
@@ -48,7 +48,7 @@ function Notice({
         </h3>
         <p className={cx("m-0", tone === "stale" ? "text-(--d-stale-ink)" : "text-muted")}>{children}</p>
       </div>
-    </aside>
+    </div>
   );
 }
 
