@@ -98,6 +98,20 @@ Rules that hold on every channel:
 - A failing channel never holds up the others. A 429, 5xx, timeout or network error is retried up to 3 times within the request (honouring the service's `Retry-After`), then by the five-minute cron for up to an hour; a config problem (404, bad URL, missing secret, `email_unavailable`) is final. The log keeps a short error code, never a URL, token, address or response body.
 - `POST /api/admin/notify/test?site=<slug>&kind=<down|up|stale|recovered>&channel=<id>` sends a TEST message to one channel (any of the site's channels, the implicit `discord` included) and records nothing; without `channel` it posts to `DISCORD_WEBHOOK_URL` as before.
 
+### Telegram setup
+
+Each install sends from its own bot: a bot token controls the bot, so Uptellis cannot ship a shared one. Setting one up takes a couple of minutes:
+
+1. In Telegram, open [@BotFather](https://t.me/BotFather), send `/newbot`, and pick a name and a username ending in `bot`. BotFather replies with the bot token. `/setuserpic`, `/setdescription` and `/setabouttext` there give the bot a picture and texts.
+2. Store the token as a secret named `NOTIFY_<NAME>`, e.g. `bunx wrangler secret put NOTIFY_TELEGRAM` on Cloudflare (it prompts for the value) or `NOTIFY_TELEGRAM=` in `docker.env` for Docker.
+3. Let the bot reach the chat: open the bot and press Start for a private chat, or add it to a group or channel (in a channel, as an administrator that may post).
+4. Find the chat id: a private chat's id is your user id and a group's is negative (`-100...` for a supergroup); a public channel can be named as `@channelname`. One way to read it: send the bot a message, then open `https://api.telegram.org/bot<token>/getUpdates` and look for `chat.id`.
+5. Add the channel in admin (Config, Alerts) or in the config, then send a test with `POST /api/admin/notify/test?site=<slug>&kind=down&channel=<id>`:
+
+```json
+{ "id": "telegram", "name": "Telegram", "type": "telegram", "secret": "NOTIFY_TELEGRAM", "chatId": "123456789" }
+```
+
 ## Agent API
 
 Agents use a site API key with the `agent` scope and name themselves in `X-Uptellis-Runner`; the agent must be declared in the site's `agents`.
