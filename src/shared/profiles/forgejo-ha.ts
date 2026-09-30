@@ -67,9 +67,22 @@ const replicationDetail = (ctx: ProfileContext) => {
         : null;
 };
 
-/** The headline's replication clause: a lag reads "replication lag 0 s, 20 min ago". */
-const replicationLine = (detail: string | null) =>
-  detail === null ? "replication stopped" : detail.startsWith("lag ") ? `replication ${detail}` : detail;
+/** True when any replication fact arrived (current or stale); none means nothing is known about it. */
+const replicationKnown = (ctx: ProfileContext) =>
+  ctx.facts.has("replication.state") || ctx.facts.has("replication.lagSeconds");
+
+/**
+ * The headline's replication clause: a lag reads "replication lag 0 s, 20 min ago"; null (no clause) when no
+ * replication fact ever arrived, since "stopped" is a claim only a fact can make.
+ */
+const replicationLine = (ctx: ProfileContext, detail: string | null) =>
+  detail === null
+    ? replicationKnown(ctx)
+      ? "replication stopped"
+      : null
+    : detail.startsWith("lag ")
+      ? `replication ${detail}`
+      : detail;
 
 const watchdogText = (ctx: ProfileContext) => {
   const reachable = bool(ctx, "watchdog.reachable");
@@ -454,7 +467,7 @@ export const forgejoHa: Profile = {
       ? null
       : streaming(ctx)
         ? `replication ${str(ctx, "replication.state")}`
-        : replicationLine(replicationDetail(ctx));
+        : replicationLine(ctx, replicationDetail(ctx));
     return [`Forgejo serving from ${serving}`, replication].filter(Boolean).join(", ");
   },
   topology: refineTopology,
@@ -531,7 +544,10 @@ function refineTopology(ctx: ProfileContext, topology: TopologyView): TopologyVi
           ? null
           : { label: "disk", value: `${disk}%`, state: disk >= 90 ? "down" : disk >= 80 ? "degraded" : "up" }
         : !live
-          ? { label: "wal", value: "stopped", state: "down" }
+          ? // Without a replication fact nothing says the stream stopped.
+            replicationKnown(ctx)
+            ? { label: "wal", value: "stopped", state: "down" }
+            : { label: "wal", value: "no data", state: "unknown" }
           : lag === null
             ? { label: "wal", value: "live", state: "up" }
             : // A lag past its window shows its last value and age, stale: "lag 0 s, 20 min ago".

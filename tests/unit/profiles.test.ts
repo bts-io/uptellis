@@ -203,6 +203,43 @@ describe("forgejo-ha: a lag past its freshness window", () => {
   });
 });
 
+describe("forgejo-ha: no replication stream facts", () => {
+  const wal = (v: SiteView) => v.topology!.nodes.find((n) => n.id === "app-2")!.details.at(-1);
+  const edge = (v: SiteView) => v.topology!.edges.find((e) => e.kind === "replication")!;
+  const without = (keys: string[]) =>
+    viewWith((i) => {
+      i.model.facts = i.model.facts.filter((f) => !(f.group === "replication" && keys.includes(f.key)));
+    });
+
+  it("claims no stopped stream when no replication fact arrived", () => {
+    const v = viewWith((i) => {
+      i.model.facts = i.model.facts.filter((f) => f.group !== "replication");
+    });
+    expect(v.headline).toBe("Forgejo serving from app-1");
+    expect(edge(v)).toMatchObject({ live: false, detail: null });
+    expect(JSON.stringify(v.topology)).not.toContain("stopped");
+  });
+
+  it("reads no data on the peer's wal row while the pair is known but the stream is not", () => {
+    // Role and peer name the pair; the state and the lag, which say whether it streams, never arrived.
+    const v = without(["state", "lagSeconds"]);
+    expect(wal(v)).toEqual({ label: "wal", value: "no data", state: "unknown" });
+    expect(v.headline).toBe("Forgejo serving from app-1");
+    expect(edge(v)).toMatchObject({ live: false, detail: null });
+  });
+
+  it("still says stopped once a replication fact tells", () => {
+    const v = viewWith((i) => {
+      const state = i.model.facts.find((f) => f.group === "replication" && f.key === "state")!;
+      state.value = { type: "string", value: "stopped" };
+      i.model.facts = i.model.facts.filter((f) => !(f.group === "replication" && f.key === "lagSeconds"));
+    });
+    expect(wal(v)).toEqual({ label: "wal", value: "stopped", state: "down" });
+    expect(edge(v)).toMatchObject({ live: false, detail: "stopped" });
+    expect(v.headline).toBe("Forgejo serving from app-1, stopped");
+  });
+});
+
 describe("groups the topology carries", () => {
   const carried = (v: SiteView) => v.factGroups.filter((g) => g.inTopology).map((g) => g.id);
 
