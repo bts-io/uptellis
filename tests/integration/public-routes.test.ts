@@ -2,6 +2,7 @@ import { SELF } from "cloudflare:test";
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it } from "vitest";
 import { PUBLIC_FIELDS, type PublicField, type SiteConfig } from "@/shared/config";
+import { ChannelConfig } from "@/shared/notify";
 import { PublicSummary } from "@/shared/public/summary";
 import { type AppEnv, platformContext } from "@/worker/app-env";
 import { isWorkerOwned } from "@/worker/build";
@@ -19,7 +20,7 @@ const NOW = Date.parse(fx.now);
 
 let store: MemoryStore;
 let handle: (path: string, init?: RequestInit) => Promise<Response>;
-let site: Pick<SiteConfig, "visibility" | "public">;
+let site: Pick<SiteConfig, "visibility" | "public"> & Partial<Pick<SiteConfig, "notify">>;
 
 const configs: ConfigSource = {
   slugs: seedConfigs.slugs,
@@ -213,6 +214,33 @@ describe("embeds", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
     expect(await res.text()).toContain("data-uptellis");
+  });
+});
+
+describe("notification channels", () => {
+  it("never show a configured SMS number, sender or account SID on a public path", async () => {
+    // Fictional numbers (555-01xx); the SID is assembled at runtime for the repo-wide literal scan.
+    const hex = "0123456789abcdef";
+    const secrets = { to: "+15555550123", from: "+15555550100", sid: `AC${hex}${hex}` };
+    const sms = ChannelConfig.parse({
+      id: "sms-ops",
+      name: "SMS (Ops)",
+      type: "sms",
+      provider: "twilio",
+      accountSid: secrets.sid,
+      secret: "NOTIFY_TWILIO_TOKEN",
+      from: secrets.from,
+      to: secrets.to,
+    });
+    publish([...PUBLIC_FIELDS]);
+    site = { ...site, notify: { ...seedConfig("demo")!.notify, channels: [sms] } };
+    for (const path of ALL_PATHS) {
+      const res = await handle(path);
+      expect(res.status, path).toBe(200);
+      const body = await res.text();
+      for (const value of [...Object.values(secrets), secrets.to.slice(1), "sms-ops"])
+        expect(body, path).not.toContain(value);
+    }
   });
 });
 

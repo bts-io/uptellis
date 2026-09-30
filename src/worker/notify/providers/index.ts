@@ -14,6 +14,7 @@ import { discordProvider } from "./discord";
 import { emailProvider } from "./email";
 import { ntfyProvider } from "./ntfy";
 import { slackProvider } from "./slack";
+import { smsProvider } from "./sms";
 import { telegramProvider } from "./telegram";
 import { webhookProvider } from "./webhook";
 
@@ -24,6 +25,7 @@ export const PROVIDERS: { [T in ChannelConfig["type"]]: ChannelProvider<T> } = {
   ntfy: ntfyProvider,
   telegram: telegramProvider,
   email: emailProvider,
+  sms: smsProvider,
 };
 
 /** Sends `message` to `channel` with its provider; never throws. */

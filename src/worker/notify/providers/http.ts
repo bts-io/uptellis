@@ -2,8 +2,9 @@
  * The one HTTP send every webhook-style provider shares: a POST under a 5 s timeout, mapped to a
  * `DeliveryOutcome`. A 2xx is a delivery; a 429 or 5xx, a timeout or a network error is retryable (with the
  * service's `Retry-After` or `retry_after` when it gives one); any other status is a final failure. The
- * response body is read only for a rate limit's `retry_after` and never returned; nothing here logs, and an
- * error is a short code (`http_404`, `timeout`), never the URL or a message.
+ * response body is read only for a rate limit's `retry_after` (and by a provider's `errorOf`, which maps it
+ * to a short code) and never returned; nothing here logs, and an error is a short code (`http_404`,
+ * `timeout`), never the URL or a message.
  */
 import type { DeliveryOutcome } from "@/shared/notify";
 
@@ -49,10 +50,15 @@ function retryAfterOf(res: Response, data: unknown): number | undefined {
   return undefined;
 }
 
+/**
+ * `errorOf` names a failure from its status and parsed JSON body (null when not JSON) with a short code of
+ * the provider's own, never text from the body; undefined keeps `rate_limited` or `http_<status>`.
+ */
 export async function postTo(
   doFetch: typeof fetch,
   url: URL | string,
   init: { headers: Record<string, string>; body: string },
+  errorOf?: (status: number, data: unknown) => string | undefined,
 ): Promise<DeliveryOutcome> {
   let res: Response;
   try {
@@ -69,20 +75,19 @@ export async function postTo(
   const text = await res.text().catch(() => "");
   if (res.ok) return { ok: true, status: res.status };
   const retryable = res.status === 429 || res.status >= 500;
-  let after: number | undefined;
-  if (retryable) {
-    let data: unknown = null;
+  let data: unknown = null;
+  if (retryable || errorOf) {
     try {
       data = JSON.parse(text);
     } catch {
       data = null;
     }
-    after = retryAfterOf(res, data);
   }
+  const after = retryable ? retryAfterOf(res, data) : undefined;
   return {
     ok: false,
     status: res.status,
-    error: res.status === 429 ? "rate_limited" : `http_${res.status}`,
+    error: errorOf?.(res.status, data) ?? (res.status === 429 ? "rate_limited" : `http_${res.status}`),
     retryable,
     ...(after === undefined ? {} : { retryAfterS: after }),
   };

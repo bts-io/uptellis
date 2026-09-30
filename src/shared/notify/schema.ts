@@ -1,6 +1,7 @@
 /**
  * Phase 6b contract (lead): notification channels in the site config. A channel is one destination (a
- * Discord or Slack webhook, a signed webhook, an ntfy topic, a Telegram chat, email addresses) with the
+ * Discord or Slack webhook, a signed webhook, an ntfy topic, a Telegram chat, email addresses, a phone
+ * number for SMS) with the
  * events it wants. Secrets are never in the config: a channel names the Worker secret or env var that holds
  * its URL or token (`NOTIFY_*`, or the historical `DISCORD_WEBHOOK_URL`), read with
  * `Platform.notifySecret`. Email is sent by the instance's sender (`Platform.email`), so an email channel
@@ -15,7 +16,7 @@ export const NOTIFY_EVENTS = ["down", "up", "stale", "recovered"] as const;
 export const NotifyEvent = z.enum(NOTIFY_EVENTS);
 export type NotifyEvent = z.infer<typeof NotifyEvent>;
 
-export const CHANNEL_TYPES = ["discord", "slack", "webhook", "ntfy", "telegram", "email"] as const;
+export const CHANNEL_TYPES = ["discord", "slack", "webhook", "ntfy", "telegram", "email", "sms"] as const;
 export const ChannelType = z.enum(CHANNEL_TYPES);
 export type ChannelType = z.infer<typeof ChannelType>;
 
@@ -31,6 +32,10 @@ export type ChannelSecretName = z.infer<typeof ChannelSecretName>;
 const ChannelId = z.string().regex(/^[a-z0-9][a-z0-9-]{0,31}$/);
 /** A plain mailbox address (no display name). */
 const EmailAddress = z.email().max(254);
+/** A phone number in E.164 form: `+`, a country code and up to 15 digits in all. */
+const E164 = /^\+[1-9]\d{6,14}$/;
+/** A Twilio Messaging Service SID. */
+const MESSAGING_SERVICE_SID = /^MG[0-9a-f]{32}$/;
 
 const common = {
   id: ChannelId,
@@ -82,6 +87,26 @@ export const ChannelConfig = z.discriminatedUnion("type", [
     type: z.literal("email"),
     to: z.array(EmailAddress).min(1).max(10),
     from: EmailAddress.optional(),
+  }),
+  /**
+   * A text message through Twilio: `secret` holds the account's auth token, `from` is a Twilio number
+   * (E.164) or a Messaging Service SID (`MG...`), `to` exactly one E.164 number (a second person is a
+   * second channel). Every text costs money, so `events` defaults to `down` and `up`. The numbers are
+   * personal data: they never reach a log, the delivery log, an error or a public surface.
+   */
+  z.object({
+    ...common,
+    events: common.events.unwrap().default(["down", "up"]),
+    type: z.literal("sms"),
+    provider: z.literal("twilio"),
+    accountSid: z
+      .string()
+      .regex(/^AC[0-9a-f]{32}$/, "Expected a Twilio Account SID (AC and 32 hex characters)"),
+    secret: ChannelSecretName,
+    from: z.string().refine((s) => E164.test(s) || MESSAGING_SERVICE_SID.test(s), {
+      message: "Expected an E.164 number like +15551234567 or a Messaging Service SID (MG...)",
+    }),
+    to: z.string().regex(E164, "Expected one E.164 number like +15551234567"),
   }),
 ]);
 export type ChannelConfig = z.infer<typeof ChannelConfig>;

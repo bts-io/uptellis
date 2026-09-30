@@ -1,8 +1,9 @@
 /**
  * The real channel providers and email senders against local impersonators: one Bun.serve standing in for
- * a Slack incoming webhook, an ntfy server, the Telegram Bot API, a signed webhook receiver and the Cloudflare
- * Email Service REST API, and a tiny SMTP server over `node:net`. Nothing leaves the machine: the secrets
- * point at localhost, Telegram's fixed API host is rewritten by the context's fetch.
+ * a Slack incoming webhook, an ntfy server, the Telegram Bot API, Twilio's Messages resource, a signed webhook
+ * receiver and the Cloudflare Email Service REST API, and a tiny SMTP server over `node:net`. Nothing leaves
+ * the machine: the secrets point at localhost, Telegram's and Twilio's fixed API hosts are rewritten by the
+ * context's fetch.
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -22,12 +23,16 @@ import {
 } from "@/shared/notify";
 import { downMessage } from "@/worker/notify/alerts";
 import { PROVIDERS } from "@/worker/notify/providers";
+import { TWILIO_API } from "@/worker/notify/providers/sms";
 import { TELEGRAM_API } from "@/worker/notify/providers/telegram";
 
 const LOOPBACK = [127, 0, 0, 1].join(".");
 const addr = (user: string) => [user, "example.org"].join("@");
 const NOW = Date.parse("2026-09-27T10:07:30Z");
 const BOT = `123456:${"b".repeat(30)}`;
+// Twilio test values, assembled for the repo-wide literal scan; the numbers are fictional (555-01xx).
+const TWILIO_SID = `AC${"0123456789abcdef".repeat(2)}`;
+const TWILIO_TOKEN = "c".repeat(32);
 
 interface Captured {
   path: string;
@@ -52,6 +57,10 @@ beforeAll(() => {
       if (status === 429)
         return Response.json({ retry_after: 3 }, { status, headers: { "retry-after": "3" } });
       if (url.pathname.includes("/sendMessage")) return Response.json({ ok: status < 300 }, { status });
+      if (url.pathname.endsWith("/Messages.json")) {
+        if (status < 300) return Response.json({ sid: "SM1", status: "queued" }, { status: 201 });
+        return Response.json({ code: 21608, message: "unverified", status }, { status });
+      }
       if (url.pathname.includes("/email/sending/send")) {
         return Response.json({ success: status < 300, errors: [], messages: [], result: null }, { status });
       }
@@ -94,14 +103,15 @@ function context(email: ProviderContext["email"] = null): ProviderContext {
     NOTIFY_NTFY: `${base}/uptellis-ops`,
     NOTIFY_NTFY_TOKEN: "tk_capture",
     NOTIFY_TG: BOT,
+    NOTIFY_TWILIO: TWILIO_TOKEN,
   };
   return {
     secret: (name) => secrets[name],
     email,
     emailFrom: addr("status"),
-    // Telegram's API host is fixed: send it here instead.
+    // Telegram's and Twilio's API hosts are fixed: send them here instead.
     fetch: ((input: RequestInfo | URL, init?: RequestInit) =>
-      fetch(String(input).replace(TELEGRAM_API, base), init)) as typeof fetch,
+      fetch(String(input).replace(TELEGRAM_API, base).replace(TWILIO_API, base), init)) as typeof fetch,
     version: "0.0.0-test",
     now: () => NOW,
   };
@@ -169,6 +179,34 @@ describe("providers against local impersonators", () => {
       status: 429,
       retryable: true,
       retryAfterS: 3,
+    });
+  });
+
+  it("Twilio gets a form with Basic auth, and an unverified number is final", async () => {
+    const ch = channel({
+      type: "sms",
+      provider: "twilio",
+      accountSid: TWILIO_SID,
+      secret: "NOTIFY_TWILIO",
+      from: "+15555550100",
+      to: "+15555550123",
+    });
+    expect(await PROVIDERS.sms.send(message, ch, context())).toEqual({ ok: true, status: 201 });
+    const path = `/Accounts/${TWILIO_SID}/Messages.json`;
+    expect(last().path).toBe(path);
+    expect(last().headers.get("content-type")).toBe("application/x-www-form-urlencoded");
+    expect(last().headers.get("authorization")).toBe(`Basic ${btoa(`${TWILIO_SID}:${TWILIO_TOKEN}`)}`);
+    expect(Object.fromEntries(new URLSearchParams(last().body))).toEqual({
+      To: "+15555550123",
+      From: "+15555550100",
+      Body: "DOWN: Checkout (Demo) since 10:00 UTC. status.example.com",
+    });
+    answers.set(path, [400]);
+    expect(await PROVIDERS.sms.send(message, ch, context())).toEqual({
+      ok: false,
+      status: 400,
+      error: "unverified_number",
+      retryable: false,
     });
   });
 
