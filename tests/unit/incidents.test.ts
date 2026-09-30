@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { type Heartbeat, Incident, type Service, type ServiceStatus, type Source } from "@/shared/model";
+import { retiredServiceOf } from "@/shared/monitors";
 import type { ModelDelta } from "@/shared/schemas";
 import {
   type DownInput,
   deriveDeltaIncidents,
   deriveDownIncidents,
   deriveIncidents,
+  deriveRetiredServiceIncidents,
   deriveStaleIncidents,
   isOutdatedDelta,
   RETIRED_NOTE,
@@ -470,6 +472,42 @@ describe("deriveStaleIncidents with watched sources", () => {
       now: T("10:06:00"),
     });
     expect(r.opened).toHaveLength(1);
+  });
+});
+
+describe("deriveRetiredServiceIncidents", () => {
+  const down = (serviceId: string, startedAt: string, endedAt: string | null = null): Incident => ({
+    id: `${serviceId}:${startedAt}`,
+    site,
+    kind: "down",
+    serviceId,
+    sourceId: null,
+    startedAt,
+    endedAt,
+    title: `${serviceId} down`,
+    notes: null,
+  });
+
+  it("resolves only the open `down` incidents of retired services, with RETIRED_NOTE", () => {
+    const gone = down("webhook:deploy-api", T("10:00:00"));
+    const kept = down("kuma:1", T("10:00:00"));
+    const closed = down("webhook:deploy-api", T("09:00:00"), T("09:10:00"));
+    const r = deriveRetiredServiceIncidents({
+      incidents: [gone, kept, closed],
+      now: T("11:00:00"),
+      retired: (id) => id.startsWith("webhook:"),
+    });
+    expect(r).toEqual({ opened: [], resolved: [{ ...gone, endedAt: T("11:00:00"), notes: RETIRED_NOTE }] });
+  });
+});
+
+describe("retiredServiceOf", () => {
+  const retired = retiredServiceOf({ sources: [{ id: "kuma:watch-1" }] });
+
+  it("is true for a service whose source is not listed, never for a monitor's service", () => {
+    expect(retired({ id: "kuma:1", source: "kuma:watch-1" })).toBe(false);
+    expect(retired({ id: "webhook:deploy-api", source: "webhook:deploys" })).toBe(true);
+    expect(retired({ id: "probe:checkout", source: "probe:cf" })).toBe(false);
   });
 });
 

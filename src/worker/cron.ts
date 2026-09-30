@@ -8,7 +8,7 @@ import { lt, sql } from "drizzle-orm";
 import { runCheck } from "@/checks";
 import type { JobName, Platform } from "@/platform/types";
 import type { Incident } from "@/shared/model";
-import { removedMonitorOf } from "@/shared/monitors";
+import { removedMonitorOf, retiredServiceOf } from "@/shared/monitors";
 import { type Db, schema } from "@/worker/db";
 import { changesOf, toIso } from "@/worker/db/util";
 import { D1ConfigStore } from "@/worker/engine/config-store";
@@ -105,7 +105,8 @@ export async function prune(
  * (src/worker/notify: every channel of the site that wants them) and retries the deliveries that failed
  * with a retryable error in the last hour; both send inside the platform's `waitUntil`. It also resolves,
  * without a card, the incidents a config change left open: `stale` ones of removed sources and `down` ones
- * of removed monitors (`QUIET_NOTES` in src/worker/engine/incidents.ts).
+ * of removed monitors and of the services of removed sources (`QUIET_NOTES` in
+ * src/worker/engine/incidents.ts).
  */
 export async function runJob(
   platform: Platform,
@@ -159,15 +160,25 @@ export async function runJob(
         // Only the sources the config lists or implies can go stale; a removed one (a retired agent) is
         // resolved quietly instead of paging forever. A site without a config keeps every source watched.
         const config = await getSiteConfig(configs, site);
-        const watched = config ? new Set(siteSources(config, platform.runtime).map((s) => s.id)) : undefined;
+        const effective = config ? siteSources(config, platform.runtime) : undefined;
+        const watched = effective ? new Set(effective.map((s) => s.id)) : undefined;
         const r = await store.sweepStaleness(site, toIso(now), watched);
         // Likewise a monitor removed from the config never reports again: its open `down` incident is
         // resolved quietly (REMOVED_MONITOR_NOTE); the view already leaves the service out.
         const gone = config
           ? await store.resolveRemovedMonitors(site, toIso(now), removedMonitorOf(config))
           : null;
+        // And so is an open `down` incident of a service of a removed source (RETIRED_NOTE), which the view
+        // also leaves out with the rest of that source's data.
+        const retired = effective
+          ? await store.resolveRetiredServices(site, toIso(now), retiredServiceOf({ sources: effective }))
+          : null;
         const siteOpened = r.incidentsOpened;
-        const siteResolved = [...r.incidentsResolved, ...(gone?.incidentsResolved ?? [])];
+        const siteResolved = [
+          ...r.incidentsResolved,
+          ...(gone?.incidentsResolved ?? []),
+          ...(retired?.incidentsResolved ?? []),
+        ];
         opened.push(...siteOpened);
         resolved.push(...siteResolved);
         await notifier.notify(site, {

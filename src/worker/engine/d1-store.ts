@@ -20,6 +20,7 @@ import { chunk, excluded, rowsPerInsert, toIso, toMs } from "@/worker/db/util";
 import {
   deriveDeltaIncidents,
   deriveRemovedMonitorIncidents,
+  deriveRetiredServiceIncidents,
   deriveStaleIncidents,
   type IncidentTransitions,
   isOutdatedDelta,
@@ -378,6 +379,34 @@ export class D1Store implements Store {
       .from(incidents)
       .where(and(eq(incidents.site, site), eq(incidents.kind, "down"), isNull(incidents.endedAt)));
     const transitions = deriveRemovedMonitorIncidents({ incidents: rows.map(rowToIncident), now, removed });
+    const stmts = this.incidentStatements(site, transitions, Date.now());
+    if (stmts.length === 0) return empty();
+    const [first, ...others] = stmts as [Stmt, ...Stmt[]];
+    const results = (await this.platform.batch([first, ...others])) as unknown[];
+    return { ...empty(), ...this.confirmed(transitions, results) };
+  }
+
+  /**
+   * Resolves the open `down` incidents of services whose source the site no longer lists (`retired`, from
+   * `retiredServiceOf` over the effective sources) with `RETIRED_NOTE`; the five-minute job calls it next to
+   * the staleness sweep. D1 only (not part of `Store`): nothing else runs the cron.
+   */
+  async resolveRetiredServices(
+    site: string,
+    now: string,
+    retired: (service: { id: string; source: string }) => boolean,
+  ): Promise<ApplyResult> {
+    const rows = await this.db
+      .select()
+      .from(incidents)
+      .where(and(eq(incidents.site, site), eq(incidents.kind, "down"), isNull(incidents.endedAt)));
+    if (rows.length === 0) return empty();
+    const gone = new Set((await this.currentServices(site)).filter(retired).map((s) => s.id));
+    const transitions = deriveRetiredServiceIncidents({
+      incidents: rows.map(rowToIncident),
+      now,
+      retired: (id) => gone.has(id),
+    });
     const stmts = this.incidentStatements(site, transitions, Date.now());
     if (stmts.length === 0) return empty();
     const [first, ...others] = stmts as [Stmt, ...Stmt[]];

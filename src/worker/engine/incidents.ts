@@ -64,7 +64,10 @@ export interface StaleInput {
   watched?: ReadonlySet<string>;
 }
 
-/** The note on a `stale` incident resolved because its source is no longer in the config. */
+/**
+ * The note on a `stale` incident resolved because its source is no longer in the config, and on a `down`
+ * incident of one of that source's services (`deriveRetiredServiceIncidents`).
+ */
 export const RETIRED_NOTE = "Source removed from the config";
 
 const OPENS: ReadonlySet<ServiceStatus> = new Set(["down"]);
@@ -202,6 +205,26 @@ export function deriveRemovedMonitorIncidents(input: RemovedMonitorInput): Incid
   const resolved = input.incidents
     .filter((i) => i.kind === "down" && !i.endedAt && i.serviceId && input.removed(i.serviceId))
     .map((i) => ({ ...i, endedAt: iso(Math.max(now, ms(i.startedAt))), notes: REMOVED_MONITOR_NOTE }));
+  return { opened: [], resolved };
+}
+
+export interface RetiredServiceInput {
+  /** Known incidents of the site: at least every open `down` one. */
+  incidents: readonly Incident[];
+  now: string;
+  /** Whether a service belongs to a source the site no longer lists (`retiredServiceOf`). */
+  retired: (serviceId: string) => boolean;
+}
+
+/**
+ * Open `down` incidents of services of retired sources, resolved at `now` with `RETIRED_NOTE` (the source
+ * no longer reports, so nothing else would close them). Opens nothing.
+ */
+export function deriveRetiredServiceIncidents(input: RetiredServiceInput): IncidentTransitions {
+  const now = ms(input.now);
+  const resolved = input.incidents
+    .filter((i) => i.kind === "down" && !i.endedAt && i.serviceId && input.retired(i.serviceId))
+    .map((i) => ({ ...i, endedAt: iso(Math.max(now, ms(i.startedAt))), notes: RETIRED_NOTE }));
   return { opened: [], resolved };
 }
 
