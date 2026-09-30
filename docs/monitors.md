@@ -94,7 +94,7 @@ Without configured channels a site behaves as before: the historical Discord cha
 Rules that hold on every channel:
 
 - Each transition is sent at most once per channel (the delivery log, the `notifications` table, one row per incident, transition and channel).
-- A service in a maintenance window when its incident starts sends no `down` anywhere. An `up` (or `recovered`) goes to a channel only if its `down` (or `stale`) was sent there or may still be. A source removed from the config is resolved quietly.
+- A service in a maintenance window when its incident starts sends no `down` anywhere. An `up` (or `recovered`) goes to a channel only if its `down` (or `stale`) was sent there or may still be. A source removed from the config is resolved quietly, and so is the open `down` incident of a monitor removed from the config (by the five-minute job, note "Monitor removed from the config"); the page, the public summary, badges and the widget stop listing that monitor at once, while its history stays stored.
 - A failing channel never holds up the others. A 429, 5xx, timeout or network error is retried up to 3 times within the request (honouring the service's `Retry-After`), then by the five-minute cron for up to an hour; a config problem (404, bad URL, missing secret, `email_unavailable`) is final. The log keeps a short error code, never a URL, token, address or response body.
 - `POST /api/admin/notify/test?site=<slug>&kind=<down|up|stale|recovered>&channel=<id>` sends a TEST message to one channel (any of the site's channels, the implicit `discord` included) and records nothing; without `channel` it posts to `DISCORD_WEBHOOK_URL` as before.
 

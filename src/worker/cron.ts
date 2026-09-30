@@ -8,11 +8,12 @@ import { lt, sql } from "drizzle-orm";
 import { runCheck } from "@/checks";
 import type { JobName, Platform } from "@/platform/types";
 import type { Incident } from "@/shared/model";
+import { removedMonitorOf } from "@/shared/monitors";
 import { type Db, schema } from "@/worker/db";
 import { changesOf, toIso } from "@/worker/db/util";
 import { D1ConfigStore } from "@/worker/engine/config-store";
 import { D1Store } from "@/worker/engine/d1-store";
-import { RETIRED_NOTE } from "@/worker/engine/incidents";
+import { QUIET_NOTES } from "@/worker/engine/incidents";
 import { KvModelCache } from "@/worker/engine/kv-cache";
 import { getSiteConfig, siteSources, syncSiteSources } from "@/worker/engine/sites";
 import { type BuiltinRun, type BuiltinRunOptions, runBuiltin } from "@/worker/monitors/builtin";
@@ -102,7 +103,9 @@ export async function prune(
 /**
  * Runs one job at its scheduled time. The five-minute job hands its `stale` transitions to the notifier
  * (src/worker/notify: every channel of the site that wants them) and retries the deliveries that failed
- * with a retryable error in the last hour; both send inside the platform's `waitUntil`.
+ * with a retryable error in the last hour; both send inside the platform's `waitUntil`. It also resolves,
+ * without a card, the incidents a config change left open: `stale` ones of removed sources and `down` ones
+ * of removed monitors (`QUIET_NOTES` in src/worker/engine/incidents.ts).
  */
 export async function runJob(
   platform: Platform,
@@ -158,14 +161,21 @@ export async function runJob(
         const config = await getSiteConfig(configs, site);
         const watched = config ? new Set(siteSources(config, platform.runtime).map((s) => s.id)) : undefined;
         const r = await store.sweepStaleness(site, toIso(now), watched);
-        opened.push(...r.incidentsOpened);
-        resolved.push(...r.incidentsResolved);
+        // Likewise a monitor removed from the config never reports again: its open `down` incident is
+        // resolved quietly (REMOVED_MONITOR_NOTE); the view already leaves the service out.
+        const gone = config
+          ? await store.resolveRemovedMonitors(site, toIso(now), removedMonitorOf(config))
+          : null;
+        const siteOpened = r.incidentsOpened;
+        const siteResolved = [...r.incidentsResolved, ...(gone?.incidentsResolved ?? [])];
+        opened.push(...siteOpened);
+        resolved.push(...siteResolved);
         await notifier.notify(site, {
-          opened: r.incidentsOpened,
-          resolved: r.incidentsResolved.filter((i) => i.notes !== RETIRED_NOTE),
+          opened: siteOpened,
+          resolved: siteResolved.filter((i) => !i.notes || !QUIET_NOTES.has(i.notes)),
         });
-        // Keep latest:<site> in step when a stale incident opened or closed.
-        if (r.incidentsOpened.length + r.incidentsResolved.length > 0) {
+        // Keep latest:<site> in step when an incident opened or closed.
+        if (siteOpened.length + siteResolved.length > 0) {
           await cache.put(await store.loadSiteModel(site, toIso(now)));
         }
       }

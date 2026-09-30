@@ -7,8 +7,8 @@
  *   up, with the outage duration). Which of them a channel gets is its `events` and `services`.
  * - A service inside a maintenance window when its incident starts gets no `down` anywhere. An `up` or a
  *   `recovered` goes to a channel only if that channel's `down` or `stale` was sent, is in flight or may
- *   still be retried, so nobody hears "back up" without having heard "down". A source resolved because it
- *   left the config (`RETIRED_NOTE`) sends nothing.
+ *   still be retried, so nobody hears "back up" without having heard "down". A source or monitor resolved
+ *   because it left the config (`QUIET_NOTES`: `RETIRED_NOTE`, `REMOVED_MONITOR_NOTE`) sends nothing.
  * - The implicit Discord channel is skipped quietly while `DISCORD_WEBHOOK_URL` is unset; a configured
  *   channel whose secret is missing is recorded as `failed secret_missing`.
  *
@@ -41,7 +41,7 @@ import {
 import { type Db, schema } from "@/worker/db";
 import { rowToIncident, rowToService, rowToSource } from "@/worker/db/rows";
 import { toIso } from "@/worker/db/util";
-import { RETIRED_NOTE } from "@/worker/engine/incidents";
+import { QUIET_NOTES } from "@/worker/engine/incidents";
 import type { ConfigSource } from "@/worker/engine/sites";
 import pkg from "../../../package.json";
 import { type CardService, downMessage, recoveredMessage, staleMessage, upMessage } from "./alerts";
@@ -121,7 +121,7 @@ export class IncidentNotifier {
         .filter((i) => (i.kind === "stale" || i.kind === "down") && i.endedAt === null)
         .map((i) => ["open", i] as const),
       ...t.resolved
-        .filter((i) => (i.kind === "stale" || i.kind === "down") && i.notes !== RETIRED_NOTE)
+        .filter((i) => (i.kind === "stale" || i.kind === "down") && !(i.notes && QUIET_NOTES.has(i.notes)))
         .map((i) => ["resolve", i] as const),
     ];
     if (jobs.length === 0) return;

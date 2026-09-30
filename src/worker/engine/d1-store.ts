@@ -19,6 +19,7 @@ import {
 import { chunk, excluded, rowsPerInsert, toIso, toMs } from "@/worker/db/util";
 import {
   deriveDeltaIncidents,
+  deriveRemovedMonitorIncidents,
   deriveStaleIncidents,
   type IncidentTransitions,
   isOutdatedDelta,
@@ -355,6 +356,28 @@ export class D1Store implements Store {
       now,
       ...(watched ? { watched } : {}),
     });
+    const stmts = this.incidentStatements(site, transitions, Date.now());
+    if (stmts.length === 0) return empty();
+    const [first, ...others] = stmts as [Stmt, ...Stmt[]];
+    const results = (await this.platform.batch([first, ...others])) as unknown[];
+    return { ...empty(), ...this.confirmed(transitions, results) };
+  }
+
+  /**
+   * Resolves the open `down` incidents of monitors the config no longer defines (`removed`, from
+   * `removedMonitorOf`) with `REMOVED_MONITOR_NOTE`; the five-minute job calls it next to the staleness
+   * sweep. D1 only (not part of `Store`): nothing else runs the cron.
+   */
+  async resolveRemovedMonitors(
+    site: string,
+    now: string,
+    removed: (serviceId: string) => boolean,
+  ): Promise<ApplyResult> {
+    const rows = await this.db
+      .select()
+      .from(incidents)
+      .where(and(eq(incidents.site, site), eq(incidents.kind, "down"), isNull(incidents.endedAt)));
+    const transitions = deriveRemovedMonitorIncidents({ incidents: rows.map(rowToIncident), now, removed });
     const stmts = this.incidentStatements(site, transitions, Date.now());
     if (stmts.length === 0) return empty();
     const [first, ...others] = stmts as [Stmt, ...Stmt[]];
