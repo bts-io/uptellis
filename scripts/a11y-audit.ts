@@ -2,7 +2,7 @@
  * Accessibility and contrast audit of every registered theme (`bun run a11y`). Not part of `verify`: it needs
  * a browser and the dev server.
  *
- * For each theme x fixture (default, stale, incident) x viewport (1440x900 desktop, 390x844 phone) x colour
+ * For each theme x fixture (default, stale, incident, maintenance) x viewport (1440x900 desktop, 390x844 phone) x colour
  * scheme (light, dark through emulated prefers-color-scheme) it loads `/_preview?fixture=..&theme=..` in
  * headless Chromium and runs axe-core with the WCAG 2.0/2.1/2.2 A and AA rules (color-contrast included) plus
  * axe's best-practice rules (landmarks, heading order). Findings are printed grouped by theme and rule, the
@@ -68,7 +68,7 @@ interface Exclusion {
 const EXCLUSIONS: Exclusion[] = [];
 
 const ROOT = new URL("..", import.meta.url).pathname;
-const FIXTURES = ["default", "stale", "incident"] as const;
+const FIXTURES = ["default", "stale", "incident", "maintenance"] as const;
 const VIEWPORTS = [
   { name: "desktop", width: 1440, height: 900 },
   { name: "phone", width: 390, height: 844 },
@@ -95,7 +95,8 @@ function args(): Map<string, string> {
 function registeredThemes(): string[] {
   const src = readFileSync(`${ROOT}src/client/themes/index.ts`, "utf8");
   const body = src.slice(src.indexOf("export const THEMES"));
-  return [...body.matchAll(/^\s+"([a-z]-[a-z-]+)": \{ module:/gm)].map((m) => m[1]!);
+  // An entry's key starts its line, whether the entry fits on one line or wraps (f-dashboard, i-minimal).
+  return [...body.matchAll(/^\s+"([a-z]-[a-z-]+)": \{/gm)].map((m) => m[1]!);
 }
 
 async function answers(url: string): Promise<boolean> {
