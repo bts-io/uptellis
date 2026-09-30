@@ -43,7 +43,7 @@ Themes never name a fact group or key: what the site's facts mean comes from its
 
 ### Sections
 
-`sections` holds the config's sections in config order, each with the services the model has, in the section's order (unknown ids are skipped). A section none of whose services is in the model (all its ids unknown, or none listed) is left out (contract addition, 0.5.0), so every entry has at least one service and no theme renders an empty header such as "Database UNKNOWN" with nothing under it. `unsectioned` is unchanged: the model's services no section lists.
+`sections` holds the config's sections in config order, each with the services the model has, in the section's order (unknown ids are skipped). A section none of whose services is in the model (all its ids unknown, or none listed) is left out (contract addition, 0.5.0), so every entry has at least one service and no theme renders an empty header such as "Database UNKNOWN" with nothing under it. `unsectioned` is unchanged: the model's services no section lists. Data of a source the site no longer lists (a retired collector, facts pusher or webhook) is left out of the whole view: its services, their beats and incidents, and its facts with the fact groups, highlights, headline and topology built from them; the history stays stored.
 
 ### Registry: theme-color and fonts
 
