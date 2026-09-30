@@ -16,6 +16,7 @@ All notable changes to Uptellis are recorded here. The format follows [Conventio
 * README screenshots of every theme.
 * `bun run a11y`: an axe-core audit of every theme, fixture, phone and desktop width, light and dark (WCAG 2.2 A and AA plus best practices); see `docs/THEMES.md`.
 * Theme contract additions: a section with none of its services in the model is left out of `sections`; `RegisteredTheme` gains `themeColorDark` (Dashboard and Minimal send a light and a dark `theme-color`) and `fonts` (each page preloads only its theme's fonts).
+* A `maintenance` verdict (contract addition): when no service is up, down or degraded and at least one is in a maintenance window, the view's verdict is "N services under maintenance" and every theme says so, instead of "All systems operational" next to "0 of N up". The public `summary.json`, badges and embed report `maintenance` too.
 
 ### Bug Fixes
 
@@ -26,6 +27,8 @@ All notable changes to Uptellis are recorded here. The format follows [Conventio
 * No theme renders an empty section header for a section whose services are not reported.
 * Control Room and Session no longer list replication and the fence twice beside the failover pair; a stale standby lag keeps its last value, marked stale.
 * `notify.webhooks` (never read since 0.4.0) is dropped when a config is parsed, so exports, revisions and the admin JSON omit it; old configs still load.
+* A source removed from the config (a retired collector, facts pusher or webhook) leaves the page: its services and facts are no longer shown as stale forever, and an open incident of one of its services is resolved quietly by the five-minute job, with a note and no card. Its history is kept.
+* The accessibility audit now also covers Dashboard and Minimal (it skipped registry entries written over several lines) and the maintenance fixture.
 
 ## 0.4.0 (2026-09-29)
 
