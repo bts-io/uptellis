@@ -87,7 +87,7 @@ Every transition (a service `down` and back `up`, a source `stale` and `recovere
 
 - **Discord** keeps the cards it always had: a red card for `down` (service, target, runner, since, reason), a green one with the outage duration for `up`, a dark red one for a silent source (last report, expected interval, still reporting) and a green one when it is back (silent for, beats backfilled).
 - **Slack** gets the same facts in Block Kit with the event's colour, **ntfy** a text notification (priority 5 for down, 4 for stale, 3 for back, a click to the status page), **Telegram** an HTML message, **email** a plain text and an HTML part (subject `[Uptellis] Checkout is down`).
-- **Webhook** gets the message itself as JSON, signed with HMAC-SHA256 (`X-Uptellis-Signature: t=<unix>,v1=<hex>` over `<t>.<body>`), with `X-Uptellis-Event` and an `X-Uptellis-Delivery` id that stays the same across retries of one delivery.
+- **Webhook** gets the message itself as JSON, with `X-Uptellis-Event` and an `X-Uptellis-Delivery` id that stays the same across retries of one delivery. It is signed with HMAC-SHA256 (`X-Uptellis-Signature: t=<unix>,v1=<hex>` over `<t>.<body>`) when the channel names a `signingSecret`, and plain otherwise; an optional `authSecret` is sent as the `Authorization` header ([Webhook setup](#webhook-setup)).
 
 Without configured channels a site behaves as before: the historical Discord channel on `DISCORD_WEBHOOK_URL` gets `stale` and `recovered` always, and `down` and `up` when `notify.discord` is on (admin, Config, "Alerts").
 
@@ -111,6 +111,30 @@ Each install sends from its own bot: a bot token controls the bot, so Uptellis c
 ```json
 { "id": "telegram", "name": "Telegram", "type": "telegram", "secret": "NOTIFY_TELEGRAM", "chatId": "123456789" }
 ```
+
+### Webhook setup
+
+A webhook channel POSTs the alert message as JSON to the URL in its `secret`, with `Content-Type: application/json`, `User-Agent: uptellis/<version>`, `X-Uptellis-Event` (`down`, `up`, `stale`, `recovered`) and `X-Uptellis-Delivery` (the same id on every retry of one delivery, so a receiver can drop duplicates). A 2xx answer is a delivery; a 429, 5xx, timeout or network error is retried. Store each value as a `NOTIFY_<NAME>` secret like any other channel secret, then send a test with `POST /api/admin/notify/test?site=<slug>&kind=down&channel=<id>`.
+
+A plain webhook, for a receiver that checks nothing:
+
+```json
+{ "id": "hook", "name": "Receiver", "type": "webhook", "secret": "NOTIFY_HOOK" }
+```
+
+With an `Authorization` header, for n8n, Home Assistant or a Zapier-style receiver: the value of `authSecret` is sent as the header as is, so store the whole value (`Bearer <token>`, `Basic <base64 of user:password>`). It is never logged or written to the delivery log. A named `authSecret` that is not set fails the delivery with `secret_missing`, and a value with a line break fails with `bad_auth_header`, without a request:
+
+```json
+{ "id": "n8n", "name": "n8n", "type": "webhook", "secret": "NOTIFY_N8N", "authSecret": "NOTIFY_N8N_AUTH" }
+```
+
+Signed, so the receiver can prove a POST came from this instance (add `authSecret` too if the receiver also wants the header):
+
+```json
+{ "id": "hook", "name": "Receiver", "type": "webhook", "secret": "NOTIFY_HOOK", "signingSecret": "NOTIFY_HOOK_SIGNING" }
+```
+
+A signed POST carries `X-Uptellis-Signature: t=<unix seconds>,v1=<hex>`, where `v1` is the HMAC-SHA256 of `<t>.<raw body>` keyed with the signing secret (the Stripe scheme). To verify, recompute it over the raw body as received, compare in constant time, and reject a `t` more than 300 seconds from your clock. `verifyWebhook` in `src/shared/notify/webhook.ts` does exactly this.
 
 ## Agent API
 
