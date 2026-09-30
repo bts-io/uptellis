@@ -59,10 +59,16 @@ function ServiceRow({ service: s }: { service: ServiceView }) {
           30 days
         </small>
       </div>
-      <StateTag state={s.state} className="justify-self-end max-[640px]:col-start-2 max-[640px]:row-start-1">
+      {/* The stale note wraps under the word inside the fixed state column, never over the uptime figure. */}
+      <StateTag
+        state={s.state}
+        className="min-w-0 flex-wrap justify-end justify-self-end text-right max-[640px]:col-start-2 max-[640px]:row-start-1"
+      >
         {stale && (
-          <small className="font-medium tracking-normal text-muted normal-case">
-            {" "}
+          <small
+            data-note=""
+            className="basis-full font-medium tracking-normal whitespace-normal text-muted normal-case"
+          >
             (last seen {STATE_WORD[s.status].toLowerCase()})
           </small>
         )}
