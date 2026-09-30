@@ -111,6 +111,53 @@ describe("theme A page", () => {
     expect(inc).toMatch(/<span data-level="warn" class="text-degraded">\(reachable no\)<\/span>/);
   });
 
+  it("wraps a long infra row onto a second, smaller line and keeps a short one whole", () => {
+    const html = render(view("default"));
+    const row = (title: string) => {
+      const at = html.indexOf(`text-accent lowercase">${title}</span>`);
+      return html.slice(at, html.indexOf("</div></div>", at));
+    };
+    const second = /<span class="block text-xs text-muted \[overflow-wrap:anywhere\]">(.*)$/;
+    const text = (markup: string) => markup.replace(/<[^>]+>/g, "");
+    // First runs up top, the rest below, as the original rows read.
+    for (const [title, first, rest] of [
+      ["Replication", "streaming lag 0 s · primary", "peer app-2 (reachable yes) · standby connected yes"],
+      ["Fence", "SERVE · timelines 1/1", "peer is a standby · peer standby"],
+      ["Backup", "5e7d0a42 26 min ago", "73.7 MiB in 18 s · ok · next in 23 h 32 min"],
+      ["Runners", "2 of 2 online · offline none", "runner-1 (idle), watch-1 (idle)"],
+    ] as const) {
+      const r = row(title);
+      const below = second.exec(r)?.[1] ?? "";
+      expect(text(below), title).toBe(rest);
+      expect(text(r.slice(0, r.length - below.length)), title).toContain(first);
+    }
+    // Short rows stay on one line.
+    expect(row("Forgejo")).not.toMatch(second);
+    expect(row("Disk")).not.toMatch(second);
+    // A long word breaks inside the column instead of running out of it.
+    expect(row("Forgejo")).toContain("[overflow-wrap:anywhere]");
+  });
+
+  it("captions the pair from the profile's first card row and colours the standby's lag", () => {
+    const v = view("default");
+    const html = render(v);
+    expect(html).toMatch(/<figcaption[^>]*>forgejo failover pair<\/figcaption>/);
+    // The standby's wal row: its lag in green behind the dot; words (replica, serving) stay ink.
+    expect(html).toMatch(
+      />wal<b class="[^"]*text-up"><span[^>]*data-state="up"[^>]*><\/span><span class="truncate">lag 0 s</,
+    );
+    expect(html).toMatch(
+      />postgres<b class="[^"]*text-ink"><span[^>]*><\/span><span class="truncate">replica</,
+    );
+    expect(render(view("incident"))).toMatch(/>wal<b class="[^"]*text-down"[^>]*>(?:(?!<\/b>).)*>stopped</);
+    // No rows from the profile: a plain caption; no replication pair: topology.
+    const topo = v.topology!;
+    const bare = { ...topo, nodes: topo.nodes.map((n) => ({ ...n, details: [] })) };
+    expect(render({ ...v, topology: bare })).toMatch(/<figcaption[^>]*>failover pair<\/figcaption>/);
+    const unpaired = { ...topo, edges: topo.edges.filter((e) => e.kind !== "replication") };
+    expect(render({ ...v, topology: unpaired })).toMatch(/<figcaption[^>]*>topology<\/figcaption>/);
+  });
+
   it("keeps infra before monitors in document order (the phone order)", () => {
     const html = render(view("default"));
     expect(html.indexOf('id="infra"')).toBeGreaterThan(-1);
@@ -148,7 +195,6 @@ describe("theme A page", () => {
 
   it("fills the pair cards from the node details: serving, postgres role, disk, and the standby down in an incident", () => {
     const html = render(view("default"));
-    expect(html).toContain("failover pair");
     expect(html).toContain("replica");
     expect(html).toContain("16%");
     expect(html).toContain("peer is a standby · 23:45");

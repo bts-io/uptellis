@@ -12,8 +12,15 @@ import {
   TopologyTile,
 } from "@/client/kit";
 import type { TopologyTileProps } from "@/client/kit/props";
-import { type DisplayState, type FactGroupView, highlightedGroups, type SiteView } from "@/shared/view";
-import { cx, hhmm, LEVEL_STATE, probeStale } from "./format";
+import {
+  type DisplayState,
+  type FactGroupView,
+  highlightedGroups,
+  type SiteView,
+  type SummaryPartView,
+  summaryRuns,
+} from "@/shared/view";
+import { cx, hhmm, isMeasure, LEVEL_STATE, pairCaption, probeStale } from "./format";
 
 /** Topology tile (failover pair, replication edge, fence stamp) over one row per fact group. */
 export function InfraPanel({ view }: { view: SiteView }) {
@@ -48,7 +55,7 @@ export function InfraPanel({ view }: { view: SiteView }) {
         <div className={cx("mt-1.5", stale && "saturate-[.4]")}>
           <TopologyTile
             topology={view.topology}
-            caption={replication ? "failover pair" : "topology"}
+            caption={pairCaption(view.topology)}
             rows={nodeRows(view, stale)}
             fenceDetail={fenceDetail(view)}
           />
@@ -98,12 +105,13 @@ function nodeRows(view: SiteView, stale: boolean): TopologyTileProps["rows"] {
         // A percentage draws a gauge in its state's colour instead of a dot.
         state: d.state === null || percent !== undefined ? undefined : shown(d.state),
         percent,
+        // A measure that is fine (`lag 0 s` on the standby, a gauge) reads green; words stay ink.
         level:
           d.state === "down"
             ? "crit"
             : d.state === "degraded"
               ? "warn"
-              : percent !== undefined
+              : percent !== undefined || (d.state === "up" && isMeasure(d.value))
                 ? "ok"
                 : undefined,
       };
@@ -125,31 +133,61 @@ function fenceDetail(view: SiteView): string | undefined {
     .join(" · ");
 }
 
+/** Characters the first line of an infra row holds before the rest of its summary wraps onto a second. */
+const FIRST_LINE = 36;
+
+/**
+ * A summary's runs as two lines: the first runs up to `FIRST_LINE` characters (at least one), then the rest,
+ * so `streaming lag 0 s · primary` stays up top and `peer app-2 (reachable yes) · standby connected yes`
+ * wraps below it, in small muted type as the original rows did. Separators come back between runs.
+ */
+function splitLines(parts: SummaryPartView[]): [SummaryPartView[], SummaryPartView[]] {
+  const runs = summaryRuns(parts);
+  const sep: SummaryPartView = { text: "·", level: "info", emphasis: false };
+  const join = (list: SummaryPartView[][]) => list.flatMap((r, i) => (i ? [sep, ...r] : r));
+  const width = (r: SummaryPartView[]) => r.reduce((n, p) => n + p.text.length + 1, -1);
+  let used = width(runs[0] ?? []);
+  let n = 1;
+  while (n < runs.length && used + 3 + width(runs[n]!) <= FIRST_LINE) used += 3 + width(runs[n++]!);
+  return [join(runs.slice(0, n)), join(runs.slice(n))];
+}
+
 /**
  * A group's summary in coloured parts, else its rows. A percentage row draws a gauge first; otherwise a
  * line whose first part has no colour of its own (`16.0.5`, `2 of 2 online`) starts with the group's dot.
+ * A long summary keeps its first runs on the line and wraps the rest onto a second, smaller one.
  */
 function GroupValue({ group, stale }: { group: FactGroupView; stale: boolean }) {
   const [lead] = group.summaryParts;
   if (!lead) return <FactList rows={group.rows} />;
+  const [first, rest] = splitLines(group.summaryParts);
   const gauge = group.rows.find((r) => r.percent !== null);
+  const second = rest.length > 0 && (
+    <SummaryParts parts={rest} className="block text-xs text-muted [overflow-wrap:anywhere]" />
+  );
   if (gauge?.percent != null)
     return (
-      <Inline>
-        <Gauge value={gauge.percent} cells={18} level={gauge.level ?? undefined} label={gauge.label} />
-        <SummaryParts parts={group.summaryParts} />
-      </Inline>
+      <>
+        <Inline>
+          <Gauge value={gauge.percent} cells={18} level={gauge.level ?? undefined} label={gauge.label} />
+          <SummaryParts parts={first} className="[overflow-wrap:anywhere]" />
+        </Inline>
+        {second}
+      </>
     );
-  // In the text flow, so a long line wraps under its dot instead of dropping below it.
+  // In the text flow, so a long first line wraps under its dot instead of dropping below it.
   return (
-    <span>
-      {lead.level === null && (
-        <span className="mr-1.5 inline-flex align-middle">
-          <StateDot state={stale ? "stale" : LEVEL_STATE[group.level]} />
-        </span>
-      )}
-      <SummaryParts parts={group.summaryParts} />
-    </span>
+    <>
+      <span className="block [overflow-wrap:anywhere]">
+        {lead.level === null && (
+          <span className="mr-1.5 inline-flex align-middle">
+            <StateDot state={stale ? "stale" : LEVEL_STATE[group.level]} />
+          </span>
+        )}
+        <SummaryParts parts={first} />
+      </span>
+      {second}
+    </>
   );
 }
 

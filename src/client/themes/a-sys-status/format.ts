@@ -1,4 +1,4 @@
-import type { DisplayState, Level, ServiceView, SiteView } from "@/shared/view";
+import type { DisplayState, Level, ServiceView, SiteView, TopologyView } from "@/shared/view";
 
 /** Shown wherever a value is missing (a fact the collector did not send, a check without latency). */
 export const DASH = "-";
@@ -81,3 +81,19 @@ export function checkType(s: ServiceView): string {
 
 /** A service's state as its card label: `LAST UP` once the data is stale. */
 export const stateLabel = (s: ServiceView) => (s.state === "stale" ? `last ${s.status}` : s.state);
+
+/** A value that carries a figure (`lag 0 s`, `HTTP 200`) rather than only words (`serving`, `replica`). */
+export const isMeasure = (value: string) => /\d/.test(value);
+
+/**
+ * The pair tile's caption from the profile: the application its cards lead with (the first row the profile
+ * gives a pair node, e.g. `forgejo`), so `forgejo failover pair`; plain `failover pair` when the profile
+ * gives no rows, `topology` without a replication pair.
+ */
+export function pairCaption(topology: TopologyView): string {
+  const pair = topology.edges.find((e) => e.kind === "replication");
+  if (!pair) return "topology";
+  const app = topology.nodes.find((n) => (n.id === pair.from || n.id === pair.to) && n.details.length)
+    ?.details[0]?.label;
+  return app ? `${app} failover pair` : "failover pair";
+}
