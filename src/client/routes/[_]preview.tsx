@@ -5,11 +5,11 @@ import { SitePage } from "../lib/site-page";
 import { THEMES } from "../themes";
 
 /**
- * Dev only (`vite dev`): `/_preview?fixture=default|stale|incident[&theme=<registered id>]` renders a
+ * Dev only (`vite dev`): `/_preview?fixture=default|stale|incident|maintenance[&theme=<registered id>]` renders a
  * test fixture through the same theme page as `/`, for screenshots against the mock-ups. In a build
  * `import.meta.env.DEV` is false, so the loader is a plain 404 and the fixtures are never bundled.
  */
-const FIXTURES = ["default", "stale", "incident"] as const;
+const FIXTURES = ["default", "stale", "incident", "maintenance"] as const;
 type Fixture = (typeof FIXTURES)[number];
 
 const pick = <T extends string>(list: readonly T[], v: unknown): T | undefined => list.find((x) => x === v);

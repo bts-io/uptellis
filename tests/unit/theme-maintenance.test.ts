@@ -37,3 +37,33 @@ describe("maintenance notice in the themes", () => {
     expect(render(id, { ...base, maintenance: undefined })).not.toContain("data-maintenance");
   });
 });
+
+/** The page's visible text: tags dropped, whitespace collapsed. */
+const text = (html: string) =>
+  html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+describe("every service in maintenance (site-wide window)", () => {
+  const all = buildSiteView(fixtureInput("maintenance"));
+
+  it("builds the maintenance verdict", () => {
+    expect(all.verdict.state).toBe("maintenance");
+    expect(all.summary.up).toBe(0);
+  });
+
+  it.each(registered)("%s shows the maintenance verdict", (id) => {
+    const html = render(id, all);
+    expect(html).toMatch(/data-state="maintenance"/);
+    expect(text(html)).toContain(all.verdict.label);
+  });
+
+  it.each(registered)("%s claims nothing is up", (id) => {
+    const t = text(render(id, all));
+    expect(t).not.toMatch(/all systems operational/i);
+    expect(t).not.toMatch(/running smoothly/i);
+    expect(t).not.toMatch(/up and answering/i);
+    expect(t).not.toMatch(/\ball (?:the )?\d+ [^.]{0,40}?\bup\b/i);
+  });
+});
