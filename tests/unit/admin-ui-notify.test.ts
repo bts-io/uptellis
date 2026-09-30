@@ -192,7 +192,8 @@ describe("channel editor", () => {
 
     choose(typeSelect, "webhook");
     expect(field("Endpoint URL secret", g()).value).toBe("NOTIFY_CHANNEL_1");
-    expect(field("Signing key secret", g()).value).toBe("NOTIFY_CHANNEL_1_SIGNING");
+    expect(field("Signing key secret (optional)", g()).value).toBe("NOTIFY_CHANNEL_1_SIGNING");
+    expect(field("Authorization header secret (optional)", g()).value).toBe("");
     expect(text(g())).toContain("HMAC-SHA256");
 
     choose(typeSelect, "ntfy");
@@ -228,6 +229,51 @@ describe("channel editor", () => {
       from: mail("status"),
     });
     expect(sent.notify.channels[0]).not.toHaveProperty("secret");
+  });
+
+  it("makes a webhook plain or signed, with an optional Authorization header secret", async () => {
+    editor();
+    act(() => button("Add channel").click());
+    const g = () => group("Channel channel-1");
+    choose(field("Type", g()), "webhook");
+    expect(text(g())).toContain("Leave empty for a plain, unsigned webhook.");
+    expect(text(g())).toContain("Its value is sent as the Authorization header as is");
+
+    const signing = field("Signing key secret (optional)", g());
+    type(signing, "");
+    expect(issuesOf(signing)).toBe("");
+    expect(text(g())).not.toContain("HMAC-SHA256");
+    expect(text(g())).toContain("no X-Uptellis-Signature header");
+
+    const auth = field("Authorization header secret (optional)", g());
+    expect(auth.placeholder).toBe("none");
+    type(auth, "Bearer abc");
+    expect(auth.value).toBe("BEARER_ABC");
+    expect(issuesOf(auth)).toContain("Expected a secret name");
+    type(auth, "notify-hook-auth");
+    expect(auth.value).toBe("NOTIFY_HOOK_AUTH");
+    expect(issuesOf(auth)).toBe("");
+    const plain = await reviewed();
+    expect(plain.notify.channels[0]).toMatchObject({
+      type: "webhook",
+      secret: "NOTIFY_CHANNEL_1",
+      authSecret: "NOTIFY_HOOK_AUTH",
+    });
+    expect(plain.notify.channels[0]).not.toHaveProperty("signingSecret");
+  });
+
+  it("keeps a signed webhook signed next to its Authorization header secret", async () => {
+    editor();
+    act(() => button("Add channel").click());
+    const g = () => group("Channel channel-1");
+    choose(field("Type", g()), "webhook");
+    type(field("Authorization header secret (optional)", g()), "NOTIFY_HOOK_AUTH");
+    const both = await reviewed();
+    expect(both.notify.channels[0]).toMatchObject({
+      type: "webhook",
+      signingSecret: "NOTIFY_CHANNEL_1_SIGNING",
+      authSecret: "NOTIFY_HOOK_AUTH",
+    });
   });
 
   it("needs at least one event and limits down and up to chosen services", async () => {
@@ -584,6 +630,11 @@ describe("contracts and helpers", () => {
     expect(newChannel([first, { ...first, id: "channel-2" }]).id).toBe("channel-3");
     const hook1 = withChannelType(first, "webhook");
     expect(withId(hook1, "ops")).toMatchObject({ secret: "NOTIFY_OPS", signingSecret: "NOTIFY_OPS_SIGNING" });
+    const authed = { ...hook1, signingSecret: undefined, authSecret: "NOTIFY_CHANNEL_1_AUTH" };
+    const moved = withId(authed, "ops");
+    expect(moved).toMatchObject({ secret: "NOTIFY_OPS", authSecret: "NOTIFY_OPS_AUTH" });
+    expect(moved.type === "webhook" && moved.signingSecret).toBeUndefined();
+    expect(ChannelConfig.safeParse(moved).success).toBe(true);
     expect(withId(OPS, "ops-2")).toMatchObject({ id: "ops-2", secret: "NOTIFY_SLACK_OPS" });
   });
 

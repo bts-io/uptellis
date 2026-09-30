@@ -27,7 +27,7 @@ type Notify = SiteConfig["notify"];
 export const TYPE_LABEL: Record<ChannelType, string> = {
   discord: "Discord webhook",
   slack: "Slack webhook",
-  webhook: "Signed webhook",
+  webhook: "Webhook",
   ntfy: "ntfy",
   telegram: "Telegram",
   email: "Email",
@@ -109,8 +109,10 @@ export function withId(ch: ChannelConfig, id: string): ChannelConfig {
     name === suggestedSecret(ch.id, suffix) ? suggestedSecret(id, suffix) : name;
   const next = { ...ch, id };
   if ("secret" in next) next.secret = follow(next.secret) ?? next.secret;
-  if (next.type === "webhook")
-    next.signingSecret = follow(next.signingSecret, "_SIGNING") ?? next.signingSecret;
+  if (next.type === "webhook") {
+    next.signingSecret = follow(next.signingSecret, "_SIGNING");
+    next.authSecret = follow(next.authSecret, "_AUTH");
+  }
   return next;
 }
 
@@ -261,15 +263,18 @@ function SecretField({
   value,
   issues,
   optional,
+  hint,
   onChange,
 }: {
   label: string;
   value: string | undefined;
   issues: ConfigIssue[];
   optional?: boolean;
+  /** One line under the field. */
+  hint?: string;
   onChange: (value: string | undefined) => void;
 }) {
-  return (
+  const field = (
     <Field
       label={label}
       value={value ?? ""}
@@ -284,6 +289,13 @@ function SecretField({
         onChange(optional && v === "" ? undefined : v);
       }}
     />
+  );
+  if (!hint) return field;
+  return (
+    <div>
+      {field}
+      <p className="mt-1 text-xs text-muted">{hint}</p>
+    </div>
   );
 }
 
@@ -345,12 +357,24 @@ function ChannelRow({
           />
         )}
         {ch.type === "webhook" && (
-          <SecretField
-            label="Signing key secret"
-            value={ch.signingSecret}
-            issues={at("signingSecret")}
-            onChange={(v) => set({ signingSecret: v ?? "" })}
-          />
+          <>
+            <SecretField
+              label="Signing key secret (optional)"
+              value={ch.signingSecret}
+              issues={at("signingSecret")}
+              optional
+              hint="Leave empty for a plain, unsigned webhook."
+              onChange={(v) => set({ signingSecret: v })}
+            />
+            <SecretField
+              label="Authorization header secret (optional)"
+              value={ch.authSecret}
+              issues={at("authSecret")}
+              optional
+              hint="Its value is sent as the Authorization header as is, e.g. Bearer <token>."
+              onChange={(v) => set({ authSecret: v })}
+            />
+          </>
         )}
         {ch.type === "ntfy" && (
           <SecretField
@@ -411,7 +435,9 @@ function ChannelRow({
       </div>
       {ch.type === "webhook" && (
         <p className="mt-1 text-xs text-muted">
-          Each POST is signed with HMAC-SHA256 over the timestamp and body, keyed by the signing key secret.
+          {ch.signingSecret
+            ? "Each POST is signed with HMAC-SHA256 over the timestamp and body, keyed by the signing key secret."
+            : "Each POST is plain JSON with no X-Uptellis-Signature header; set a signing key secret to sign it."}
         </p>
       )}
       {ch.type === "email" && (
