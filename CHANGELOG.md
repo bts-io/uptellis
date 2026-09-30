@@ -4,17 +4,28 @@ All notable changes to Uptellis are recorded here. The format follows [Conventio
 
 ## 0.5.0 (2026-09-30)
 
+### ⚠ BREAKING CHANGES
+
+* **ingest:** the `INGEST_KEY_<ID>` and `INGEST_KEY_<ID>_NEXT` env secrets are no longer read; ingest keys live in D1 only. A producer still signing with one gets 401 `unknown_key` (with a hint in the log) until its key is rotated or created under Admin > Sources, and the server logs the leftover secret names once at startup. See the upgrade path in `docs/OPERATIONS.md`.
+
 ### Features
 
 * Six new themes, chosen from mock-ups: **Classic** (`d-classic`, the familiar hosted status page), **Editorial** (`e-editorial`, reads like a report), **Dashboard** (`f-dashboard`, cards and charts, light and dark), **Wallboard** (`g-wallboard`, for a TV: paging, capped alerts, readable from across a room), **Friendly** (`h-friendly`, plain language) and **Minimal** (`i-minimal`, one line and a compact list). Pick one per site in admin, or preview any with `?theme=`.
 * Self-hosted fonts for the new themes (Inter, Fraunces, Source Serif 4, Manrope, Barlow Semi Condensed, Nunito), all SIL OFL 1.1; see `public/fonts/LICENSES.md`.
 * Themes Control Room and Session regain the profile details they lost in 0.2.0 (coloured group tiles and lines, state dots, the pair caption, the standby lag, the fence timelines), and sys.status wraps long infrastructure rows.
 * README screenshots of every theme.
+* `bun run a11y`: an axe-core audit of every theme, fixture, phone and desktop width, light and dark (WCAG 2.2 A and AA plus best practices); see `docs/THEMES.md`.
+* Theme contract additions: a section with none of its services in the model is left out of `sections`; `RegisteredTheme` gains `themeColorDark` (Dashboard and Minimal send a light and a dark `theme-color`) and `fonts` (each page preloads only its theme's fonts).
 
 ### Bug Fixes
 
 * A monitor removed from a site's config no longer stays on the page, in the public summary or on badges; its open incident is resolved quietly by the five-minute job, with a note and no card. Its history is kept.
 * Agent CLI tests get a 20 s timeout (they spawn the binary and timed out under load).
+* All nine themes pass the accessibility audit: faint and muted text reach AA contrast (sys.status, Control Room, Session, Classic, Dashboard light, Minimal light), Classic's operational banner and Friendly's accent links are darker, sys.status has a `main` landmark, and status notices no longer put `role` on `aside`.
+* Wallboard tile names get the full tile width, with the state word on its own row, so typical names no longer truncate on a wall screen.
+* No theme renders an empty section header for a section whose services are not reported.
+* Control Room and Session no longer list replication and the fence twice beside the failover pair; a stale standby lag keeps its last value, marked stale.
+* `notify.webhooks` (never read since 0.4.0) is dropped when a config is parsed, so exports, revisions and the admin JSON omit it; old configs still load.
 
 ## 0.4.0 (2026-09-29)
 
