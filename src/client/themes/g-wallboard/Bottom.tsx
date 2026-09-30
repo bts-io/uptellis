@@ -1,15 +1,40 @@
 import { highlightSlots, type Level, type SiteView } from "@/shared/view";
 import { ago, clock, cx, day, ms } from "./format";
 
-/** The last four incidents as cards: resolved or open, title, when and how long. */
-export function History({ view }: { view: SiteView }) {
+/**
+ * The last four incidents as cards: resolved or open, title, when and how long. Under pressure on a wall
+ * screen (`squeezed`: the alert rows or a short screen leave no room) the cards give way to one line with the
+ * latest incident, so the service tiles keep their room; a phone always shows the cards.
+ */
+export function History({ view, squeezed }: { view: SiteView; squeezed: boolean }) {
   const recent = view.incidents.recent.slice(0, 4);
+  const [last] = recent;
+  const line = last
+    ? `${last.endedAt ? "Resolved" : "Open"}: ${last.title} · ${day(last.startedAt)}, ${clock(last.startedAt)} · lasted ${ago(last.durationS)}${recent.length > 1 ? ` · +${recent.length - 1} more` : ""}`
+    : "No incidents in the recent history.";
   return (
-    <section aria-labelledby="g-history" className="flex flex-col gap-2">
-      <h2 id="g-history" className="text-[1.1rem] font-bold tracking-[0.16em] text-muted uppercase">
-        Recent incidents
-      </h2>
-      <ol className="grid grid-cols-1 gap-3 min-[900px]:grid-cols-4">
+    <section
+      aria-labelledby="g-history"
+      data-g-history=""
+      data-squeezed={squeezed ? "" : undefined}
+      className="group/h flex flex-col gap-2"
+    >
+      <div className="flex min-w-0 items-baseline gap-4">
+        <h2
+          id="g-history"
+          className="text-[1.1rem] font-bold tracking-[0.16em] whitespace-nowrap text-muted uppercase"
+        >
+          Recent incidents
+        </h2>
+        <p
+          data-g-history-line=""
+          title={line}
+          className="hidden min-w-0 flex-1 truncate text-[1.2rem] text-muted min-[900px]:group-data-squeezed/h:block"
+        >
+          {line}
+        </p>
+      </div>
+      <ol className="grid grid-cols-1 gap-3 min-[900px]:grid-cols-4 min-[900px]:group-data-squeezed/h:hidden">
         {recent.length ? (
           recent.map((i) => (
             <li

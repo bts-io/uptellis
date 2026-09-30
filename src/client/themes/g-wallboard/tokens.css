@@ -73,11 +73,18 @@
   --g-maint-ink: #04142a;
   --g-well: #05070a;
 
+  /* The services board's floor on a wall screen: its heading, one group title and one row of tiles. */
+  --g-board-min: 14rem;
+
   color-scheme: dark;
 }
 
+/*
+ * 1.25vw, capped at 2vh so a wide, short screen (16:9 and wider) still gets 50rem of height for the
+ * board: at 1440x900 both are 18px, at 1920x1080 the height wins (21.6px).
+ */
 html[data-theme="g"] {
-  font-size: clamp(16px, 1.25vw, 60px);
+  font-size: clamp(16px, min(1.25vw, 2vh), 60px);
 }
 
 /* The pager's progress bar (Board.tsx); skipped under reduced motion. */

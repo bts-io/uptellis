@@ -18,7 +18,11 @@ export const TILE: Record<DisplayState, string> = {
 const TILE_BOX =
   "flex min-w-0 flex-col gap-2 rounded-[0.9rem] border-[0.15rem] border-t-[0.55rem] border-line border-t-(--g-c) bg-panel px-[1.1rem] pt-4 pb-[0.9rem]";
 
-/** Name and the state as icon plus word, in the state's colour. */
+/**
+ * Name and the state as icon plus word, in the state's colour. On a wall screen the name keeps to one line
+ * and ends in an ellipsis (the full name in its title), so a long name never wraps into a clipped second line;
+ * on a phone the tile is wide and the name wraps.
+ */
 function Head({
   name,
   state,
@@ -33,8 +37,9 @@ function Head({
   return (
     <div className="flex items-center justify-between gap-2.5">
       <h3
+        title={name}
         className={cx(
-          "min-w-0 text-[1.6rem] leading-[1.05] font-bold [overflow-wrap:anywhere] min-[900px]:text-[1.9rem]",
+          "min-w-0 text-[1.6rem] leading-[1.05] font-bold [overflow-wrap:anywhere] min-[900px]:truncate min-[900px]:text-[1.9rem] min-[900px]:leading-[1.15]",
           muted && "text-muted",
         )}
       >

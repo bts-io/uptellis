@@ -27,7 +27,9 @@ const GROUP_STATE: Record<string, string> = {
 
 /**
  * The services grid: one group per section (then "Other" and "Infrastructure"), four columns on a wall,
- * two from 900 px, stacked below. On a wall screen the groups that do not fit rotate in pages (usePaging).
+ * two from 900 px, stacked below. On a wall screen the groups that do not fit rotate in pages (usePaging),
+ * and the board never shrinks below one full row of tiles (`--g-board-min`, tokens.css): the alerts and the
+ * recent incidents give way first (Alerts, History).
  */
 export function Board({ view }: { view: SiteView }) {
   const groups = boardGroups(view);
@@ -39,7 +41,10 @@ export function Board({ view }: { view: SiteView }) {
   const titles = shown?.map((i) => groups[i]?.title).join(", ");
 
   return (
-    <section aria-labelledby="g-services" className="flex min-h-0 flex-1 flex-col gap-2.5">
+    <section
+      aria-labelledby="g-services"
+      className="flex min-h-0 flex-1 flex-col gap-2.5 min-[900px]:min-h-(--g-board-min)"
+    >
       <div className="flex items-center justify-between gap-4">
         <h2 id="g-services" className="text-[1.1rem] font-bold tracking-[0.16em] text-muted uppercase">
           Services

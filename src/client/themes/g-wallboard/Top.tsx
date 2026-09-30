@@ -1,6 +1,6 @@
 import { useAgeTicker } from "@/client/effects";
 import type { SiteView } from "@/shared/view";
-import { ago, cx, isFresh, isoBefore, pct } from "./format";
+import { ago, alertPlan, clock, cx, isFresh, isoBefore, pct, silentSources } from "./format";
 import { BoardIcon, Mark, verdictIcon } from "./icons";
 
 /** Brand on the left (site name, tagline or host), the data's age on the right, ticking on the client. */
@@ -32,7 +32,7 @@ function Fresh({ view }: { view: SiteView }) {
       : fresh
         ? `Updated ${ago(age)} ago`
         : `Stale: last data ${ago(age)} ago`;
-  return (
+  const line = (
     <p
       data-state={f.state}
       className={cx(
@@ -46,6 +46,18 @@ function Fresh({ view }: { view: SiteView }) {
       />
       {text}
     </p>
+  );
+  if (!alertPlan(view).staleInHeader) return line;
+  // Incidents hold the alert rows, so on a wall the stale strip folds in here: its sources under the age.
+  const silent = silentSources(view);
+  const detail = `${silent.length ? `Not reporting: ${silent.join(", ")} · ` : ""}last snapshot ${clock(view.generatedAt)}`;
+  return (
+    <div data-stale-folded="" className="flex min-w-0 flex-col items-end gap-0.5">
+      {line}
+      <p title={detail} className="hidden max-w-full truncate text-[1.1rem] text-muted min-[900px]:block">
+        {detail}
+      </p>
+    </div>
   );
 }
 

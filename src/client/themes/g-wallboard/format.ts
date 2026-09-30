@@ -175,3 +175,39 @@ export function paginate(count: number, fits: (set: number[]) => boolean): numbe
   if (cur.length) pages.push(cur);
   return pages;
 }
+
+/** The sources behind stale data (stale or never reported), by id. */
+export const silentSources = (view: SiteView) =>
+  view.freshness.perSource.filter((p) => p.freshness === "stale" || p.freshness === "empty").map((p) => p.id);
+
+/** Alert strips a wall screen shows in full; past this many it shows the first ones and a "+M more" row. */
+export const WALL_ALERTS = 2;
+
+/**
+ * How the alert strips sit on a wall screen (from 900 px; a phone shows every strip and scrolls). Open
+ * incidents come first, then the stale notice, then maintenance windows. While incidents are open the stale
+ * notice folds into the header's age line, so it takes no row. When more than `WALL_ALERTS` strips remain,
+ * the first `WALL_ALERTS` show and one compact row counts the rest. `rows` is the rows the wall shows.
+ */
+export interface AlertPlan {
+  /** The stale notice folds into the header (stale data while incidents are open). */
+  staleInHeader: boolean;
+  /** Strips shown in full on the wall, in order (incidents, stale unless folded, maintenance). */
+  shown: number;
+  /** Strips counted in the "+M more" row instead. */
+  more: number;
+  rows: number;
+}
+
+export function alertPlan(view: SiteView): AlertPlan {
+  const incidents = view.incidents.open.length;
+  const stale = !isFresh(view);
+  const staleInHeader = stale && incidents > 0;
+  const total = incidents + (stale && !staleInHeader ? 1 : 0) + (view.maintenance?.length ?? 0);
+  const shown = total > WALL_ALERTS ? WALL_ALERTS : total;
+  const more = total - shown;
+  return { staleInHeader, shown, more, rows: shown + (more ? 1 : 0) };
+}
+
+/** The wall folds the recent-incidents row to one line once this many alert rows take its room. */
+export const SQUEEZE_ROWS = 2;

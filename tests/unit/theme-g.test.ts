@@ -6,7 +6,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { THEMES, themeFor } from "@/client/themes";
 import { gWallboard, THEME_COLOR } from "@/client/themes/g-wallboard";
 import { Board } from "@/client/themes/g-wallboard/Board";
-import { ago, boardGroups, paginate, pct, startPage, until } from "@/client/themes/g-wallboard/format";
+import {
+  ago,
+  alertPlan,
+  boardGroups,
+  paginate,
+  pct,
+  startPage,
+  until,
+} from "@/client/themes/g-wallboard/format";
 import { findForbiddenLiterals } from "@/shared/model";
 import { buildSiteView, type SiteView } from "@/shared/view";
 import { FIXTURE_NAMES, type FixtureName } from "../fixtures";
@@ -139,6 +147,101 @@ describe("theme G page", () => {
   });
 });
 
+/**
+ * The stale fixture with three open incidents (the incident fixture's, copied) and a long service name:
+ * more alerts than a wall can show next to the tiles.
+ */
+const LONG_NAME = "API health (edge) behind the regional load balancer";
+const crowded = (): SiteView => {
+  const v = view("stale");
+  const [open] = view("incident").incidents.open;
+  const incidents = ["a", "b", "c"].map((n, i) => ({
+    ...open!,
+    id: `inc-${n}`,
+    title: `Incident ${n.toUpperCase()} down`,
+    startedAt: `2026-09-27T23:5${i}:00Z`,
+  }));
+  const [first, ...rest] = v.sections;
+  const [svc, ...others] = first!.services;
+  return {
+    ...v,
+    incidents: { ...v.incidents, open: incidents },
+    sections: [{ ...first!, services: [{ ...svc!, name: LONG_NAME }, ...others] }, ...rest],
+  };
+};
+
+describe("theme G under alert pressure (wall screen)", () => {
+  it("plans the alert rows: at most two strips, a +M more row, stale folded while incidents are open", () => {
+    expect(alertPlan(crowded())).toEqual({ staleInHeader: true, shown: 2, more: 1, rows: 3 });
+    expect(alertPlan(view("stale"))).toEqual({ staleInHeader: false, shown: 1, more: 0, rows: 1 });
+    expect(alertPlan(view("incident"))).toEqual({ staleInHeader: false, shown: 1, more: 0, rows: 1 });
+    expect(alertPlan(view("default"))).toEqual({ staleInHeader: false, shown: 0, more: 0, rows: 0 });
+    const twoAndStale = crowded();
+    twoAndStale.incidents = { ...twoAndStale.incidents, open: twoAndStale.incidents.open.slice(0, 2) };
+    expect(alertPlan(twoAndStale)).toEqual({ staleInHeader: true, shown: 2, more: 0, rows: 2 });
+  });
+
+  it("caps the incident strips on the wall, keeps them all for a phone, and counts the rest", () => {
+    const html = render(crowded());
+    const strip = (id: string) => html.match(new RegExp(`<div data-incident="${id}"[^>]*>`))![0];
+    for (const id of ["inc-a", "inc-b"]) {
+      expect(strip(id)).not.toContain("data-overflow");
+      expect(strip(id)).not.toContain("min-[900px]:hidden");
+      // One line on the wall: no wrapping from 900 px.
+      expect(strip(id)).toContain("min-[900px]:flex-nowrap");
+    }
+    expect(strip("inc-c")).toContain('data-overflow=""');
+    expect(strip("inc-c")).toMatch(/class="[^"]*min-\[900px\]:hidden/);
+    // Every incident is still in the markup (a phone shows them all).
+    for (const n of ["A", "B", "C"]) expect(html).toContain(`Incident ${n} down`);
+    const more = html.match(/<p data-more="1"[^>]*>(.*?)<\/p>/)!;
+    expect(more[0]).toMatch(/class="hidden [^"]*min-\[900px\]:flex/);
+    expect(text(more[1]!)).toContain("+1 more Incident C down");
+  });
+
+  it("folds the stale strip into the header while incidents are open", () => {
+    const html = render(crowded());
+    const stale = html.match(/<div data-stale="stale"[^>]*>/)![0];
+    expect(stale).toContain('data-folded=""');
+    expect(stale).toMatch(/class="[^"]*min-\[900px\]:hidden/);
+    const header = html.match(/<div data-stale-folded=""[^>]*>(.*?)<\/div>/)![1]!;
+    expect(text(header)).toContain("Stale: last data 14 min ago");
+    expect(text(header)).toContain("Not reporting: kuma:watch-1, probe:cf · last snapshot 23:57 UTC");
+    // Without open incidents the stale strip keeps its row and the header its one line.
+    const alone = render(view("stale"));
+    expect(alone.match(/<div data-stale="stale"[^>]*>/)![0]).not.toContain("min-[900px]:hidden");
+    expect(alone).not.toContain("data-stale-folded");
+  });
+
+  it("folds the recent incidents to one line under pressure, never on a calm board", () => {
+    const html = render(crowded());
+    const history = html.slice(html.indexOf('<section aria-labelledby="g-history"'));
+    expect(history).toMatch(/^<section [^>]*data-g-history="" data-squeezed=""/);
+    expect(history).toMatch(/<ol class="grid [^"]*min-\[900px\]:group-data-squeezed\/h:hidden/);
+    const line = history.match(/<p data-g-history-line=""[^>]*>(.*?)<\/p>/)!;
+    expect(line[0]).toMatch(/class="hidden [^"]*min-\[900px\]:group-data-squeezed\/h:block/);
+    expect(line[1]).toMatch(/^(Resolved|Open): .+ · lasted .+ · \+\d more$/);
+    for (const name of ["default", "incident", "stale"] as const)
+      expect(render(view(name))).not.toContain('data-squeezed=""');
+  });
+
+  it("keeps the board at least one row of tiles tall and every tile name on one line", () => {
+    const html = render(crowded());
+    expect(html).toMatch(
+      /<section aria-labelledby="g-services" class="[^"]*min-\[900px\]:min-h-\(--g-board-min\)/,
+    );
+    const long = html.match(
+      new RegExp(`<h3 title="${LONG_NAME.replace(/[()]/g, "\\$&")}" class="([^"]*)">([^<]*)</h3>`),
+    )!;
+    expect(long[2]).toBe(LONG_NAME);
+    expect(long[1]).toContain("min-[900px]:truncate");
+    for (const h of html.matchAll(/<h3 title="([^"]*)" class="([^"]*)">([^<]*)<\/h3>/g)) {
+      expect(h[2]).toContain("min-[900px]:truncate");
+      expect(h[1]).toBe(h[3]);
+    }
+  });
+});
+
 describe("theme G helpers", () => {
   it("formats ages, uptimes and groups like the mock-up", () => {
     expect([ago(null), ago(34), ago(360), ago(7200), ago(4 * 86400)]).toEqual([
@@ -257,6 +360,25 @@ describe("theme G rotation (client)", () => {
     ).toBeNull();
     act(() => b.host.querySelector<HTMLButtonElement>('[aria-label="Next page"]')!.click());
     expect(b.shown()).toEqual(["_infra"]);
+  });
+
+  const mountPage = (v: SiteView) => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    roots.push(root);
+    act(() => root.render(createElement(gWallboard.Page, { view: v, commit: "cbe27a13" })));
+    return host.querySelector<HTMLElement>("[data-g-history]")!;
+  };
+
+  it("folds the recent incidents when the full row would push the board off a short wall screen", () => {
+    // main holds the verdict, the board and the history: 3 x 40 px in 100 px overflows.
+    expect(mountPage(view("default")).hasAttribute("data-squeezed")).toBe(true);
+  });
+
+  it("keeps the recent incidents in full on a phone", () => {
+    wall = false;
+    expect(mountPage(view("default")).hasAttribute("data-squeezed")).toBe(false);
   });
 
   it("does not page below 900 px: every group shows and the page scrolls", () => {
