@@ -8,4 +8,6 @@ export const REGISTERED: Partial<Record<ThemeId, { dataTheme: string; themeColor
   "a-sys-status": { dataTheme: "a", themeColor: "#1d1d27" },
   "b-control-room": { dataTheme: "b", themeColor: "#0a0c10" },
   "c-session": { dataTheme: "c", themeColor: "#050807" },
+  "d-classic": { dataTheme: "d", themeColor: "#f6f7f9" },
+  "i-minimal": { dataTheme: "i", themeColor: "#ffffff" },
 };

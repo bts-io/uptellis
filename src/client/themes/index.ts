@@ -7,6 +7,8 @@ import type { ThemeId } from "@/shared/config";
 import { aSysStatus } from "./a-sys-status";
 import { THEME_COLOR as B_THEME_COLOR, bControlRoom } from "./b-control-room";
 import { THEME_COLOR as C_THEME_COLOR, cSession } from "./c-session";
+import { THEME_COLOR as D_THEME_COLOR, dClassic } from "./d-classic";
+import { THEME_COLOR as I_THEME_COLOR, iMinimal } from "./i-minimal";
 import type { ThemeModule } from "./types";
 
 export interface RegisteredTheme {
@@ -19,6 +21,8 @@ export const THEMES: Partial<Record<ThemeId, RegisteredTheme>> = {
   "a-sys-status": { module: aSysStatus, themeColor: "#1d1d27" },
   "b-control-room": { module: bControlRoom, themeColor: B_THEME_COLOR },
   "c-session": { module: cSession, themeColor: C_THEME_COLOR },
+  "d-classic": { module: dClassic, themeColor: D_THEME_COLOR },
+  "i-minimal": { module: iMinimal, themeColor: I_THEME_COLOR },
 };
 
 export const DEFAULT_THEME: RegisteredTheme = THEMES["a-sys-status"]!;
