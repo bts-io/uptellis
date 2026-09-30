@@ -256,6 +256,7 @@ export const SiteConfig = z
     );
     const agents = new Set(c.agents.map((a) => a.id));
     for (const [i, m] of c.monitors.entries()) {
+      if (m.type === "push") continue;
       for (const [j, r] of m.runners.entries()) {
         if (r !== BUILTIN_RUNNER && !agents.has(r)) {
           ctx.addIssue({

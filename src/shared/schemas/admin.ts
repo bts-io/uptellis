@@ -2,7 +2,7 @@
  * Admin API contract (Phase 3, frozen): request and response bodies of `/api/admin/*`. Every route needs a
  * signed-in user with the route's permission (src/shared/auth.ts: `config.edit` for config, `sources.manage`
  * for sources and keys); 401 signed out, 403 without it. Responses carry no secrets except the one-time
- * `secret` of a created or rotated ingest key.
+ * `secret` of a created or rotated ingest key and the one-time `url` of a created or rotated push URL.
  *
  * Routes (all JSON unless noted; `:site` is a site slug):
  * - `POST   /api/admin/sites`                               CreateSiteRequest -> 201 SaveConfigResponse (`instance.manage`; 409 when the slug exists)
@@ -16,6 +16,8 @@
  * - `POST   /api/admin/sites/:site/sources`                 CreateSourceRequest -> IssuedKey (source added to the config as a new revision)
  * - `POST   /api/admin/sites/:site/sources/:keyId/rotate`   -> IssuedKey (the new key is `next`; see KeyState)
  * - `GET    /api/admin/sites/:site/notifications?limit=50`  -> DeliveryList (`config.edit`; newest first, at most 200)
+ * - `GET    /api/admin/sites/:site/push-tokens`             -> PushTokenList (contract addition; `sources.manage`)
+ * - `POST   /api/admin/sites/:site/monitors/:id/push-token` -> 201 IssuedPushUrl (contract addition; `sources.manage`; creates or rotates)
  */
 import { z } from "zod";
 import { SiteConfig } from "../config";
@@ -189,3 +191,32 @@ export const NotifyTestResult = z.object({
   channel: z.string().optional(),
 });
 export type NotifyTestResult = z.infer<typeof NotifyTestResult>;
+
+/**
+ * `GET /api/admin/sites/:site/push-tokens` (`sources.manage`): the push URL of each push monitor of the
+ * current config. Never the token or its hash: only whether one exists, when it was created and when its
+ * last push arrived.
+ */
+export const PushTokenSummary = z.object({
+  monitorId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,31}$/),
+  hasUrl: z.boolean(),
+  createdAt: z.string().nullable(),
+  lastPushAt: z.string().nullable(),
+});
+export type PushTokenSummary = z.infer<typeof PushTokenSummary>;
+export const PushTokenList = z.object({ monitors: z.array(PushTokenSummary) });
+export type PushTokenList = z.infer<typeof PushTokenList>;
+
+/**
+ * `POST /api/admin/sites/:site/monitors/:id/push-token` (`sources.manage`): a new push URL for a push
+ * monitor of the saved config (201). Creating one again rotates it: the old URL stops at once. The only
+ * response that carries the token (inside `url`); shown once, never retrievable again.
+ */
+export const IssuedPushUrl = z.object({
+  monitorId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,31}$/),
+  url: z.url({ protocol: /^https?$/ }),
+  createdAt: z.string(),
+  /** True when an earlier URL existed and has stopped working. */
+  rotated: z.boolean(),
+});
+export type IssuedPushUrl = z.infer<typeof IssuedPushUrl>;

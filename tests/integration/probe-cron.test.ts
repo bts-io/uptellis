@@ -134,7 +134,17 @@ describe("cron: every-minute probes", () => {
     await waitOnExecutionContext(ctx);
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(logs.map((l) => JSON.parse(l))).toEqual([
-      { evt: "cron", job: "probes", opened: 0, resolved: 0, sites: 1, checks: 2, down: 0, failedSites: 0 },
+      {
+        evt: "cron",
+        job: "probes",
+        opened: 0,
+        resolved: 0,
+        sites: 1,
+        checks: 2,
+        down: 0,
+        silent: 0,
+        failedSites: 0,
+      },
     ]);
   });
 });

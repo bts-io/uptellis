@@ -1,11 +1,13 @@
 /**
  * `applyResults`: the one entry point for check results, whoever ran them (the builtin runner in-process,
- * an agent over `POST /api/agent/v1/results`). For one (site, runner) call:
+ * an agent over `POST /api/agent/v1/results`, a push monitor's URL and its silent rule as runner `push`,
+ * src/worker/monitors/push.ts). For one (site, runner) call:
  *
  * 0. the site's sources are synced first (`syncSiteSources`: configured and implied runner sources), so a
  *    runner's first report finds its expected interval;
  * 1. each result is checked against the site's monitors (`monitorsOf`): the monitor exists, is enabled,
- *    lists this runner, is of a type this runner can run (`RUNNER_TYPES`), and the result is at most
+ *    lists this runner (`monitorRunners`: `push` for a push monitor), is of a type this runner can run
+ *    (`RUNNER_TYPES`; only `push` takes push monitors), and the result is at most
  *    `MAX_RESULT_AGE_S` old and at most `MAX_RESULT_SKEW_S` ahead of `now`; anything else is `ignored`;
  * 2. the results apply in time order to the runner's state (`advanceRunner`); one that is not newer than
  *    the last applied one of its monitor (a resend, a duplicate) is `ignored`;
@@ -51,10 +53,12 @@ import {
   MAX_RESULT_AGE_S,
   MAX_RESULT_SKEW_S,
   type MonitorConfig,
+  monitorRunners,
   monitorServiceId,
   monitorServiceKind,
   monitorsOf,
   monitorTargetDisplay,
+  PUSH_RUNNER,
   type ResultsAccepted,
   RUNNER_TYPES,
   type RunnerId,
@@ -81,7 +85,7 @@ export interface MonitorsBackend extends IngestBackend {
 
 export interface ApplyContext {
   site: string;
-  runner: RunnerId;
+  runner: RunnerId | typeof PUSH_RUNNER;
   /** Where this instance runs (decides the builtin runner's source and types). */
   runtime: "cloudflare" | "docker";
 }
@@ -98,13 +102,19 @@ export interface ApplyOutcome extends ResultsAccepted {
 export const runnerRuntime = (runner: string, runtime: ApplyContext["runtime"]): RunnerRuntime =>
   runner === BUILTIN_RUNNER ? runtime : "agent";
 
-/** True when `runner` can run monitors of `type` on this instance's runtime. */
-export const runnerCanRun = (runner: string, type: MonitorConfig["type"], runtime: ApplyContext["runtime"]) =>
-  RUNNER_TYPES[runnerRuntime(runner, runtime)].includes(type);
+/**
+ * True when `runner` can run monitors of `type` on this instance's runtime. `push` takes push monitors and
+ * nothing else; no other runner takes them.
+ */
+export const runnerCanRun = (
+  runner: string,
+  type: MonitorConfig["type"],
+  runtime: ApplyContext["runtime"],
+) => (runner === PUSH_RUNNER ? type === "push" : RUNNER_TYPES[runnerRuntime(runner, runtime)].includes(type));
 
 /** The monitor's runners that cannot run its type here (left out of confirmation). */
 const unsupportedOf = (m: MonitorConfig, runtime: ApplyContext["runtime"]) =>
-  new Set(m.runners.filter((r) => !runnerCanRun(r, m.type, runtime)));
+  new Set(monitorRunners(m).filter((r) => !runnerCanRun(r, m.type, runtime)));
 
 const siteWindows: InMaintenance = (config, serviceId, nowMs) => siteInMaintenance(config, serviceId, nowMs);
 
@@ -147,7 +157,7 @@ export async function applyResults(
     const ok =
       !!monitor &&
       monitor.enabled &&
-      monitor.runners.includes(runner) &&
+      monitorRunners(monitor).includes(runner) &&
       runnerCanRun(runner, monitor.type, runtime) &&
       !Number.isNaN(ts) &&
       nowMs - ts <= MAX_RESULT_AGE_S * 1000 &&
@@ -270,7 +280,8 @@ export async function applyResults(
   return outcome;
 }
 
-function serviceOf(
+/** A monitor's Service (`probe:<id>`) with `verdict` as its status. */
+export function serviceOf(
   site: string,
   m: MonitorConfig,
   verdict: ReturnType<typeof confirmMonitor>,
@@ -282,14 +293,14 @@ function serviceOf(
   return Service.parse({
     id: monitorServiceId(m.id),
     site,
-    source: runnerSourceId(m.runners[0]!, runtime),
+    source: m.type === "push" ? runnerSourceId(PUSH_RUNNER, runtime) : runnerSourceId(m.runners[0]!, runtime),
     externalId: m.id,
     name: m.name,
     kind: monitorServiceKind(m),
     targetDisplay: monitorTargetDisplay(m),
     intervalS: m.intervalS,
     ...(m.type === "http" ? { method: m.method } : {}),
-    timeoutS: m.timeoutS,
+    ...(m.type === "push" ? {} : { timeoutS: m.timeoutS }),
     status: verdict.status,
     latencyMs: verdict.latencyMs,
     avgLatencyMs: before?.avgLatencyMs ?? null,

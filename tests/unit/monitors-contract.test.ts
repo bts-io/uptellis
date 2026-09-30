@@ -12,6 +12,7 @@ import {
   monitorsOf,
   monitorTargetDisplay,
   ResultsBatch,
+  type RunnerMonitorConfig,
   type RunnerState,
   runnerSourceId,
 } from "@/shared/monitors";
@@ -32,7 +33,13 @@ const base: SiteConfigInput = {
 };
 
 const http = (over: Partial<MonitorConfigInput> = {}) =>
-  MonitorConfig.parse({ id: "web", name: "Web", type: "http", url: "https://acme.example/", ...over });
+  MonitorConfig.parse({
+    id: "web",
+    name: "Web",
+    type: "http",
+    url: "https://acme.example/",
+    ...over,
+  }) as RunnerMonitorConfig;
 
 describe("monitor schema", () => {
   it("defaults to builtin, one retry, one minute and a strict-majority quorum", () => {

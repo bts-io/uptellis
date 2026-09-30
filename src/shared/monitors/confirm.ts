@@ -15,10 +15,20 @@
  * 5. any runner failing but not yet confirmed -> `pending`;
  * 6. any runner `degraded` (e.g. a certificate close to expiry) -> `degraded`; else `up`.
  * Only `down` opens an incident and only the transitions into and out of `down` send cards.
+ *
+ * A push monitor is confirmed the same way with one runner (`PUSH_RUNNER`), no retries and no quorum, and
+ * its results never go out of date: each push is final, and silence is not "no recent results" but a
+ * `down` result of its own, written by the silent rule (src/worker/monitors/push.ts).
  */
 import type { ServiceStatus } from "../model/common";
 import type { CheckResult, CheckStatus } from "./api";
-import { effectiveQuorum, type MonitorConfig } from "./schema";
+import {
+  effectiveQuorum,
+  type MonitorConfig,
+  PUSH_RUNNER,
+  type PushMonitor,
+  type RunnerMonitorConfig,
+} from "./schema";
 
 export interface RunnerState {
   runner: string;
@@ -66,8 +76,22 @@ export interface ConfirmContext {
   unsupported?: ReadonlySet<string>;
 }
 
+/** What confirmation reads of a monitor: runners, quorum and retries, or the push monitor itself. */
+export type ConfirmTarget =
+  | Pick<RunnerMonitorConfig, "runners" | "quorum" | "retries" | "intervalS" | "enabled">
+  | Pick<PushMonitor, "type" | "intervalS" | "enabled">;
+
+/** Push monitors as confirmation sees them: one runner, no retries, no quorum, results that never expire. */
+function confirmSpec(m: ConfirmTarget) {
+  if ("type" in m && m.type === "push") {
+    return { runners: [PUSH_RUNNER], retries: 0, quorum: undefined, freshMs: Number.POSITIVE_INFINITY };
+  }
+  const r = m as Pick<RunnerMonitorConfig, "runners" | "quorum" | "retries" | "intervalS">;
+  return { runners: r.runners, retries: r.retries, quorum: r.quorum, freshMs: freshWindowMs(r) };
+}
+
 export function confirmMonitor(
-  m: Pick<MonitorConfig, "runners" | "quorum" | "retries" | "intervalS" | "enabled">,
+  m: ConfirmTarget,
   states: readonly RunnerState[],
   ctx: ConfirmContext,
 ): Verdict {
@@ -79,18 +103,19 @@ export function confirmMonitor(
   });
   if (!m.enabled) return none("paused", "paused");
   if (ctx.inMaintenance) return none("maintenance", "maintenance");
-  const runners = m.runners.filter((r) => !ctx.unsupported?.has(r));
+  const spec = confirmSpec(m);
+  const runners = spec.runners.filter((r) => !ctx.unsupported?.has(r));
   const byRunner = new Map(states.map((s) => [s.runner, s]));
   const fresh = runners
     .map((r) => byRunner.get(r))
-    .filter((s): s is RunnerState => !!s && ctx.nowMs - s.lastTs <= freshWindowMs(m));
+    .filter((s): s is RunnerState => !!s && ctx.nowMs - s.lastTs <= spec.freshMs);
   if (fresh.length === 0) return none("unknown", "no recent results");
 
   const multi = runners.length > 1;
   const label = (s: RunnerState) => (multi ? `${s.runner}: ${s.message}` : s.message).slice(0, 200);
-  const down = fresh.filter((s) => s.lastStatus === "down" && s.consecutiveDown > m.retries);
-  const failing = fresh.filter((s) => s.lastStatus === "down" && s.consecutiveDown <= m.retries);
-  const need = Math.min(effectiveQuorum({ runners, quorum: m.quorum }), fresh.length);
+  const down = fresh.filter((s) => s.lastStatus === "down" && s.consecutiveDown > spec.retries);
+  const failing = fresh.filter((s) => s.lastStatus === "down" && s.consecutiveDown <= spec.retries);
+  const need = Math.min(effectiveQuorum({ runners, quorum: spec.quorum }), fresh.length);
   const downRunners = down.map((s) => s.runner);
 
   if (down.length >= need) return { status: "down", latencyMs: null, message: label(down[0]!), downRunners };

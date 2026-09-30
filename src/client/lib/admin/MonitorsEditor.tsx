@@ -4,8 +4,12 @@
  * the editor's review and save (a new config revision, `config.edit`), and every issue comes from the same
  * `SiteConfig` schema the server applies (`MonitorConfig`, `AgentDecl`, `MaintenanceWindow`), shown under
  * the field it belongs to.
+ *
+ * A push monitor has no target and no runners: its row edits the interval and grace, and (once saved)
+ * creates or rotates its push URL through the admin API (`sources.manage`), shown once in a dialog with a
+ * ready `curl` line; the row also shows when the URL was created and the last push.
  */
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { SiteConfig } from "@/shared/config";
 import {
   type AgentDecl,
@@ -17,12 +21,15 @@ import {
   type MonitorType,
   monitorHost,
   monitorServiceId,
+  type PushMonitor,
   RUNNER_TYPES,
+  type RunnerMonitorConfig,
   WEEKDAYS,
 } from "@/shared/monitors";
 import { LEGACY_DISCORD_CHANNEL, LEGACY_DISCORD_SECRET } from "@/shared/notify";
-import type { ConfigIssue } from "@/shared/schemas/admin";
-import { Button, Field, IssueText, SelectField } from "./ui";
+import type { ConfigIssue, IssuedPushUrl, PushTokenSummary } from "@/shared/schemas/admin";
+import { describeFailure, issuePushUrl } from "./client";
+import { Button, ConfirmDialog, CopyField, Field, IssueText, Modal, Notice, SelectField, when } from "./ui";
 
 type At = (path: string) => ConfigIssue[];
 
@@ -31,6 +38,7 @@ const TYPE_LABEL: Record<MonitorType, string> = {
   tcp: "TCP port",
   ping: "Ping (ICMP)",
   tls: "TLS certificate",
+  push: "Push (heartbeat)",
 };
 
 const DAY_LABEL: Record<(typeof WEEKDAYS)[number], string> = {
@@ -55,7 +63,20 @@ const num = (v: number | undefined) => (v !== undefined && Number.isFinite(v) ? 
 /** The monitor as `type`, keeping the common fields and the host where the types share one. */
 export function withType(m: MonitorConfig, type: MonitorType): MonitorConfig {
   if (m.type === type) return m;
-  const { id, name, intervalS, timeoutS, retries, runners, quorum, enabled } = m;
+  const { id, name, enabled } = m;
+  if (type === "push") {
+    return { id, name, enabled, type, intervalS: m.intervalS, graceS: 60 };
+  }
+  const { intervalS, timeoutS, retries, runners, quorum } =
+    m.type === "push"
+      ? {
+          intervalS: Math.min(3600, Math.ceil(m.intervalS / 60) * 60),
+          timeoutS: 10,
+          retries: 1,
+          runners: [BUILTIN_RUNNER],
+          quorum: undefined,
+        }
+      : m;
   const common = { id, name, intervalS, timeoutS, retries, runners, quorum, enabled };
   const host = monitorHost(m);
   switch (type) {
@@ -76,6 +97,9 @@ export function withType(m: MonitorConfig, type: MonitorType): MonitorConfig {
       return { ...common, type, host, port: m.type === "tcp" ? m.port : 443, minDays: 7 };
   }
 }
+
+/** The ready command a job runs to push: `curl -fsS "<url>?status=up&msg=OK"`. */
+export const pushCurl = (url: string) => `curl -fsS "${url}?status=up&msg=OK"`;
 
 export function newMonitor(taken: readonly MonitorConfig[]): MonitorConfig {
   return {
@@ -106,10 +130,21 @@ const move = <T,>(list: T[], i: number, by: -1 | 1): T[] => {
 /* Monitors                                                            */
 /* ------------------------------------------------------------------ */
 
+/** What a push monitor's row needs to create its URL: the site, the saved push monitors and their state. */
+export interface PushUrls {
+  site: string;
+  /** Ids of the push monitors in the saved config (a URL needs the monitor saved first). */
+  saved: ReadonlySet<string>;
+  /** Per monitor id, from `GET /push-tokens`; empty while loading or when it failed. */
+  state: ReadonlyMap<string, PushTokenSummary>;
+  onIssued: (issued: IssuedPushUrl) => void;
+}
+
 export function MonitorsField({
   monitors,
   agents,
   legacyProbes,
+  push,
   at,
   onChange,
 }: {
@@ -117,6 +152,8 @@ export function MonitorsField({
   agents: AgentDecl[];
   /** Legacy `probes` still in the config (they run as http monitors on builtin). */
   legacyProbes: number;
+  /** Push URL state and actions; without it push rows show no URL controls. */
+  push?: PushUrls;
   at: At;
   onChange: (monitors: MonitorConfig[]) => void;
 }) {
@@ -138,6 +175,7 @@ export function MonitorsField({
             key={i}
             monitor={m}
             runners={runners}
+            push={push}
             at={(p) => at(`monitors.${i}${p ? `.${p}` : ""}`)}
             onChange={(next) => update(i, next)}
             onMove={(by) => onChange(move(monitors, i, by))}
@@ -162,6 +200,7 @@ export function MonitorsField({
 function MonitorRow({
   monitor: m,
   runners,
+  push,
   at,
   onChange,
   onMove,
@@ -171,6 +210,7 @@ function MonitorRow({
 }: {
   monitor: MonitorConfig;
   runners: string[];
+  push?: PushUrls;
   at: At;
   onChange: (m: MonitorConfig) => void;
   onMove: (by: -1 | 1) => void;
@@ -179,8 +219,6 @@ function MonitorRow({
   last: boolean;
 }) {
   const set = (patch: Partial<MonitorConfig>) => onChange({ ...m, ...patch } as MonitorConfig);
-  const cloudflareSkips = m.runners.includes(BUILTIN_RUNNER) && !RUNNER_TYPES.cloudflare.includes(m.type);
-  const unknownRunners = m.runners.filter((r) => !runners.includes(r));
   return (
     <div role="group" aria-label={`Monitor ${m.id}`} className="border border-line p-3">
       <div className="grid gap-3 sm:grid-cols-[10rem_1fr_12rem]">
@@ -205,6 +243,48 @@ function MonitorRow({
       </div>
       <p className="mt-1 font-mono text-xs text-faint">service {monitorServiceId(m.id)}</p>
 
+      {m.type === "push" ? (
+        <PushFields monitor={m} push={push} at={at} onChange={onChange} />
+      ) : (
+        <RunnerFields monitor={m} runners={runners} at={at} onChange={onChange} />
+      )}
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <label className="mr-2 flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={m.enabled} onChange={(e) => set({ enabled: e.target.checked })} />
+          Enabled
+        </label>
+        <Button onClick={() => onMove(-1)} disabled={first}>
+          Move up
+        </Button>
+        <Button onClick={() => onMove(1)} disabled={last}>
+          Move down
+        </Button>
+        <Button tone="danger" onClick={onRemove}>
+          Remove monitor
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** Target, schedule and runners of a monitor that runners check. */
+function RunnerFields({
+  monitor: m,
+  runners,
+  at,
+  onChange,
+}: {
+  monitor: RunnerMonitorConfig;
+  runners: string[];
+  at: At;
+  onChange: (m: MonitorConfig) => void;
+}) {
+  const set = (patch: Partial<RunnerMonitorConfig>) => onChange({ ...m, ...patch } as MonitorConfig);
+  const cloudflareSkips = m.runners.includes(BUILTIN_RUNNER) && !RUNNER_TYPES.cloudflare.includes(m.type);
+  const unknownRunners = m.runners.filter((r) => !runners.includes(r));
+  return (
+    <>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <TypeFields monitor={m} at={at} onChange={onChange} />
       </div>
@@ -290,22 +370,127 @@ function MonitorRow({
           socket limit); check those with an HTTP monitor or from an agent.
         </p>
       )}
+    </>
+  );
+}
 
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <label className="mr-2 flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={m.enabled} onChange={(e) => set({ enabled: e.target.checked })} />
-          Enabled
-        </label>
-        <Button onClick={() => onMove(-1)} disabled={first}>
-          Move up
-        </Button>
-        <Button onClick={() => onMove(1)} disabled={last}>
-          Move down
-        </Button>
-        <Button tone="danger" onClick={onRemove}>
-          Remove monitor
-        </Button>
+/** Interval, grace and the push URL of a push monitor. */
+function PushFields({
+  monitor: m,
+  push,
+  at,
+  onChange,
+}: {
+  monitor: PushMonitor;
+  push?: PushUrls;
+  at: At;
+  onChange: (m: MonitorConfig) => void;
+}) {
+  return (
+    <>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <Field
+          label="Expected every (s)"
+          type="number"
+          min={60}
+          max={86400}
+          value={num(m.intervalS)}
+          issues={at("intervalS")}
+          onChange={(e) => onChange({ ...m, intervalS: e.target.valueAsNumber })}
+        />
+        <Field
+          label="Grace (s)"
+          type="number"
+          min={0}
+          max={86400}
+          value={num(m.graceS)}
+          issues={at("graceS")}
+          onChange={(e) => onChange({ ...m, graceS: e.target.valueAsNumber })}
+        />
       </div>
+      <p className="mt-2 text-xs text-muted">
+        Down when no push arrives for the interval plus the grace; a push with{" "}
+        <span className="font-mono">status=down</span> is down at once.
+      </p>
+      {push && <PushUrl monitorId={m.id} push={push} />}
+    </>
+  );
+}
+
+/** Create or rotate a push monitor's URL; the URL is shown once, in a dialog, and dropped on close. */
+function PushUrl({ monitorId, push }: { monitorId: string; push: PushUrls }) {
+  const [issued, setIssued] = useState<IssuedPushUrl | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (!push.saved.has(monitorId)) {
+    return (
+      <p className="mt-2 text-xs text-muted">
+        Save the config first, then create this monitor's push URL here.
+      </p>
+    );
+  }
+  const state = push.state.get(monitorId);
+  const create = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const out = await issuePushUrl(push.site, monitorId);
+      setIssued(out);
+      push.onIssued(out);
+    } catch (err) {
+      setError(describeFailure(err).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-3">
+      <p className="text-xs text-muted">
+        {state?.hasUrl ? `Push URL created ${when(state.createdAt)}` : "No push URL yet"}; last push{" "}
+        {when(state?.lastPushAt)}
+      </p>
+      {state?.hasUrl ? (
+        <Button disabled={busy} onClick={() => setConfirming(true)}>
+          Rotate push URL
+        </Button>
+      ) : (
+        <Button disabled={busy} onClick={() => void create()}>
+          Create push URL
+        </Button>
+      )}
+      {error && (
+        <p role="alert" className="text-xs text-down">
+          {error}
+        </p>
+      )}
+      <ConfirmDialog
+        open={confirming}
+        title="Rotate the push URL?"
+        confirm="Rotate push URL"
+        busy={busy}
+        onClose={() => setConfirming(false)}
+        onConfirm={() => {
+          setConfirming(false);
+          void create();
+        }}
+      >
+        The current URL stops working at once: update every job that calls it.
+      </ConfirmDialog>
+      <Modal open={issued !== null} onClose={() => setIssued(null)} title="Push URL">
+        {issued && (
+          <div className="flex flex-col gap-3 text-sm">
+            <Notice tone="warn">
+              This URL is shown once. Copy it now: it cannot be shown again. Closing this dialog discards it.
+            </Notice>
+            <CopyField label="Push URL" value={issued.url} copyLabel="Copy URL" />
+            <CopyField label="Command for the job" value={pushCurl(issued.url)} copyLabel="Copy command" />
+            <div className="flex justify-end">
+              <Button onClick={() => setIssued(null)}>Done</Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
@@ -315,7 +500,7 @@ function TypeFields({
   at,
   onChange,
 }: {
-  monitor: MonitorConfig;
+  monitor: RunnerMonitorConfig;
   at: At;
   onChange: (m: MonitorConfig) => void;
 }) {
@@ -458,7 +643,7 @@ export function AgentsField({
       </p>
       <div className="flex flex-col gap-3">
         {agents.map((a, i) => {
-          const used = monitors.filter((m) => m.runners.includes(a.id)).length;
+          const used = monitors.filter((m) => m.type !== "push" && m.runners.includes(a.id)).length;
           return (
             <div
               key={i}

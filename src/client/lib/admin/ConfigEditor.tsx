@@ -1,12 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { VISIBILITIES } from "@/shared/auth";
 import { SiteConfig } from "@/shared/config";
 import { monitorServiceId, monitorsOf } from "@/shared/monitors";
 import { listProfiles } from "@/shared/profiles";
-import type { ConfigDiffEntry, ConfigIssue, ConfigState } from "@/shared/schemas/admin";
+import type { ConfigDiffEntry, ConfigIssue, ConfigState, PushTokenSummary } from "@/shared/schemas/admin";
 import { registeredThemes } from "../../themes";
 import { ChannelsField } from "./ChannelsEditor";
-import { type AdminFailure, describeFailure, importConfig, saveConfig } from "./client";
+import { type AdminFailure, describeFailure, getPushTokens, importConfig, saveConfig } from "./client";
 import { AgentsField, AlertsField, MaintenanceField, MonitorsField } from "./MonitorsEditor";
 import { PublicSettings } from "./PublicEditor";
 import { Button, Card, DiffTable, Field, IssueText, inputClass, issuesAt, Notice, SelectField } from "./ui";
@@ -66,6 +66,21 @@ export function ConfigEditor({ site, state, services, onReload }: ConfigEditorPr
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<AdminFailure | null>(null);
+  const [pushState, setPushState] = useState<ReadonlyMap<string, PushTokenSummary>>(new Map());
+  const savedPush = new Set(monitorsOf(state.config).flatMap((m) => (m.type === "push" ? [m.id] : [])));
+  const hasPush = savedPush.size > 0;
+
+  // Push URL state (created, last push) of the saved push monitors; a failed read shows none.
+  useEffect(() => {
+    if (!hasPush) return;
+    let live = true;
+    getPushTokens(site)
+      .then((list) => live && setPushState(new Map(list.monitors.map((m) => [m.monitorId, m]))))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [site, hasPush]);
 
   const candidate: Candidate =
     mode === "form"
@@ -439,6 +454,20 @@ export function ConfigEditor({ site, state, services, onReload }: ConfigEditorPr
             monitors={draft.monitors}
             agents={draft.agents}
             legacyProbes={draft.probes.filter((p) => !draft.monitors.some((m) => m.id === p.id)).length}
+            push={{
+              site,
+              saved: savedPush,
+              state: pushState,
+              onIssued: (issued) =>
+                setPushState((prev) =>
+                  new Map(prev).set(issued.monitorId, {
+                    monitorId: issued.monitorId,
+                    hasUrl: true,
+                    createdAt: issued.createdAt,
+                    lastPushAt: prev.get(issued.monitorId)?.lastPushAt ?? null,
+                  }),
+                ),
+            }}
             at={at}
             onChange={(monitors) => set("monitors", monitors)}
           />

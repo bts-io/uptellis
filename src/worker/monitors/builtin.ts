@@ -11,6 +11,7 @@ import {
   BUILTIN_RUNNER,
   type CheckOptions,
   type CheckResult,
+  monitorRunners,
   monitorsOf,
   type RunCheck,
 } from "@/shared/monitors";
@@ -51,7 +52,7 @@ export async function runBuiltin(
     const due = (config ? monitorsOf(config) : []).filter(
       (m) =>
         m.enabled &&
-        m.runners.includes(BUILTIN_RUNNER) &&
+        monitorRunners(m).includes(BUILTIN_RUNNER) &&
         runnerCanRun(BUILTIN_RUNNER, m.type, runtime) &&
         isDue(m, scheduledMs),
     );

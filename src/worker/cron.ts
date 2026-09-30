@@ -1,6 +1,7 @@
 /**
  * The scheduled jobs (`JOBS` in src/platform/types.ts): `probes` every minute (the builtin monitor runner,
- * src/worker/monitors/builtin.ts), `fiveMinute` every 5 minutes, `daily` once a day. Cloudflare maps each
+ * src/worker/monitors/builtin.ts, then the silent rule of push monitors, src/worker/monitors/push.ts),
+ * `fiveMinute` every 5 minutes, `daily` once a day. Cloudflare maps each
  * Cron Trigger to its job (src/platform/cloudflare/scheduled.ts), Docker runs them from its own scheduler
  * (src/platform/docker/scheduler.ts); both call `runJob` through `runScheduledJob` (./scheduled.ts).
  */
@@ -17,6 +18,8 @@ import { QUIET_NOTES } from "@/worker/engine/incidents";
 import { KvModelCache } from "@/worker/engine/kv-cache";
 import { getSiteConfig, siteSources, syncSiteSources } from "@/worker/engine/sites";
 import { type BuiltinRun, type BuiltinRunOptions, runBuiltin } from "@/worker/monitors/builtin";
+import { type PushWatchRun, watchPushMonitors } from "@/worker/monitors/push";
+import { PushTokenStore } from "@/worker/monitors/push-store";
 import { SqlRunnerStates } from "@/worker/monitors/runner-state";
 import { incidentNotifier } from "@/worker/notify";
 import pkg from "../../package.json";
@@ -47,6 +50,8 @@ export interface CronResult {
   resolved?: Incident[];
   pruned?: Record<string, number>;
   probes?: BuiltinRun;
+  /** The silent rule of push monitors (the `probes` job). */
+  push?: PushWatchRun;
 }
 
 /** What the `probes` job checks with; each defaults to the runtime's own. */
@@ -137,7 +142,12 @@ export async function runJob(
         version: pkg.version,
         ...probeOptions,
       });
-      return { job, probes };
+      const push = await watchPushMonitors(
+        { ...backend, pushes: new PushTokenStore(platform) },
+        platform.runtime,
+        now,
+      );
+      return { job, probes, push };
     }
     case "fiveMinute": {
       const downsampled = await downsample(db, now);

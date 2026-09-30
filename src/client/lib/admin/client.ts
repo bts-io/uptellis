@@ -13,7 +13,9 @@ import {
   DeliveryList,
   ImportResult,
   IssuedKey,
+  IssuedPushUrl,
   NotifyTestResult,
+  PushTokenList,
   RevisionList,
   SaveConfigResponse,
   SourceKeyList,
@@ -64,6 +66,16 @@ export const createSource = async (site: string, req: CreateSourceRequest) =>
 
 export const rotateKey = async (site: string, keyId: string) =>
   IssuedKey.parse(await api(`${base(site)}/sources/${encodeURIComponent(keyId)}/rotate`, { method: "POST" }));
+
+/** The push URL state of each push monitor of the saved config (never a token). */
+export const getPushTokens = async (site: string) =>
+  PushTokenList.parse(await api(`${base(site)}/push-tokens`));
+
+/** Creates or rotates a push monitor's URL; the response is the only place the URL appears. */
+export const issuePushUrl = async (site: string, monitorId: string) =>
+  IssuedPushUrl.parse(
+    await api(`${base(site)}/monitors/${encodeURIComponent(monitorId)}/push-token`, { method: "POST" }),
+  );
 
 /** The site's recent notification deliveries, newest first. */
 export const getDeliveries = async (site: string, limit = 50) =>

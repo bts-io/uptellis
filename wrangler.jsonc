@@ -59,10 +59,12 @@
   // Rate limits (src/worker/middleware/rate-limit.ts). Counted per Cloudflare location, so they are
   // approximate: a brake on floods and key guessing, not a quota. Ingest is per key id and client IP (the
   // collector posts every 60 s, the facts pusher every 15 min); the gate counts sign-in attempts and
-  // refused requests (401, 403, 404) per client IP; admin writes are per client IP.
+  // refused requests (401, 403, 404) per client IP; admin writes are per client IP; push monitor calls
+  // (`/api/push/<token>`) are one per 10 s per token (keyed by the token's hash, never the token).
   "ratelimits": [
     { "name": "INGEST_RATE_LIMIT", "namespace_id": "1001", "simple": { "limit": 60, "period": 60 } },
     { "name": "GATE_RATE_LIMIT", "namespace_id": "1002", "simple": { "limit": 20, "period": 60 } },
-    { "name": "ADMIN_WRITE_RATE_LIMIT", "namespace_id": "1003", "simple": { "limit": 30, "period": 60 } }
+    { "name": "ADMIN_WRITE_RATE_LIMIT", "namespace_id": "1003", "simple": { "limit": 30, "period": 60 } },
+    { "name": "PUSH_RATE_LIMIT", "namespace_id": "1004", "simple": { "limit": 1, "period": 10 } }
   ]
 }

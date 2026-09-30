@@ -40,6 +40,9 @@ async function attempt(m: MonitorConfig, options: CheckOptions, now: () => numbe
         return await pingAttempt(m, transport);
       case "tls":
         return await tlsAttempt(m, transport, now);
+      case "push":
+        // Nothing checks a push monitor (it is not in any runner's `RUNNER_TYPES`).
+        return down("not supported");
     }
   } catch {
     // Each attempt already maps transport errors; this only guards against a misbehaving transport.

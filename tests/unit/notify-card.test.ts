@@ -55,6 +55,7 @@ describe("producers", () => {
     expect(producerOf("probe:cf")).toBe("Cloudflare probes");
     expect(producerOf("probe:server")).toBe("the server's own probes");
     expect(producerOf("probe:office-1")).toBe("agent office-1");
+    expect(producerOf("probe:push")).toBe("calls to its push URL");
     expect(producerOf("webhook:ci")).toBe("signed webhooks from ci");
   });
 

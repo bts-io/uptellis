@@ -3,6 +3,12 @@
  * `ping` or `tls`) that one or more runners perform on a schedule; their results are confirmed into one
  * service status (./confirm.ts). Changing a shape here needs the lead: every 6a stream codes against it.
  *
+ * A `push` monitor (a heartbeat) is the exception: nothing runs it. A job or timer calls its push URL
+ * (`POST|GET /api/push/<token>`, src/worker/routes/push.ts), each call is one result from the reserved
+ * runner `push` (`PUSH_RUNNER`, source `probe:push`), and the every-minute job marks it down when the
+ * calls stop (src/worker/monitors/push.ts). It has no runners, target, quorum, timeout or retries, is never
+ * handed to the builtin runner or an agent (`RUNNER_TYPES`) and implies no source.
+ *
  * Runners:
  * - `builtin`: the Uptellis instance itself, from Cloudflare's edge (`http`, `tcp`) or from the Docker
  *   server (all four types). The same config works on both runtimes; a type the runtime cannot run is
@@ -17,18 +23,28 @@ import { z } from "zod";
 import { Hostname, IsoTimestamp, ServiceId, type ServiceKind, type SourceId } from "../model/common";
 import { containsForbiddenLiteral, safeDisplay } from "../model/safety";
 
-export const MONITOR_TYPES = ["http", "tcp", "ping", "tls"] as const;
+/** The types a runner checks (the builtin runner or an agent). */
+export const RUNNER_MONITOR_TYPES = ["http", "tcp", "ping", "tls"] as const;
+export const MONITOR_TYPES = [...RUNNER_MONITOR_TYPES, "push"] as const;
 export const MonitorType = z.enum(MONITOR_TYPES);
 export type MonitorType = z.infer<typeof MonitorType>;
 
 /** The instance's own runner; every other runner is an agent id from `agents`. */
 export const BUILTIN_RUNNER = "builtin";
 
-/** Agent ids (the `<name>` of their source `probe:<name>`); `cf`, `server` and `builtin` are reserved. */
+/** The runner a push monitor's results come from (the push route and the silent rule); never configured. */
+export const PUSH_RUNNER = "push";
+
+/** The source push monitors report as. No config lists or implies it, so it never goes stale. */
+export const PUSH_SOURCE_ID: SourceId = `probe:${PUSH_RUNNER}`;
+
+/** Agent ids (the `<name>` of their source `probe:<name>`); `cf`, `server`, `builtin` and `push` are reserved. */
 export const AgentId = z
   .string()
   .regex(/^[a-z0-9][a-z0-9-]{0,31}$/, "Expected an agent id like office-1")
-  .refine((s) => !["cf", "server", BUILTIN_RUNNER].includes(s), { message: "Reserved agent id" });
+  .refine((s) => !["cf", "server", BUILTIN_RUNNER, PUSH_RUNNER].includes(s), {
+    message: "Reserved agent id",
+  });
 export type AgentId = z.infer<typeof AgentId>;
 
 export const RunnerId = z.union([z.literal(BUILTIN_RUNNER), AgentId]);
@@ -36,15 +52,24 @@ export type RunnerId = z.infer<typeof RunnerId>;
 
 export type RunnerRuntime = "cloudflare" | "docker" | "agent";
 
-/** Which monitor types each kind of runner performs (Workers have no ICMP and no peer certificate). */
+/**
+ * Which monitor types each kind of runner performs (Workers have no ICMP and no peer certificate). No runner
+ * performs `push`: its results come from the push route.
+ */
 export const RUNNER_TYPES: Record<RunnerRuntime, readonly MonitorType[]> = {
   cloudflare: ["http", "tcp"],
-  docker: MONITOR_TYPES,
-  agent: MONITOR_TYPES,
+  docker: RUNNER_MONITOR_TYPES,
+  agent: RUNNER_MONITOR_TYPES,
 };
 
-/** The source a runner reports as. `builtin` is `probe:cf` on Cloudflare (as before) and `probe:server` in Docker. */
-export function runnerSourceId(runner: RunnerId, runtime: "cloudflare" | "docker"): SourceId {
+/**
+ * The source a runner reports as. `builtin` is `probe:cf` on Cloudflare (as before) and `probe:server` in
+ * Docker; `push` is `PUSH_SOURCE_ID`.
+ */
+export function runnerSourceId(
+  runner: RunnerId | typeof PUSH_RUNNER,
+  runtime: "cloudflare" | "docker",
+): SourceId {
   if (runner !== BUILTIN_RUNNER) return `probe:${runner}`;
   return runtime === "cloudflare" ? "probe:cf" : "probe:server";
 }
@@ -60,6 +85,8 @@ export function monitorServiceKind(m: MonitorConfig): ServiceKind {
       return "ping";
     case "tls":
       return "tls";
+    case "push":
+      return "push";
   }
 }
 
@@ -93,9 +120,17 @@ const AnyHost = z
 
 const Port = z.number().int().min(1).max(65535);
 
-const common = {
+/** What every monitor has, push monitors included. */
+const base = {
   id: MonitorId,
   name: safeDisplay(150),
+  /** Paused monitors are not run and show `paused`. */
+  enabled: z.boolean().default(true),
+};
+
+/** What a monitor that runners check has on top of `base`. */
+const common = {
+  ...base,
   /** Whole minutes: the builtin runner fires once a minute. */
   intervalS: z
     .number()
@@ -116,8 +151,6 @@ const common = {
     .default([BUILTIN_RUNNER]),
   /** Runners that must agree before the service is down; default a strict majority (1 of 1, 2 of 2, 2 of 3). */
   quorum: z.number().int().min(1).max(5).optional(),
-  /** Paused monitors are not run and show `paused`. */
-  enabled: z.boolean().default(true),
 };
 
 export const HttpMonitor = z.object({
@@ -157,9 +190,34 @@ export const TlsMonitor = z.object({
   minDays: z.number().int().min(0).max(365).default(7),
 });
 
+/**
+ * A heartbeat: up while calls to its push URL keep arriving, down once none came for `intervalS` plus
+ * `graceS` seconds (or at once on a `status=down` call). No runners: each call is the result.
+ */
+export const PushMonitor = z.object({
+  ...base,
+  type: z.literal("push"),
+  /** How often the job is expected to call (1 minute to 1 day). */
+  intervalS: z
+    .number()
+    .int()
+    .min(60)
+    .max(24 * 60 * 60)
+    .default(60),
+  /** Extra seconds a call may be late before the monitor is down. */
+  graceS: z
+    .number()
+    .int()
+    .min(0)
+    .max(24 * 60 * 60)
+    .default(60),
+});
+export type PushMonitor = z.infer<typeof PushMonitor>;
+
 export const MonitorConfig = z
-  .discriminatedUnion("type", [HttpMonitor, TcpMonitor, PingMonitor, TlsMonitor])
+  .discriminatedUnion("type", [HttpMonitor, TcpMonitor, PingMonitor, TlsMonitor, PushMonitor])
   .superRefine((m, ctx) => {
+    if (m.type === "push") return;
     if (m.quorum !== undefined && m.quorum > m.runners.length) {
       ctx.addIssue({ code: "custom", message: "Quorum exceeds the number of runners", path: ["quorum"] });
     }
@@ -178,14 +236,35 @@ export const MonitorConfig = z
 export type MonitorConfig = z.infer<typeof MonitorConfig>;
 export type MonitorConfigInput = z.input<typeof MonitorConfig>;
 
-/** The host a monitor connects to (the URL's host for http). */
+/** A monitor that runners check (every type but `push`). */
+export type RunnerMonitorConfig = Exclude<MonitorConfig, { type: "push" }>;
+
+/** The runners whose results a monitor takes: its `runners`, or only `PUSH_RUNNER` for a push monitor. */
+export const monitorRunners = (m: MonitorConfig): readonly string[] =>
+  m.type === "push" ? [PUSH_RUNNER] : m.runners;
+
+/** The host a monitor connects to (the URL's host for http; none for push). */
 export function monitorHost(m: Pick<MonitorConfig, "type"> & { url?: string; host?: string }): string {
   if (m.type === "http") return URL.parse(m.url ?? "")?.hostname.replace(/^\[|\]$/g, "") ?? "";
   return m.host ?? "";
 }
 
-/** What the page may show as a monitor's target: host (+ port or path) on a public name, else null. */
+/** `30 s`, `5 min`, `1 h 30 min`, `1 day`: a duration as the page and messages show it. */
+export function formatSeconds(total: number): string {
+  if (total > 0 && total % 86_400 === 0) return total === 86_400 ? "1 day" : `${total / 86_400} days`;
+  const h = Math.floor(total / 3600);
+  const min = Math.floor((total % 3600) / 60);
+  const sec = total % 60;
+  const parts = [h ? `${h} h` : "", min ? `${min} min` : "", sec ? `${sec} s` : ""].filter(Boolean);
+  return parts.length > 0 ? parts.join(" ") : "0 s";
+}
+
+/**
+ * What the page may show as a monitor's target: host (+ port or path) on a public name, else null. A push
+ * monitor shows its schedule (`heartbeat every 5 min`), never its URL or token.
+ */
 export function monitorTargetDisplay(m: MonitorConfig): string | null {
+  if (m.type === "push") return `heartbeat every ${formatSeconds(m.intervalS)}`;
   if (!isPublicHost(monitorHost(m))) return null;
   let t: string;
   switch (m.type) {
@@ -208,7 +287,7 @@ export function monitorTargetDisplay(m: MonitorConfig): string | null {
 }
 
 /** Strict majority of the configured runners unless `quorum` says otherwise. */
-export const effectiveQuorum = (m: Pick<MonitorConfig, "runners" | "quorum">) =>
+export const effectiveQuorum = (m: Pick<RunnerMonitorConfig, "runners" | "quorum">) =>
   m.quorum ?? Math.floor(m.runners.length / 2) + 1;
 
 /** An agent a site accepts results from; its API key needs the `agent` scope. */

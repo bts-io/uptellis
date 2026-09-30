@@ -58,9 +58,9 @@ const log = (fields: Record<string, string | number | boolean>) =>
 const reject = (status: 400 | 401 | 403 | 413, error: string, extra: object = {}) =>
   Response.json({ error, ...extra }, { status, headers: { "cache-control": "no-store" } });
 
-/** The agent's monitors: enabled ones listing it among their runners, in config order. */
+/** The agent's monitors: enabled ones listing it among their runners, in config order (never a push monitor). */
 export const agentMonitors = (config: SiteConfig, runner: string): MonitorConfig[] =>
-  monitorsOf(config).filter((m) => m.enabled && m.runners.includes(runner));
+  monitorsOf(config).filter((m) => m.enabled && m.type !== "push" && m.runners.includes(runner));
 
 /** A strong ETag over the monitors' JSON (SHA-256, hex). */
 export async function monitorsEtag(monitors: readonly MonitorConfig[]): Promise<string> {

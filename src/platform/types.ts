@@ -31,6 +31,7 @@ export const RATE_LIMITERS = {
   ingest: { limit: 60, periodS: 60 },
   gate: { limit: 20, periodS: 60 },
   adminWrite: { limit: 30, periodS: 60 },
+  push: { limit: 1, periodS: 10 },
 } as const;
 export type RateLimiterName = keyof typeof RATE_LIMITERS;
 

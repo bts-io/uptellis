@@ -60,7 +60,8 @@ export const MIN_RUNNER_INTERVAL_S = 60;
  * `probe:<agent>`) that the config does not list, expecting a report every smallest interval of that
  * runner's monitors (at least `MIN_RUNNER_INTERVAL_S`). A silent agent then raises a `stale` incident
  * like any source. Paused monitors, and types a runner cannot run here (`RUNNER_TYPES`), imply nothing:
- * that runner would never report them.
+ * that runner would never report them. Push monitors imply nothing either: they have no runner, and their
+ * silence is their own `down` (src/worker/monitors/push.ts), never a `stale` source.
  */
 export function siteSources(config: SiteConfig, runtime: Runtime): SourceSpec[] {
   // A listed builtin source of the other runtime (`probe:cf` in Docker) would never report: left out.
@@ -71,7 +72,7 @@ export function siteSources(config: SiteConfig, runtime: Runtime): SourceSpec[] 
   const listed = new Set(out.map((s) => s.id));
   const implied = new Map<string, number>();
   for (const m of monitorsOf(config)) {
-    if (!m.enabled) continue;
+    if (!m.enabled || m.type === "push") continue;
     for (const r of m.runners) {
       if (!RUNNER_TYPES[r === BUILTIN_RUNNER ? runtime : "agent"].includes(m.type)) continue;
       const id = runnerSourceId(r, runtime);

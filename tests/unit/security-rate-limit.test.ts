@@ -29,7 +29,12 @@ function fakeLimiter(limit: number): RateLimiter & { keys: string[] } {
 
 /** A platform with a fake limiter per name. */
 const fakes = (limit = 2) => {
-  const limiters = { ingest: fakeLimiter(limit), gate: fakeLimiter(limit), adminWrite: fakeLimiter(limit) };
+  const limiters = {
+    ingest: fakeLimiter(limit),
+    gate: fakeLimiter(limit),
+    adminWrite: fakeLimiter(limit),
+    push: fakeLimiter(limit),
+  };
   return { ...limiters, rateLimiter: (name: RateLimiterName) => limiters[name] };
 };
 
@@ -187,8 +192,12 @@ describe("wrangler.jsonc rate limits", () => {
       const { simple } = byName[RATE_LIMIT_BINDINGS[name as RateLimiterName]]!;
       expect({ limit: simple.limit, periodS: simple.period }).toEqual(budget);
     }
-    expect(new Set(limits.map((l) => l.namespace_id)).size).toBe(3);
-    for (const l of limits) expect(l.simple.period).toBe(RETRY_AFTER_S);
+    expect(new Set(limits.map((l) => l.namespace_id)).size).toBe(limits.length);
+    // The push limiter answers with its own retry-after (its 10 s window); every other one with RETRY_AFTER_S.
+    for (const l of limits.filter((x) => x.name !== RATE_LIMIT_BINDINGS.push)) {
+      expect(l.simple.period).toBe(RETRY_AFTER_S);
+    }
+    expect(byName[RATE_LIMIT_BINDINGS.push]!.simple).toEqual({ limit: 1, period: 10 });
     // The collector posts once a minute and backs off from 5 s after a failure; ingest must leave room.
     expect(byName.INGEST_RATE_LIMIT!.simple.limit).toBeGreaterThanOrEqual(30);
   });

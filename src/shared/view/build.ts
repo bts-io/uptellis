@@ -4,7 +4,9 @@
  *
  * Freshness: a configured source reports `fresh`, `aging`, `stale` or `empty` (never seen) at `now`.
  * A service whose source is stale or empty shows `stale` instead of its last status. The site's
- * freshness is the worst among sources that have reported; it is `empty` only when none has.
+ * freshness is the worst among sources that have reported; it is `empty` only when none has. Push monitors
+ * (source `PUSH_SOURCE_ID`) are the exception: their silence is a `down` of its own (the silent rule in
+ * src/worker/monitors/push.ts), so they always show their stored status.
  *
  * Verdict precedence: `empty` (nothing reported) > `outage` (a service is down on current data) >
  * `stale` (a source is stale) > `degraded` > `operational`. A down service on a fresh source outranks
@@ -33,7 +35,7 @@ import {
   sourceFreshness,
 } from "../model";
 import { activeWindows } from "../monitors/maintenance";
-import { removedMonitorOf, retiredServiceOf } from "../monitors/schema";
+import { PUSH_SOURCE_ID, removedMonitorOf, retiredServiceOf } from "../monitors/schema";
 import { activeProfiles } from "../profiles";
 import { buildFactViews, latestFacts, markTopologyGroups, profileContext } from "./facts";
 import { clock, formatDuration, formatPercent, iso, mean, round, toMs } from "./format";
@@ -136,7 +138,7 @@ export function buildSiteView(input: ViewInput): SiteView {
       serviceView(maint ? { ...s, status: "maintenance" } : s, {
         config,
         nowMs,
-        stale: !maint && sourceStale(s.source),
+        stale: !maint && s.source !== PUSH_SOURCE_ID && sourceStale(s.source),
         beats: beatsBy.get(s.id) ?? [],
         days: daysBy.get(s.id) ?? [],
         openIncidentId: openBy.get(s.id) ?? null,

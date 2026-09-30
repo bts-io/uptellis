@@ -5,6 +5,7 @@
  * for sources, spans and times the cards and the dispatcher share live here too.
  */
 import { FRESHNESS_FACTORS, type Incident, type Source } from "@/shared/model";
+import { PUSH_SOURCE_ID } from "@/shared/monitors";
 import type { AlertMessage, NotifyEvent } from "@/shared/notify";
 
 const MIN_MS = 60_000;
@@ -19,6 +20,7 @@ export function producerOf(sourceId: string): string {
   if (kind === "facts") return `facts pusher on ${hostOf(sourceId)}`;
   if (sourceId === "probe:cf") return "Cloudflare probes";
   if (sourceId === "probe:server") return "the server's own probes";
+  if (sourceId === PUSH_SOURCE_ID) return "calls to its push URL";
   if (kind === "probe") return `agent ${hostOf(sourceId)}`;
   return `signed webhooks from ${hostOf(sourceId)}`;
 }

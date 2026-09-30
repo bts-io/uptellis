@@ -12,6 +12,13 @@
  * `GET /sites/:site/sources` lists every ingest key of the site with `inConfig`: false for a key whose source
  * the site no longer watches (removed from the config), which stays listed and rotatable.
  *
+ * Push URLs (`sources.manage`, like ingest and API keys: a push URL is a credential):
+ * `GET /sites/:site/push-tokens` lists each push monitor of the saved config with whether it has a URL, when
+ * that was created and its last push (never the token); `POST /sites/:site/monitors/:id/push-token` creates
+ * the URL of a push monitor of the saved config, or rotates it (the old one stops at once), and returns it
+ * once (201 `IssuedPushUrl`; 404 when the saved config has no push monitor with that id). The URL is on
+ * `PUBLIC_URL`, else the request's origin.
+ *
  * `GET /sites/:site/notifications?limit=50` (`config.edit`, like the notification test) lists the site's
  * recent deliveries, newest first (`DeliveryList`; `limit` 1 to 200, default 50).
  *
@@ -27,6 +34,7 @@ import type { z } from "zod";
 import { exportSiteConfig, type SiteConfig, SiteConfig as SiteConfigSchema } from "@/shared/config";
 import { diffConfigs } from "@/shared/config/diff";
 import { sourceKindOf } from "@/shared/model";
+import { monitorsOf } from "@/shared/monitors";
 import {
   type ConfigErrorResponse,
   type ConfigIssue,
@@ -36,22 +44,27 @@ import {
   type DeliveryList,
   type ImportResult,
   type IssuedKey,
+  type IssuedPushUrl,
   KeyId,
+  type PushTokenList,
   SaveConfigRequest,
   type SaveConfigResponse,
   type SourceKeyList,
 } from "@/shared/schemas/admin";
 import { type ApiKeyList, CreateApiKeyRequest } from "@/shared/schemas/auth";
+import { toIso } from "@/worker/db/util";
 import { readCapped, TooLarge } from "@/worker/read-capped";
 import type { AppEnv } from "../app-env";
 import { issueApiKey, listApiKeys, revokeApiKey } from "../auth/api-keys";
 import { authError, principalOf, requirePermission } from "../auth/context";
+import { baseUrl } from "../auth/instance";
 import { D1ConfigStore, type SaveOutcome } from "../engine/config-store";
 import { listDeliveries } from "../engine/delivery-log";
 import { KeyStore } from "../engine/key-store";
 import { MasterKeyMissing } from "../engine/seal";
 import { siteSources } from "../engine/sites";
 import { isSameOrigin } from "../middleware/same-origin";
+import { PushTokenStore, pushPath } from "../monitors/push-store";
 import { sendTestCard, TEST_CARD_KINDS } from "../notify";
 
 type Ctx = Context<AppEnv>;
@@ -146,6 +159,8 @@ export function adminRoutes() {
     "/sites/:site/sources/*",
     "/sites/:site/api-keys",
     "/sites/:site/api-keys/*",
+    "/sites/:site/push-tokens",
+    "/sites/:site/monitors/*",
   ]) {
     app.use(path, requirePermission("sources.manage"));
   }
@@ -358,6 +373,31 @@ export function adminRoutes() {
   app.delete("/sites/:site/api-keys/:id", async (c) => {
     const revoked = await revokeApiKey(c.get("accounts").platform, c.req.param("site"), c.req.param("id"));
     return revoked ? c.json(revoked) : fail(c, 404, "not_found", "Unknown API key");
+  });
+
+  app.get("/sites/:site/push-tokens", async (c) => {
+    const slug = c.req.param("site");
+    const current = await configs(c).load(slug);
+    if (!current) return notFound(c);
+    const rows = new Map((await new PushTokenStore(c.var.platform).list(slug)).map((r) => [r.monitorId, r]));
+    const monitors = monitorsOf(current.config)
+      .filter((m) => m.type === "push")
+      .map((m) => rows.get(m.id) ?? { monitorId: m.id, hasUrl: false, createdAt: null, lastPushAt: null });
+    return c.json({ monitors } satisfies PushTokenList);
+  });
+
+  app.post("/sites/:site/monitors/:id/push-token", async (c) => {
+    const slug = c.req.param("site");
+    const id = c.req.param("id");
+    const current = await configs(c).load(slug);
+    if (!current) return notFound(c);
+    if (!monitorsOf(current.config).some((m) => m.id === id && m.type === "push")) {
+      return fail(c, 404, "not_found", "No push monitor with this id in the saved config");
+    }
+    const now = c.var.platform.now();
+    const { token, rotated } = await new PushTokenStore(c.var.platform).issue(slug, id, current.version, now);
+    const url = `${baseUrl(c.var.platform, c.req.url)}${pushPath(token)}`;
+    return c.json({ monitorId: id, url, createdAt: toIso(now), rotated } satisfies IssuedPushUrl, 201);
   });
 
   app.post("/notify/test", async (c) => {

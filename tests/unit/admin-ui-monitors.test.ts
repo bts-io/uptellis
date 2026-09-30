@@ -3,7 +3,13 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ConfigEditor } from "@/client/lib/admin/ConfigEditor";
-import { fromLocalInput, newMonitor, toLocalInput, withType } from "@/client/lib/admin/MonitorsEditor";
+import {
+  fromLocalInput,
+  newMonitor,
+  pushCurl,
+  toLocalInput,
+  withType,
+} from "@/client/lib/admin/MonitorsEditor";
 import { parseSiteConfig, type SiteConfig } from "@/shared/config";
 import { MonitorConfig } from "@/shared/monitors";
 import type { ConfigState } from "@/shared/schemas/admin";
@@ -217,6 +223,144 @@ describe("monitors editor", () => {
     act(() => button("Remove monitor", group("Monitor b")).click());
     const sent = await reviewed();
     expect(sent.monitors.map((m) => [m.id, m.enabled])).toEqual([["a", false]]);
+  });
+});
+
+describe("push monitors in the editor", () => {
+  // A push URL as the admin API returns it once (built at run time: no token literal in the repo).
+  const URL_ONCE = `https://status.example.com/api/push/${"Ab1_".repeat(10)}xyz`;
+  const pushMonitor = MonitorConfig.parse({ id: "backup", name: "Backup", type: "push", intervalS: 300 });
+  /** The read-only values on screen that hold a push URL. */
+  const shown = () =>
+    [...document.querySelectorAll("input[readonly]")]
+      .map((i) => (i as HTMLInputElement).value)
+      .filter((v) => v.includes("/api/push/"));
+
+  /** The admin API for push URLs on top of the review dry run. */
+  function pushApi(state: { hasUrl: boolean; lastPushAt: string | null }) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: URL | string, init: RequestInit = {}) => {
+        const u = new URL(String(url));
+        const method = init.method ?? "GET";
+        const raw = typeof init.body === "string" ? init.body : undefined;
+        calls.push({ method, path: u.pathname + u.search, body: raw && JSON.parse(raw) });
+        if (u.pathname.endsWith("/push-tokens")) {
+          return Response.json({
+            monitors: [
+              {
+                monitorId: "backup",
+                hasUrl: state.hasUrl,
+                createdAt: state.hasUrl ? "2026-09-28T09:00:00Z" : null,
+                lastPushAt: state.lastPushAt,
+              },
+            ],
+          });
+        }
+        if (u.pathname.endsWith("/push-token") && method === "POST") {
+          const rotated = state.hasUrl;
+          state.hasUrl = true;
+          return Response.json(
+            { monitorId: "backup", url: URL_ONCE, createdAt: "2026-09-28T10:00:00Z", rotated },
+            { status: 201 },
+          );
+        }
+        return Response.json({ valid: true, issues: [], diff: [], version: null });
+      }),
+    );
+  }
+
+  it("switches a monitor to push: interval and grace, no target, runners, timeout or quorum", async () => {
+    editor({
+      monitors: [MonitorConfig.parse({ id: "job", name: "Job", type: "ping", host: "a.example.org" })],
+    });
+    const m = () => group("Monitor job");
+    choose(field("Type", m()), "push");
+    expect(text(m())).not.toContain("Host");
+    expect(text(m())).not.toContain("Runners");
+    expect(text(m())).not.toContain("Timeout");
+    expect(text(m())).not.toContain("Quorum");
+    expect(field("Expected every (s)", m()).value).toBe("60");
+    expect(field("Grace (s)", m()).value).toBe("60");
+    // Not saved as a push monitor yet: no URL to create.
+    expect(text(m())).toContain("Save the config first");
+    expect(button("Create push URL", m())).toBeUndefined();
+
+    type(field("Expected every (s)", m()), "30");
+    expect(issuesOf(field("Expected every (s)", m()))).toContain("Too small");
+    type(field("Expected every (s)", m()), "3600");
+    type(field("Grace (s)", m()), "900");
+    const sent = await reviewed();
+    expect(sent.monitors).toEqual([
+      { id: "job", name: "Job", type: "push", intervalS: 3600, graceS: 900, enabled: true },
+    ]);
+  });
+
+  it("creates the push URL of a saved monitor and shows it once with a curl line", async () => {
+    pushApi({ hasUrl: false, lastPushAt: null });
+    editor({ monitors: [pushMonitor] });
+    await settle();
+    const m = () => group("Monitor backup");
+    expect(calls.map((c) => `${c.method} ${c.path}`)).toContain("GET /api/admin/sites/demo/push-tokens");
+    expect(text(m())).toContain("No push URL yet; last push never");
+
+    act(() => button("Create push URL", m()).click());
+    await settle();
+    expect(calls.at(-1)).toMatchObject({
+      method: "POST",
+      path: "/api/admin/sites/demo/monitors/backup/push-token",
+    });
+    expect(shown()).toEqual([URL_ONCE, `curl -fsS "${URL_ONCE}?status=up&msg=OK"`]);
+    expect(text()).toContain("This URL is shown once");
+
+    act(() => button("Done").click());
+    await settle();
+    expect(shown()).toEqual([]);
+    expect(text(m())).toContain("Push URL created 2026-09-28 10:00 UTC");
+    expect(button("Rotate push URL", m())).toBeDefined();
+  });
+
+  it("rotates after a confirmation and shows the last push", async () => {
+    pushApi({ hasUrl: true, lastPushAt: "2026-09-28T09:59:00Z" });
+    editor({ monitors: [pushMonitor] });
+    await settle();
+    const m = () => group("Monitor backup");
+    expect(text(m())).toContain("Push URL created 2026-09-28 09:00 UTC; last push 2026-09-28 09:59 UTC");
+    act(() => button("Rotate push URL", m()).click());
+    await settle();
+    expect(text()).toContain("stops working at once");
+    expect(calls.filter((c) => c.method === "POST")).toEqual([]);
+    const confirm = [...document.querySelectorAll("button")].filter(
+      (b) => b.textContent?.trim() === "Rotate push URL",
+    );
+    act(() => confirm.at(-1)!.click());
+    await settle();
+    expect(calls.filter((c) => c.method === "POST").map((c) => c.path)).toEqual([
+      "/api/admin/sites/demo/monitors/backup/push-token",
+    ]);
+    expect(shown()[0]).toBe(URL_ONCE);
+  });
+
+  it("builds the curl line from the URL", () => {
+    expect(pushCurl("https://s.example.com/api/push/x")).toBe(
+      'curl -fsS "https://s.example.com/api/push/x?status=up&msg=OK"',
+    );
+    const back = withType(pushMonitor, "http");
+    expect(back).toMatchObject({
+      type: "http",
+      runners: ["builtin"],
+      timeoutS: 10,
+      retries: 1,
+      intervalS: 300,
+    });
+    expect(withType(back, "push")).toEqual({
+      id: "backup",
+      name: "Backup",
+      enabled: true,
+      type: "push",
+      intervalS: 300,
+      graceS: 60,
+    });
   });
 });
 
