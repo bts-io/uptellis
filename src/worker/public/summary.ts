@@ -36,6 +36,7 @@ const VERDICT_STATE: Record<VerdictState, PublicState> = {
   operational: "up",
   degraded: "degraded",
   outage: "down",
+  maintenance: "maintenance",
   stale: "stale",
   empty: "unknown",
 };

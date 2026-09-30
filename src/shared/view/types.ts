@@ -24,7 +24,7 @@ export type DisplayState = ServiceStatus | "stale";
 /** Severity level shared by facts, activity rows, cert and health hints. */
 export type Level = FactSeverity;
 
-export type VerdictState = "operational" | "degraded" | "outage" | "stale" | "empty";
+export type VerdictState = "operational" | "degraded" | "outage" | "maintenance" | "stale" | "empty";
 
 export interface SiteView {
   v: 1;

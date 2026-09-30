@@ -116,6 +116,20 @@ function Say({ view, up }: { view: SiteView; up: number }) {
         {s.down > 0 ? "down" : "degraded"}: {names.join(", ")}.{headline && ` ${headline}.`}
       </span>
     );
+  } else if (s.maintenance > 0) {
+    // Nothing failing, but not everything up: say how much is in maintenance, never "all up".
+    dot = <StateDot state={s.up > 0 ? "up" : "maintenance"} pulse={s.up > 0} />;
+    text = (
+      <span>
+        <Em className="text-maint">{`${s.maintenance} of ${s.total}`}</Em> in maintenance
+        {s.up > 0 && (
+          <>
+            , <Em>{String(s.up)}</Em> up
+          </>
+        )}
+        .{headline && ` ${headline}.`}
+      </span>
+    );
   } else {
     dot = <StateDot state="up" pulse />;
     text = (

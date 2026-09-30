@@ -154,7 +154,7 @@ Every string the model stores is **display-safe**: the schemas reject address li
 `buildSiteView` (`src/shared/view/build.ts`) is the one pure function from stored data to what a theme renders: the site model, 90 days of `heartbeat_5m` cells, the site config and `now` go in, a `SiteView` comes out. No I/O, no clock reads, deterministic.
 
 - A service whose source is `stale` or `empty` shows as `stale`, never with its last status, so stale data never keeps a green dot.
-- The **verdict** is, in order of precedence: `empty` (nothing has reported), `outage` (a service is down on current data), `stale` (a source is stale), `degraded`, `operational`. Stale services never count as down, so stale data cannot fake an outage.
+- The **verdict** is, in order of precedence: `empty` (nothing has reported), `outage` (a service is down on current data), `stale` (a source is stale, unless a maintenance window covers the whole site), `degraded`, `maintenance` (no service is up and at least one is in a maintenance window), `operational`. Stale services never count as down, so stale data cannot fake an outage.
 - Each service gets a health score from the config's weights (uptime, latency, certificate), 90 daily beat cells, recent checks and a sparkline; facts are grouped, labelled, formatted and levelled by the site's active [profiles](profiles.md) (against the config's thresholds), which also refine the topology and pick the summary highlights; the topology, activity feed and incidents are laid out for rendering.
 
 `GET /api/sites/:site/view` returns this view; the page's SSR loader fetches it through the API bridge and hands it to the site's theme. The page refreshes its data every 30 seconds while the tab is visible and ticks ages every second.

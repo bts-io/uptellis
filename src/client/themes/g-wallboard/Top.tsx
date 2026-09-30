@@ -69,6 +69,7 @@ const BAND: Record<SiteView["verdict"]["state"], { box: string; icon: string; co
     icon: "text-(--g-on-down)",
     counts: "text-(--g-on-down)",
   },
+  maintenance: { box: "border-maint bg-(--g-maint-bg)", icon: "text-maint", counts: "text-muted" },
   stale: {
     box: "border-dashed border-stale bg-[repeating-linear-gradient(135deg,var(--g-stale-bg)_0_1.25rem,var(--g-stale-bg-2)_1.25rem_2.5rem)]",
     icon: "text-stale",

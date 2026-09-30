@@ -75,7 +75,10 @@ function Mark() {
   );
 }
 
-/** "ALL SYSTEMS OPERATIONAL", "PARTIAL OUTAGE: STANDBY POSTGRES" or "STALE · 14M", with its dot. */
+/**
+ * "ALL SYSTEMS OPERATIONAL", "PARTIAL OUTAGE: STANDBY POSTGRES", "3 SERVICES UNDER MAINTENANCE" or "STALE · 14M",
+ * with its dot.
+ */
 function VerdictLine({ view }: { view: SiteView }) {
   const { verdict, freshness } = view;
   const age = useAgeTicker(isoBefore(view.now, freshness.ageS ?? 0), view.now, 15_000);
@@ -86,6 +89,7 @@ function VerdictLine({ view }: { view: SiteView }) {
     label = `stale · ${Math.floor(age / 60)}m`;
     state = "stale";
   } else if (verdict.state === "empty") state = "unknown";
+  else if (verdict.state === "maintenance") state = "maintenance";
   else if (verdict.state === "outage" || verdict.state === "degraded") {
     state = verdict.state === "outage" ? "down" : "degraded";
     const kind =
@@ -98,7 +102,13 @@ function VerdictLine({ view }: { view: SiteView }) {
       data-state={verdict.state}
       className={cx(
         "m-0 flex items-center gap-2 font-mono text-[12.5px] font-semibold tracking-[.08em] whitespace-nowrap uppercase",
-        state === "up" ? "text-up" : state === "down" || state === "stale" ? "text-down" : "text-muted",
+        state === "up"
+          ? "text-up"
+          : state === "down" || state === "stale"
+            ? "text-down"
+            : state === "maintenance"
+              ? "text-maint"
+              : "text-muted",
         state === "degraded" && "text-degraded",
       )}
     >

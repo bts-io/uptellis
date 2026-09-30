@@ -107,13 +107,31 @@ export function BlockHead({ id, children, aside }: { id: string; children: React
 const FLOAT = "motion-safe:animate-[h-float_4s_ease-in-out_infinite]";
 const INK = "#2f2a3b";
 
-/** The soft round buddy whose face tells the story: happy, worried or sleepy. Decorative art, drawn inline. */
+/**
+ * The soft round buddy whose face tells the story: happy, worried, resting (maintenance) or sleepy. Decorative
+ * art, drawn inline.
+ */
 export function Face({ state }: { state: VerdictState }) {
   const happy = state === "operational";
   const worried = state === "outage" || state === "degraded";
-  const fill = happy ? "#bff0d3" : state === "outage" ? "#ffd1d6" : worried ? "#ffe2bd" : "#dcd7f0";
+  const resting = state === "maintenance";
+  const fill = happy
+    ? "#bff0d3"
+    : state === "outage"
+      ? "#ffd1d6"
+      : worried
+        ? "#ffe2bd"
+        : resting
+          ? "#d3e2fb"
+          : "#dcd7f0";
   const cheek = happy ? "#ffb3c1" : worried ? "#ff9aa8" : "#f4b8c9";
-  const label = happy ? "A happy face" : worried ? "A worried face" : "A sleepy face";
+  const label = happy
+    ? "A happy face"
+    : worried
+      ? "A worried face"
+      : resting
+        ? "A resting face"
+        : "A sleepy face";
   return (
     <svg viewBox="0 0 120 120" role="img" aria-label={label} className="block size-full">
       <ellipse cx="60" cy="108" rx="30" ry="5" fill={INK} opacity=".08" />

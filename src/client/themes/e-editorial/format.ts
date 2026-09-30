@@ -19,6 +19,7 @@ export const KICKER: Record<VerdictState, string> = {
   operational: "Operating normally",
   degraded: "Service degraded",
   outage: "Service disruption",
+  maintenance: "Planned maintenance",
   stale: "Report out of date",
   empty: "Awaiting first report",
 };
@@ -101,6 +102,9 @@ export function standfirst(view: SiteView, ageS: number | null): string {
   if (state === "empty") {
     return `No monitor has reported yet, so there is nothing to say about the ${plural(total, "service")} on this page.`;
   }
+  if (state === "maintenance") {
+    return `Planned maintenance is under way on ${total === 1 ? "the one service" : `all ${plural(total, "service")}`} on this page. Their states return here once the work is done.`;
+  }
   const bad = allServices(view).filter((s) => s.state === "down" || s.state === "degraded");
   if (bad.length) {
     const parts = bad.map((s) => {
@@ -117,6 +121,10 @@ export function standfirst(view: SiteView, ageS: number | null): string {
   const lat =
     view.summary.avgLatencyMs !== null ? ` in ${Math.round(view.summary.avgLatencyMs)} ms on average` : "";
   const up = view.summary.uptime30d;
+  const maint = view.summary.maintenance;
+  if (maint > 0) {
+    return `${view.summary.up} of ${plural(total, "service")} answered their latest checks${lat}; ${maint === 1 ? "one is" : `${maint} are`} in planned maintenance.`;
+  }
   return `All ${plural(total, "service")} across ${plural(view.sections.length, "section")} answered their latest checks${lat}${up !== null ? `, with ${pct(up)} uptime over the past 30 days.` : "."}`;
 }
 

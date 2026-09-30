@@ -190,6 +190,9 @@ export function buildSiteView(input: ViewInput): SiteView {
     (a, b) => toMs(b.endedAt ?? "") - toMs(a.endedAt ?? "") || a.id.localeCompare(b.id),
   );
 
+  // Maintenance: nothing down or degraded, nothing up, and at least one service in a window (paused, pending and
+  // unknown services count neither way). Partial maintenance (some up) stays operational; the themes show the
+  // window as a notice.
   const verdictState: VerdictState =
     freshState === "empty"
       ? "empty"
@@ -199,7 +202,9 @@ export function buildSiteView(input: ViewInput): SiteView {
           ? "stale"
           : degraded > 0
             ? "degraded"
-            : "operational";
+            : maintenance > 0 && up === 0
+              ? "maintenance"
+              : "operational";
 
   return {
     v: 1,
@@ -212,7 +217,12 @@ export function buildSiteView(input: ViewInput): SiteView {
       tagline: config.branding.tagline ?? null,
       tokens: config.branding.tokens,
     },
-    verdict: { state: verdictState, label: VERDICT_LABEL[verdictState](down, degraded), down, degraded },
+    verdict: {
+      state: verdictState,
+      label: VERDICT_LABEL[verdictState](down, degraded, maintenance),
+      down,
+      degraded,
+    },
     freshness: {
       state: freshState,
       ageS: freshState === "fresh" ? newestAge(reported) : (stalest?.ageS ?? null),
@@ -274,10 +284,11 @@ export function buildSiteView(input: ViewInput): SiteView {
 }
 
 const plural = (n: number, what: string) => `${n} ${n === 1 ? what : `${what}s`}`;
-const VERDICT_LABEL: Record<VerdictState, (down: number, degraded: number) => string> = {
+const VERDICT_LABEL: Record<VerdictState, (down: number, degraded: number, maintenance: number) => string> = {
   operational: () => "All systems operational",
   degraded: (_, d) => `${plural(d, "service")} degraded`,
   outage: (d) => `${plural(d, "service")} down`,
+  maintenance: (_, __, m) => `${plural(m, "service")} under maintenance`,
   stale: () => "Data is stale",
   empty: () => "No data yet",
 };

@@ -80,7 +80,7 @@ export function withPreviewTheme(data: PageData, theme: ThemeId | undefined): Pa
   return { ...data, view: { ...data.view, theme }, siteTheme: data.view.theme };
 }
 
-/** `1 down`, `2 degraded`, `stale`, `no data`; null when all is well. */
+/** `1 down`, `2 degraded`, `maintenance`, `stale`, `no data`; null when all is well. */
 export function verdictPrefix(v: VerdictView): string | null {
   switch (v.state) {
     case "operational":
@@ -89,6 +89,8 @@ export function verdictPrefix(v: VerdictView): string | null {
       return `${v.down} down`;
     case "degraded":
       return `${v.degraded} degraded`;
+    case "maintenance":
+      return "maintenance";
     case "stale":
       return "stale";
     case "empty":
@@ -110,6 +112,7 @@ const VERDICT_COLOR: Record<VerdictView["state"], string> = {
   operational: "#3ddc84",
   degraded: "#ffb020",
   outage: "#ff6b6b",
+  maintenance: "#7aa2ff",
   stale: "#8a90a6",
   empty: "#8a90a6",
 };

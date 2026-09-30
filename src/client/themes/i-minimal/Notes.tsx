@@ -10,9 +10,11 @@ export function VerdictNote({ view }: { view: SiteView }) {
   if (verdict.down) bits.push(`${verdict.down} down`);
   if (verdict.degraded) bits.push(`${verdict.degraded} degraded`);
   const head =
-    verdict.state === "operational" || !bits.length
-      ? `${summary.total} services`
-      : `${bits.join(", ")} of ${summary.total}`;
+    verdict.state === "maintenance"
+      ? `${summary.maintenance} of ${summary.total} in maintenance`
+      : verdict.state === "operational" || !bits.length
+        ? `${summary.total} services`
+        : `${bits.join(", ")} of ${summary.total}`;
   return (
     <p className="mt-2 mb-0 ml-6 text-sm text-muted">
       {head}

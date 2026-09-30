@@ -139,6 +139,7 @@ const VERDICT_VALUE = {
   operational: "operational",
   degraded: "degraded",
   outage: "outage",
+  maintenance: "maintenance",
   stale: "stale",
   empty: "no data",
 } as const;

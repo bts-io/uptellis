@@ -7,6 +7,7 @@ const VERDICT_TONE: Record<VerdictState, Tone> = {
   operational: "up",
   degraded: "degraded",
   outage: "down",
+  maintenance: "maint",
   stale: "stale",
   empty: "stale",
 };
@@ -14,6 +15,7 @@ const VERDICT_GLYPH: Record<VerdictState, GlyphName> = {
   operational: "check",
   degraded: "warn",
   outage: "x",
+  maintenance: "wrench",
   stale: "clock",
   empty: "question",
 };
@@ -21,6 +23,7 @@ const VERDICT_WORD: Record<VerdictState, string> = {
   operational: "Operational",
   degraded: "Degraded",
   outage: "Outage",
+  maintenance: "Maintenance",
   stale: "Stale data",
   empty: "No data",
 };
@@ -145,7 +148,9 @@ function Donut({ summary, state, parts }: { summary: SummaryView; state: Verdict
       ? [`${summary.other}/${total}`, "not current"]
       : state === "empty"
         ? ["0", "services"]
-        : [`${summary.up}/${total}`, "services up"];
+        : state === "maintenance"
+          ? [`${summary.maintenance}/${total}`, "in maintenance"]
+          : [`${summary.up}/${total}`, "services up"];
   const desc = shown.map((p) => `${p.n} ${p.label.toLowerCase()}`).join(", ") || "none";
   return (
     <div

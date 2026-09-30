@@ -41,7 +41,7 @@ export const PublicSummary = z.object({
   site: z.object({ slug: SiteSlug, name: safeDisplay(80) }),
   verdict: z
     .object({
-      state: z.enum(["operational", "degraded", "outage", "stale", "empty"]),
+      state: z.enum(["operational", "degraded", "outage", "maintenance", "stale", "empty"]),
       label: safeDisplay(80),
     })
     .optional(),

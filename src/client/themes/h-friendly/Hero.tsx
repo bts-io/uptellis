@@ -30,6 +30,8 @@ const HERO: Record<VerdictState, string> = {
   operational: "border-transparent bg-[linear-gradient(160deg,var(--color-panel)_40%,var(--h-wash-up))]",
   outage: "border-(--h-edge-down) bg-[linear-gradient(160deg,var(--color-panel)_40%,var(--h-wash-down))]",
   degraded: "border-(--h-edge-warn) bg-[linear-gradient(160deg,var(--color-panel)_40%,var(--h-wash-warn))]",
+  maintenance:
+    "border-(--h-edge-maint) bg-[linear-gradient(160deg,var(--color-panel)_40%,var(--h-wash-maint))]",
   stale: "border-(--h-edge-idle) bg-[linear-gradient(160deg,var(--color-panel)_40%,var(--h-wash-idle))]",
   empty: "border-(--h-edge-idle) bg-[linear-gradient(160deg,var(--color-panel)_40%,var(--h-wash-idle))]",
 };

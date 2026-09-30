@@ -45,6 +45,10 @@ Themes never name a fact group or key: what the site's facts mean comes from its
 
 `sections` holds the config's sections in config order, each with the services the model has, in the section's order (unknown ids are skipped). A section none of whose services is in the model (all its ids unknown, or none listed) is left out (contract addition, 0.5.0), so every entry has at least one service and no theme renders an empty header such as "Database UNKNOWN" with nothing under it. `unsectioned` is unchanged: the model's services no section lists. Data of a source the site no longer lists (a retired collector, facts pusher or webhook) is left out of the whole view: its services, their beats and incidents, and its facts with the fact groups, highlights, headline and topology built from them; the history stays stored.
 
+### Verdict
+
+`verdict.state` is one of `operational`, `degraded`, `outage`, `maintenance`, `stale` and `empty`, and `verdict.label` is its short text. `maintenance` is a contract addition (0.5.0): the verdict is `maintenance` when no service is down or degraded, at least one is in a maintenance window and none is up, for example while a site-wide window covers every service (label "8 services under maintenance"). The order is `empty`, `outage`, `stale` (dropped while a window covers the whole site), `degraded`, `maintenance`, `operational`. Partial maintenance (some services up, the rest in a window, none down) stays `operational`, and the theme shows the window as its maintenance notice. A theme maps every state (a `Record<VerdictState, ...>` makes the compiler check it), colours `maintenance` with the `maint` token (`text-maint`, `bg-maint`, or a darker theme-private shade of it where text sits on it) and never claims services are up while the verdict is `maintenance`: its summary lines say how many services are in maintenance instead. The `maintenance` fixture (`/_preview?fixture=maintenance`, also in `bun run a11y`) renders this case, and `tests/unit/theme-maintenance.test.ts` checks it in every registered theme.
+
 ### Registry: theme-color and fonts
 
 Each theme is registered in `src/client/themes/index.ts` as a `RegisteredTheme`:
@@ -162,7 +166,7 @@ Under reduced motion `useDecrypt` returns the text, `useMatrixRain` draws nothin
 
 ## Accessibility
 
-`bun run a11y` audits every registered theme with [axe-core](https://github.com/dequelabs/axe-core) in headless Chromium: each theme on the `default`, `stale` and `incident` fixtures (`/_preview`), at 1440x900 and 390x844, in light and dark (emulated `prefers-color-scheme`). It checks the WCAG 2.0, 2.1 and 2.2 A and AA rules, colour contrast included, plus axe's best-practice rules (landmarks, heading order), prints the findings grouped by theme and rule, and exits 1 on any serious or critical one. It is not part of `verify`, because it needs a browser and the dev server.
+`bun run a11y` audits every registered theme with [axe-core](https://github.com/dequelabs/axe-core) in headless Chromium: each theme on the `default`, `stale`, `incident` and `maintenance` fixtures (`/_preview`), at 1440x900 and 390x844, in light and dark (emulated `prefers-color-scheme`). It checks the WCAG 2.0, 2.1 and 2.2 A and AA rules, colour contrast included, plus axe's best-practice rules (landmarks, heading order), prints the findings grouped by theme and rule, and exits 1 on any serious or critical one. It is not part of `verify`, because it needs a browser and the dev server.
 
 ```sh
 bun run a11y --out a11y-report.json            # uses vite dev on :5173, or starts one on a free port

@@ -33,6 +33,7 @@ export const VERDICT_TONE: Record<VerdictState, Tone> = {
   operational: "up",
   degraded: "warn",
   outage: "down",
+  maintenance: "maint",
   stale: "idle",
   empty: "idle",
 };
@@ -122,10 +123,23 @@ export function heroText(view: SiteView, name: string, ageS: number | null): { h
   const down = services.filter((s) => s.state === "down").map((s) => s.name);
   const slow = services.filter((s) => s.state === "degraded").map((s) => s.name);
   switch (view.verdict.state) {
-    case "operational":
+    case "operational": {
+      const { up, maintenance } = view.summary;
+      if (maintenance) {
+        return {
+          h: "Everything is running smoothly",
+          p: `${plural(up, "part")} of ${name} ${up === 1 ? "is" : "are"} up and answering, and ${plural(maintenance, "part")} ${maintenance === 1 ? "is" : "are"} having some planned work. Nothing for you to worry about.`,
+        };
+      }
       return {
         h: "Everything is running smoothly",
         p: `All ${plural(view.summary.total, "part")} of ${name} are up and answering. Nothing for you to worry about.`,
+      };
+    }
+    case "maintenance":
+      return {
+        h: "Planned work in progress",
+        p: `We're doing some planned work on ${name}, so ${view.summary.maintenance === 1 ? "one part is" : `${plural(view.summary.maintenance, "part")} are`} taking a short break. Nothing is broken, and this page will show them again once the work is done.`,
       };
     case "outage": {
       const who = down.length ? `${listNames(down)} ${down.length === 1 ? "is" : "are"}` : "Some parts are";

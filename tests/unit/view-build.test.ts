@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Fact, Heartbeat, Incident, Service } from "../../src/shared/model";
 import { buildSiteView, type ServiceView, type SiteView, type ViewInput } from "../../src/shared/view";
-import { fixtureConfig as config, fixtureInput } from "../fixtures/view";
+import { fixtureConfig as config, fixtureInput, SITE_WIDE_WINDOW } from "../fixtures/view";
 
 const NOW = "2026-09-27T23:58:00Z";
 const view = (input: ViewInput) => buildSiteView(input);
@@ -398,6 +398,77 @@ describe("freshness and verdict", () => {
     expect(at(new Date(NOW))).toBe(NOW);
     expect(at(Date.parse(NOW) + 400)).toBe(NOW);
     expect(at(NOW)).toBe(NOW);
+  });
+});
+
+describe("maintenance verdict", () => {
+  /** `input` under one window (active at every fixture's `now`) covering `services`, or the whole site. */
+  const inWindow = (input: ViewInput, services: string[]): ViewInput => ({
+    ...input,
+    config: { ...input.config, maintenance: [{ ...SITE_WIDE_WINDOW, services }] },
+  });
+  const ids = (input: ViewInput) => input.model.services.map((s) => s.id);
+
+  it("is maintenance when every service is in a window and none is up", () => {
+    const v = view(fixtureInput("maintenance"));
+    expect(v.summary).toMatchObject({ up: 0, down: 0, degraded: 0, maintenance: v.summary.total });
+    expect(v.verdict).toEqual({
+      state: "maintenance",
+      label: `${v.summary.total} services under maintenance`,
+      down: 0,
+      degraded: 0,
+    });
+  });
+
+  it("names one service in the singular", () => {
+    const input = fixtureInput("default");
+    const one = ids(input)[0]!;
+    input.model.services = input.model.services.filter((s) => s.id === one);
+    expect(view(inWindow(input, [])).verdict.label).toBe("1 service under maintenance");
+  });
+
+  it("stays operational while some services are up (partial maintenance)", () => {
+    const input = fixtureInput("default");
+    const v = view(inWindow(input, [ids(input)[0]!]));
+    expect(v.summary.maintenance).toBe(1);
+    expect(v.summary.up).toBeGreaterThan(0);
+    expect(v.verdict).toMatchObject({ state: "operational", label: "All systems operational" });
+  });
+
+  it("is an outage when a service outside the window is down", () => {
+    const input = fixtureInput("incident");
+    const v = view(
+      inWindow(
+        input,
+        ids(input).filter((id) => id !== "kuma:5"),
+      ),
+    );
+    expect(v.summary).toMatchObject({ up: 0, down: 1 });
+    expect(v.verdict).toMatchObject({ state: "outage", label: "1 service down", down: 1 });
+  });
+
+  it("is degraded when a service outside the window is degraded", () => {
+    const input = fixtureInput("default");
+    const [slow, ...rest] = ids(input);
+    input.model.services.find((s) => s.id === slow)!.status = "degraded";
+    const v = view(inWindow(input, rest));
+    expect(v.summary).toMatchObject({ up: 0, degraded: 1 });
+    expect(v.verdict).toMatchObject({ state: "degraded", label: "1 service degraded", degraded: 1 });
+  });
+
+  it("hides a stale source under a site-wide window, and only then", () => {
+    const input = fixtureInput("stale");
+    expect(view(input).verdict.state).toBe("stale");
+
+    const site = view(inWindow(input, []));
+    expect(site.freshness).toMatchObject({ state: "stale", quietForMaintenance: true });
+    expect(site.verdict.state).toBe("maintenance");
+
+    // Every service listed one by one is not a site-wide window: the stale source still shows.
+    const listed = view(inWindow(input, ids(input)));
+    expect(listed.summary.up).toBe(0);
+    expect(listed.freshness.quietForMaintenance).toBeUndefined();
+    expect(listed.verdict.state).toBe("stale");
   });
 });
 

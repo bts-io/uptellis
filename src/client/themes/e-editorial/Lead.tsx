@@ -34,6 +34,7 @@ const KICKER_TEXT: Record<VerdictState, string> = {
   operational: "text-up",
   degraded: "text-degraded",
   outage: "text-down",
+  maintenance: "text-maint",
   stale: "text-stale",
   empty: "text-stale",
 };

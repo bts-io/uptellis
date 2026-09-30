@@ -49,7 +49,7 @@ Service states are `up`, `degraded`, `down`, `maintenance`, `stale` and `unknown
 | Endpoint | Needs | Returns | Cache |
 |---|---|---|---|
 | `GET /api/public/<site>/summary.json` | a published site | the summary, CORS `Access-Control-Allow-Origin: *` (GET and OPTIONS, no credentials) | 30 s |
-| `GET /badge/<site>.svg` | `verdict` | site name and verdict (`operational`, `degraded`, `outage`, `stale`, `no data`) | 60 s |
+| `GET /badge/<site>.svg` | `verdict` | site name and verdict (`operational`, `degraded`, `outage`, `maintenance`, `stale`, `no data`) | 60 s |
 | `GET /badge/<site>/<service>.svg` | `sections` | service name (with `serviceNames`) or id, and its state | 60 s |
 | `GET /badge/<site>/<service>.svg?metric=uptime` | `sections`, `uptime90d` | the 90-day uptime, e.g. `99.95%` (green from 99%, amber from 95%, red below) | 60 s |
 | `GET /embed/<site>` | a published site | the widget as a page for an iframe | 30 s |

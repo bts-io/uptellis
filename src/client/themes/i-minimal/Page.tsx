@@ -10,6 +10,7 @@ const DOT: Record<VerdictState, string> = {
   operational: "bg-up shadow-[0_0_0_4px_color-mix(in_srgb,var(--color-up)_18%,transparent)]",
   degraded: "bg-degraded shadow-[0_0_0_4px_color-mix(in_srgb,var(--color-degraded)_20%,transparent)]",
   outage: "bg-down shadow-[0_0_0_4px_color-mix(in_srgb,var(--color-down)_18%,transparent)]",
+  maintenance: "bg-maint shadow-[0_0_0_4px_color-mix(in_srgb,var(--color-maint)_18%,transparent)]",
   stale: "border-2 border-stale bg-transparent",
   empty: "border-2 border-stale bg-transparent",
 };

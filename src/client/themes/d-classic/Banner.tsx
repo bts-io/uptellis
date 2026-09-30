@@ -6,6 +6,7 @@ const BAND: Record<VerdictState, string> = {
   operational: "bg-(--d-up-text)",
   degraded: "bg-(--d-degraded-band)",
   outage: "bg-(--d-down-text)",
+  maintenance: "bg-(--d-maint-text)",
   stale: "bg-(--d-stale-text)",
   empty: "bg-(--d-stale-text)",
 };
@@ -14,6 +15,7 @@ const ICON: Record<VerdictState, IconName> = {
   operational: "check",
   degraded: "warn",
   outage: "cross",
+  maintenance: "wrench",
   stale: "clock",
   empty: "question",
 };
@@ -57,7 +59,12 @@ function BannerLine({ view }: { view: SiteView }) {
   const bits: string[] = [];
   if (verdict.down) bits.push(`${plural(verdict.down, "service is", "services are")} down`);
   if (verdict.degraded) bits.push(`${plural(verdict.degraded, "service is", "services are")} degraded`);
-  if (!bits.length) bits.push(`${summary.up} of ${summary.total} services operational`);
+  if (verdict.state === "maintenance") {
+    bits.push(`${plural(summary.maintenance, "service is", "services are")} in scheduled maintenance`);
+  } else if (!bits.length) {
+    bits.push(`${summary.up} of ${summary.total} services operational`);
+    if (summary.maintenance) bits.push(`${summary.maintenance} in maintenance`);
+  }
   return (
     <>
       {bits.join(", ")}.

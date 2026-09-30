@@ -13,7 +13,8 @@ import {
 } from "@/worker/public/summary";
 import { fixtureConfig, fixtureInput } from "../fixtures/view";
 
-const view = (name: "default" | "incident" | "stale"): SiteView => buildSiteView(fixtureInput(name));
+const view = (name: "default" | "incident" | "stale" | "maintenance"): SiteView =>
+  buildSiteView(fixtureInput(name));
 const keys = (o: object) => Object.keys(o).sort();
 
 describe("public summary: each field unlocks only its part", () => {
@@ -139,10 +140,17 @@ describe("public states", () => {
     for (const [state, out] of Object.entries(expected)) expect(publicState(state as DisplayState)).toBe(out);
   });
 
+  it("publishes the maintenance verdict", () => {
+    const s = buildPublicSummary(view("maintenance"), ["verdict"]);
+    expect(s.verdict).toEqual({ state: "maintenance", label: "8 services under maintenance" });
+    expect(PublicSummary.parse(s)).toEqual(s);
+  });
+
   it("maps every verdict", () => {
     expect(verdictPublicState("operational")).toBe("up");
     expect(verdictPublicState("degraded")).toBe("degraded");
     expect(verdictPublicState("outage")).toBe("down");
+    expect(verdictPublicState("maintenance")).toBe("maintenance");
     expect(verdictPublicState("stale")).toBe("stale");
     expect(verdictPublicState("empty")).toBe("unknown");
   });

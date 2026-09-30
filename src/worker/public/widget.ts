@@ -108,7 +108,7 @@ export const EMBED_SCRIPT = `/* Uptellis status widget: <div data-uptellis="<sit
   "use strict";
   var CSS = ${JSON.stringify(WIDGET_CSS)};
   var LABEL = ${JSON.stringify(STATE_LABEL)};
-  var VERDICT = { operational: "up", degraded: "degraded", outage: "down", stale: "stale", empty: "unknown" };
+  var VERDICT = { operational: "up", degraded: "degraded", outage: "down", maintenance: "maintenance", stale: "stale", empty: "unknown" };
   var REFRESH_MS = ${REFRESH_MS};
   var SLUG = /^[a-z0-9-]{2,32}$/;
   var doc = document;

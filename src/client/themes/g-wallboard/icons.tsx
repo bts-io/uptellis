@@ -31,6 +31,7 @@ const FOR_VERDICT: Record<VerdictState, IconName> = {
   operational: "up",
   degraded: "degraded",
   outage: "down",
+  maintenance: "maintenance",
   stale: "stale",
   empty: "unknown",
 };

@@ -6,6 +6,7 @@ const VERDICT_TEXT: Record<VerdictState, string> = {
   operational: "text-up",
   degraded: "text-degraded",
   outage: "text-down",
+  maintenance: "text-maint",
   stale: "text-down",
   empty: "text-muted",
 };
@@ -17,8 +18,9 @@ export function Header({ view }: { view: SiteView }) {
   const names = allServices(view)
     .filter(failing)
     .map((s) => s.name);
+  // Under maintenance a quiet collector is expected: the verdict says so instead of the stale age.
   const verdict =
-    freshness.state === "stale" ? (
+    freshness.state === "stale" && view.verdict.state !== "maintenance" ? (
       <>
         stale · <Age since={since} now={view.now} suffix={false} />
       </>

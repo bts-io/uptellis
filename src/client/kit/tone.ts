@@ -51,6 +51,7 @@ export const VERDICT_TONE: Record<VerdictState, Tone> = {
   operational: "up",
   degraded: "degraded",
   outage: "down",
+  maintenance: "maint",
   stale: "stale",
   empty: "muted",
 };
