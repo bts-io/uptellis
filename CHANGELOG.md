@@ -29,6 +29,7 @@ All notable changes to Uptellis are recorded here. The format follows [Conventio
 * `notify.webhooks` (never read since 0.4.0) is dropped when a config is parsed, so exports, revisions and the admin JSON omit it; old configs still load.
 * A source removed from the config (a retired collector, facts pusher or webhook) leaves the page: its services and facts are no longer shown as stale forever, and an open incident of one of its services is resolved quietly by the five-minute job, with a note and no card. Its history is kept.
 * The accessibility audit now also covers Dashboard and Minimal (it skipped registry entries written over several lines) and the maintenance fixture.
+* A check without a latency that is not down (maintenance, paused) no longer reads as a failure: sys.status, Control Room and Session say "timeout" or "no response" only for a down check and show a dash otherwise, Dashboard's latency bars stay faint instead of red, and sys.status fits the status word ("maint") in its recent checks.
 
 ## 0.4.0 (2026-09-29)
 
