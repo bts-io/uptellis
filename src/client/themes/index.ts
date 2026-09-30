@@ -11,6 +11,7 @@ import { THEME_COLOR as D_THEME_COLOR, dClassic } from "./d-classic";
 import { THEME_COLOR as I_THEME_COLOR, iMinimal } from "./i-minimal";
 import { THEME_COLOR as E_THEME_COLOR, eEditorial } from "./e-editorial";
 import { THEME_COLOR as H_THEME_COLOR, hFriendly } from "./h-friendly";
+import { THEME_COLOR as F_THEME_COLOR, fDashboard } from "./f-dashboard";
 import type { ThemeModule } from "./types";
 
 export interface RegisteredTheme {
@@ -27,6 +28,7 @@ export const THEMES: Partial<Record<ThemeId, RegisteredTheme>> = {
   "i-minimal": { module: iMinimal, themeColor: I_THEME_COLOR },
   "e-editorial": { module: eEditorial, themeColor: E_THEME_COLOR },
   "h-friendly": { module: hFriendly, themeColor: H_THEME_COLOR },
+  "f-dashboard": { module: fDashboard, themeColor: F_THEME_COLOR },
 };
 
 export const DEFAULT_THEME: RegisteredTheme = THEMES["a-sys-status"]!;

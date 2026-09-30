@@ -12,4 +12,5 @@ export const REGISTERED: Partial<Record<ThemeId, { dataTheme: string; themeColor
   "i-minimal": { dataTheme: "i", themeColor: "#ffffff" },
   "e-editorial": { dataTheme: "e", themeColor: "#fbf8f3" },
   "h-friendly": { dataTheme: "h", themeColor: "#fff8f1" },
+  "f-dashboard": { dataTheme: "f", themeColor: "#f3f5f9" },
 };
