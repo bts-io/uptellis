@@ -2,6 +2,20 @@
 
 All notable changes to Uptellis are recorded here. The format follows [Conventional Commits](https://www.conventionalcommits.org) and the project uses [Semantic Versioning](https://semver.org). Each release adds its section in the release PR, from the Conventional Commits since the previous tag.
 
+## 0.5.0 (2026-09-30)
+
+### Features
+
+* Six new themes, chosen from mock-ups: **Classic** (`d-classic`, the familiar hosted status page), **Editorial** (`e-editorial`, reads like a report), **Dashboard** (`f-dashboard`, cards and charts, light and dark), **Wallboard** (`g-wallboard`, for a TV: paging, capped alerts, readable from across a room), **Friendly** (`h-friendly`, plain language) and **Minimal** (`i-minimal`, one line and a compact list). Pick one per site in admin, or preview any with `?theme=`.
+* Self-hosted fonts for the new themes (Inter, Fraunces, Source Serif 4, Manrope, Barlow Semi Condensed, Nunito), all SIL OFL 1.1; see `public/fonts/LICENSES.md`.
+* Themes Control Room and Session regain the profile details they lost in 0.2.0 (coloured group tiles and lines, state dots, the pair caption, the standby lag, the fence timelines), and sys.status wraps long infrastructure rows.
+* README screenshots of every theme.
+
+### Bug Fixes
+
+* A monitor removed from a site's config no longer stays on the page, in the public summary or on badges; its open incident is resolved quietly by the five-minute job, with a note and no card. Its history is kept.
+* Agent CLI tests get a 20 s timeout (they spawn the binary and timed out under load).
+
 ## 0.4.0 (2026-09-29)
 
 ### Features
