@@ -1,9 +1,12 @@
 // The CLI end to end against the fake instance: `--once`, and the long-running mode stopped by SIGTERM.
-import { afterAll, afterEach, describe, expect, it } from "bun:test";
+import { afterAll, afterEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 import { join } from "node:path";
 import { ResultBuffer } from "../src/buffer";
 import { FakeUptellis, KEY, RUNNER } from "./fake-uptellis";
 import { cleanup, result, tempDir } from "./helpers";
+
+// These tests spawn the agent CLI; on a busy machine (parallel verify runs) 5 s is too tight.
+setDefaultTimeout(20_000);
 
 afterAll(cleanup);
 

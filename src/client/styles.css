@@ -42,7 +42,7 @@
   --color-ink: #e6e8ef;
   --color-muted: #8b92a5;
   --color-accent: #7aa2ff;
-  /* Status colours. `up` is the same in every theme. */
+  /* Status colours. Dark themes share `up` #3ddc84; light themes use a darker green that stays readable on white. */
   --color-up: #3ddc84;
   --color-degraded: #f5a524;
   --color-down: #f0605d;

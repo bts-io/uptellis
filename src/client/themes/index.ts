@@ -8,11 +8,11 @@ import { aSysStatus } from "./a-sys-status";
 import { THEME_COLOR as B_THEME_COLOR, bControlRoom } from "./b-control-room";
 import { THEME_COLOR as C_THEME_COLOR, cSession } from "./c-session";
 import { THEME_COLOR as D_THEME_COLOR, dClassic } from "./d-classic";
-import { THEME_COLOR as I_THEME_COLOR, iMinimal } from "./i-minimal";
 import { THEME_COLOR as E_THEME_COLOR, eEditorial } from "./e-editorial";
-import { THEME_COLOR as H_THEME_COLOR, hFriendly } from "./h-friendly";
 import { THEME_COLOR as F_THEME_COLOR, fDashboard } from "./f-dashboard";
 import { THEME_COLOR as G_THEME_COLOR, gWallboard } from "./g-wallboard";
+import { THEME_COLOR as H_THEME_COLOR, hFriendly } from "./h-friendly";
+import { THEME_COLOR as I_THEME_COLOR, iMinimal } from "./i-minimal";
 import type { ThemeModule } from "./types";
 
 export interface RegisteredTheme {
@@ -26,11 +26,11 @@ export const THEMES: Partial<Record<ThemeId, RegisteredTheme>> = {
   "b-control-room": { module: bControlRoom, themeColor: B_THEME_COLOR },
   "c-session": { module: cSession, themeColor: C_THEME_COLOR },
   "d-classic": { module: dClassic, themeColor: D_THEME_COLOR },
-  "i-minimal": { module: iMinimal, themeColor: I_THEME_COLOR },
   "e-editorial": { module: eEditorial, themeColor: E_THEME_COLOR },
-  "h-friendly": { module: hFriendly, themeColor: H_THEME_COLOR },
   "f-dashboard": { module: fDashboard, themeColor: F_THEME_COLOR },
   "g-wallboard": { module: gWallboard, themeColor: G_THEME_COLOR },
+  "h-friendly": { module: hFriendly, themeColor: H_THEME_COLOR },
+  "i-minimal": { module: iMinimal, themeColor: I_THEME_COLOR },
 };
 
 export const DEFAULT_THEME: RegisteredTheme = THEMES["a-sys-status"]!;

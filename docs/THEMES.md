@@ -44,7 +44,7 @@ Themes never name a fact group or key: what the site's facts mean comes from its
 - Import only `@/client/kit`, `@/client/effects`, `@/shared/view` types and the theme's own files. Never `@/client/lib/api`, worker, db or model code (a Biome rule enforces it).
 - Style through the semantic tokens below, never raw colours in components. Each theme has one token file that overrides them under `[data-theme="<dataTheme>"]`.
 - Stale data never keeps a green dot: render `ServiceView.state`, not `status`.
-- `up` is always `#3ddc84`. The brand gradient is chrome only (banner, rules), never a status.
+- `up` is `#3ddc84` on the dark themes (A, B, C, wallboard); the light themes use a darker green of their own so that text and icons in `up` stay readable on white (contrast AA). The brand gradient is chrome only (banner, rules), never a status.
 - No terminal transplants: no `[ ACCESS GRANTED ]` line, prompt lines, `user@host`, chevrons, fake commands, rotating tips or a prompt footer. Kept: banner, gradient, mono values, box-drawn panel titles with `exit 0` badges, beat bars, sparklines.
 - Under `prefers-reduced-motion`: no canvas rain, no decrypt, glows become a 1px outline.
 - Every string shown comes from `SiteView` (already display-safe). A theme audit test renders every fixture and fails on any address, email or token literal in the HTML.

@@ -1,14 +1,21 @@
 # Font licences
 
-Both fonts are self-hosted from this directory (no third-party font request) and licensed under the
-SIL Open Font License, Version 1.1. Neither declares a Reserved Font Name.
+All fonts are self-hosted from this directory (no third-party font request) and licensed under the
+SIL Open Font License, Version 1.1. Only Source Serif 4 declares a Reserved Font Name ("Source"); the files
+here are the unmodified upstream fonts.
 
 | File | Font | Source | Copyright |
 | --- | --- | --- | --- |
 | `Geist-Variable.woff2` | Geist 1.7.2, variable (wght 100 to 900) | `geist-font/Geist/webfonts/Geist[wght].woff2` from the [vercel/geist-font v1.7.2 release](https://github.com/vercel/geist-font/releases/tag/v1.7.2), unchanged | Copyright 2024 The Geist Project Authors (https://github.com/vercel/geist-font) |
 | `JetBrainsMono-Variable.woff2` | JetBrains Mono 2.304, variable (wght 100 to 800) | `fonts/variable/JetBrainsMono[wght].ttf` from the [JetBrains/JetBrainsMono v2.304 release](https://github.com/JetBrains/JetBrainsMono/releases/tag/v2.304), repacked as WOFF2 with fontTools (the release ships no variable WOFF2); glyphs and tables unchanged | Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono) |
+| `Inter-Variable.woff2` | Inter 4.001, variable (wght 100 to 900), latin | `@fontsource-variable/inter` 5.3.0 (`inter-latin-wght-normal.woff2`), unchanged | Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter) |
+| `Fraunces-Variable.woff2` | Fraunces 1.000, variable (opsz 9 to 144, wght 100 to 900), latin | `@fontsource-variable/fraunces` 5.3.0, unchanged | Copyright 2020 The Fraunces Project Authors |
+| `SourceSerif4-Variable.woff2`, `SourceSerif4-Italic.woff2` | Source Serif 4 4.004, variable (wght 200 to 900, opsz 8 to 60), latin, upright and italic | `@fontsource-variable/source-serif-4` 5.3.0, unchanged | Copyright 2014 to 2021 Adobe, with Reserved Font Name "Source" |
+| `Nunito-Variable.woff2` | Nunito 3.602, variable (wght 200 to 1000), latin | `@fontsource-variable/nunito` 5.3.0, unchanged | Copyright 2014 The Nunito Project Authors |
+| `Manrope-Variable.woff2` | Manrope, variable (wght 200 to 800), latin | `@fontsource-variable/manrope` 5.3.0, unchanged | Copyright 2019 The Manrope Project Authors (https://github.com/sharanda/manrope) |
+| `BarlowSemiCondensed-{500,600,700,800}.woff2` | Barlow Semi Condensed, static weights 500 to 800, latin (no variable build exists) | `@fontsource/barlow-semi-condensed` 5.3.0, unchanged | Copyright 2017 The Barlow Project Authors |
 
-The licence text below is identical in both releases (`OFL.txt`).
+The licence text below is the same SIL OFL 1.1 text shipped with every font here (`OFL.txt`).
 
 ```text
 -----------------------------------------------------------

@@ -9,9 +9,9 @@ export const REGISTERED: Partial<Record<ThemeId, { dataTheme: string; themeColor
   "b-control-room": { dataTheme: "b", themeColor: "#0a0c10" },
   "c-session": { dataTheme: "c", themeColor: "#050807" },
   "d-classic": { dataTheme: "d", themeColor: "#f6f7f9" },
-  "i-minimal": { dataTheme: "i", themeColor: "#ffffff" },
   "e-editorial": { dataTheme: "e", themeColor: "#fbf8f3" },
-  "h-friendly": { dataTheme: "h", themeColor: "#fff8f1" },
   "f-dashboard": { dataTheme: "f", themeColor: "#f3f5f9" },
   "g-wallboard": { dataTheme: "g", themeColor: "#07090d" },
+  "h-friendly": { dataTheme: "h", themeColor: "#fff8f1" },
+  "i-minimal": { dataTheme: "i", themeColor: "#ffffff" },
 };
