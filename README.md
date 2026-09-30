@@ -18,7 +18,7 @@ Uptellis collects health data from the tools you already run, keeps it in one no
 
 ## Features
 
-- **Status page with three themes**: sys.status, Control Room and Session, all sharing a command palette (`/` or Ctrl/Cmd+K) and keyboard shortcuts. Preview another theme with `?theme=<id>` without saving it.
+- **Status page with nine themes**: three terminal-styled (sys.status, Control Room, Session) and six others (Classic, Editorial, Dashboard, Wallboard for a TV, Friendly, Minimal), all rendered on the server from one view model and sharing a command palette (`/` or Ctrl/Cmd+K). Preview another theme with `?theme=<id>` without saving it.
 - **Native monitors**: HTTP(S) with status and keyword checks, TCP, ping and TLS certificate expiry. They run from the instance itself (Cloudflare's edge or the Docker server) and from `uptellis-agent` inside private networks, with a disk buffer so no result is lost offline. Failures are confirmed (retries, and a quorum across runners) before an incident opens ([monitors.md](docs/monitors.md)).
 - **Other sources**: an Uptime Kuma collector, infrastructure facts pushed by a script on your hosts, and signed webhooks.
 - **Maintenance windows**: one-off or weekly, in any time zone; covered services show maintenance, open no incident and page nobody.
@@ -33,7 +33,16 @@ Uptellis collects health data from the tools you already run, keeps it in one no
 
 ## Screenshots
 
-Screenshots of the themes and the admin panel are planned with the theme work (Phase 7 in the [roadmap](docs/roadmap.md)).
+The demo site in each theme (healthy state). Open any of them live with `?theme=<id>`.
+
+| | | |
+|---|---|---|
+| **sys.status** (`a-sys-status`)<br/>Terminal-styled console (dark) | **Control Room** (`b-control-room`)<br/>Dense operations dashboard with the topology (dark) | **Session** (`c-session`)<br/>A live shell session, typeset (dark) |
+| <img src="docs/assets/screenshots/a-sys-status.png" alt="sys.status theme" width="100%"> | <img src="docs/assets/screenshots/b-control-room.png" alt="Control Room theme" width="100%"> | <img src="docs/assets/screenshots/c-session.png" alt="Session theme" width="100%"> |
+| **Classic** (`d-classic`)<br/>The familiar hosted status page (light) | **Editorial** (`e-editorial`)<br/>Reads like a report, serif headline (light) | **Dashboard** (`f-dashboard`)<br/>Cards and charts (light and dark) |
+| <img src="docs/assets/screenshots/d-classic.png" alt="Classic theme" width="100%"> | <img src="docs/assets/screenshots/e-editorial.png" alt="Editorial theme" width="100%"> | <img src="docs/assets/screenshots/f-dashboard.png" alt="Dashboard theme" width="100%"> |
+| **Wallboard** (`g-wallboard`)<br/>For a TV across the room (dark) | **Friendly** (`h-friendly`)<br/>Plain language for non-technical readers (light) | **Minimal** (`i-minimal`)<br/>One line and a compact list (light and dark) |
+| <img src="docs/assets/screenshots/g-wallboard.png" alt="Wallboard theme" width="100%"> | <img src="docs/assets/screenshots/h-friendly.png" alt="Friendly theme" width="100%"> | <img src="docs/assets/screenshots/i-minimal.png" alt="Minimal theme" width="100%"> |
 
 ## Architecture
 

@@ -4,14 +4,14 @@ Where Uptellis is going. Today it is a status page and monitor that runs on Clou
 
 Uptellis stays on 0.x releases for now; there is no 1.0 date. A 1.0 comes when the project decides the product is finished and proven, not at the end of a particular phase.
 
-Phases 1 to 4 built the prototype. **Phase 5 is done** (0.2.0): profiles, the Docker runtime, accounts and public or private pages. **Phase 6a is done** (0.3.0): native monitors, the private-network agent, confirmation, maintenance windows and down and up cards. **Phase 6b is done** (0.4.0): notification channels (Discord, Slack, signed webhooks, ntfy, Telegram, email) and public summaries, badges and an embeddable widget. Phase 7 (themes and polish) is next.
+Phases 1 to 4 built the prototype. **Phase 5 is done** (0.2.0): profiles, the Docker runtime, accounts and public or private pages. **Phase 6a is done** (0.3.0): native monitors, the private-network agent, confirmation, maintenance windows and down and up cards. **Phase 6b is done** (0.4.0): notification channels (Discord, Slack, signed webhooks, ntfy, Telegram, email) and public summaries, badges and an embeddable widget. **Phase 7 is done** (0.5.0): six new themes (classic, editorial, dashboard, wallboard, friendly, minimal) and the polish of the first three. Phase 8 (packaging) is next.
 
 ```mermaid
 flowchart LR
   now["Prototype<br/>Cloudflare Worker,<br/>Kuma collector, facts,<br/>webhooks, edge probes"] --> p5["Phase 5 (done)<br/>Core product"]
   p5 --> p6a["Phase 6a (done)<br/>Native monitors"]
   p6a --> p6b["Phase 6b (done)<br/>Channels, public status"]
-  p6b --> p7["Phase 7<br/>Themes and polish"]
+  p6b --> p7["Phase 7 (done)<br/>Themes and polish"]
   p7 --> p8["Phase 8<br/>Packaging"]
 ```
 
@@ -39,7 +39,7 @@ Monitor without any other tool in front, while keeping the Kuma collector, facts
 - **Notification providers.** Beyond Discord: email, Slack, Microsoft Teams, Telegram, ntfy, generic signed webhooks and more, per site and per incident kind.
 - **Public summaries and embeds.** An allow-list of what a public page and its JSON summary show (the field list already exists in the site config), plus embeddable status badges and widgets.
 
-## Phase 7: themes and polish
+## Phase 7: themes and polish (done, 0.5.0)
 
 - **New themes.** A handful of themes with genuinely different looks, not only terminal styles: for example a classic status page, an editorial page, a modern dashboard, a wallboard for a TV, a friendly rounded look and a minimal one-line page. Each starts as a mock-up with the same demo data; the ones that work become themes.
 - **Polish.** The existing themes (sys.status, Control Room, Session) get their remaining layout fixes, and the README gets screenshots.

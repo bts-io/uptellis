@@ -2,6 +2,8 @@
 
 A theme is one page over one typed view-model. Data code builds `SiteView` once; themes only render it, so switching a site's theme never touches data code.
 
+Nine themes ship: `a-sys-status`, `b-control-room` and `c-session` (terminal-styled, dark), and `d-classic`, `e-editorial`, `f-dashboard`, `g-wallboard`, `h-friendly` and `i-minimal` (Phase 7; their mock-ups and the build contract are in [contracts/phase-7b.md](contracts/phase-7b.md)). Every registered theme must pass the conformance tests (`tests/unit/theme-anchors.test.ts`, `theme-maintenance.test.ts`, `theme-profiles.test.ts`) and must not use `text-base` as a size: in this project it is the page background colour.
+
 ```mermaid
 flowchart LR
   model[("SiteModel<br/>KV latest:site")] --> build["buildSiteView(input)<br/>src/shared/view (pure)"]
