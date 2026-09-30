@@ -1,4 +1,92 @@
-/* Friendly theme tokens (Phase 7b), scoped to [data-theme="h"]. */
+/*
+ * Theme H "Friendly" (mockups/friendly): warm, rounded, plain words. Pastel fills with dark text of the same
+ * hue for contrast. Semantic tokens override the kit defaults under [data-theme="h"] only; `--h-*` tokens
+ * are private to this theme's components.
+ */
+
+/* Self-hosted variable font (public/fonts, SIL OFL 1.1). */
+@font-face {
+  font-family: "Nunito";
+  src: url("/fonts/Nunito-Variable.woff2") format("woff2");
+  font-weight: 200 1000;
+  font-style: normal;
+  font-display: swap;
+}
+
 [data-theme="h"] {
   --color-base: #fff8f1;
+  --color-panel: #ffffff;
+  --color-line: #efe6dc;
+  --color-ink: #2f2a3b;
+  --color-muted: #6c667d;
+  --color-accent: #7a5cf0;
+  /* State text colours (the pills' foregrounds), dark enough on their pastel fills and on white. */
+  --color-up: #17643d;
+  --color-degraded: #874600;
+  --color-down: #a0202e;
+  --color-maint: #264f94;
+  --color-stale: #4b4760;
+  --gradient-brand: linear-gradient(135deg, #ffcf9f, #f79ab3);
+  --font-sans:
+    "Nunito", "Quicksand", ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --color-faint: #b9b4cc;
+  --color-raised: #ffffff;
+  --color-hair: #efe6dc;
+  --color-frame: #7a5cf0;
+
+  --h-ink-2: #555067;
+  --h-shadow: 0 1px 2px rgb(80 60 40 / 0.06), 0 8px 24px rgb(80 60 40 / 0.07);
+
+  --h-up-bg: #dcf5e6;
+  --h-up-dot: #3dbb77;
+  --h-warn-bg: #ffecd2;
+  --h-warn-dot: #f1a23a;
+  --h-warn-ink: #5c3300;
+  --h-warn-dash: #f1b56a;
+  --h-down-bg: #ffe0e2;
+  --h-down-dot: #ec5f6c;
+  --h-maint-bg: #e1ecff;
+  --h-maint-dot: #6c9cf0;
+  --h-maint-ink: #1d3a6c;
+  --h-idle-bg: #eceaf4;
+  --h-idle-dot: #b9b4cc;
+  --h-none-dot: #ede7df;
+
+  /* Hero washes and borders per verdict. */
+  --h-wash-up: #effbf4;
+  --h-wash-down: #fff1f2;
+  --h-edge-down: #ffd3d7;
+  --h-wash-warn: #fff6ea;
+  --h-edge-warn: #ffe0b8;
+  --h-wash-idle: #f3f1f9;
+  --h-edge-idle: #ddd8ee;
+
+  --h-chip: #f6f0e8;
+  --h-well: #faf7f3;
+  --h-plus: #efeafe;
+  --h-mark-ink: #3a2230;
+
+  color-scheme: light;
+}
+
+/* The face floats and the sleepy "z"s breathe (only when motion is allowed, see the components). */
+@keyframes h-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes h-zz {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
 }
