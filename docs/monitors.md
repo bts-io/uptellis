@@ -83,7 +83,7 @@ Weekly windows use the given time zone, including daylight saving changes, and m
 
 ## Cards
 
-Every transition (a service `down` and back `up`, a source `stale` and `recovered`) becomes one alert message, sent to every notification channel of the site that wants it (`notify.channels`: Discord, Slack, a signed webhook, ntfy, Telegram, email or SMS; each with its `events`, and for `down` and `up` optionally its `services`). The contract is in [contracts/phase-6b.md](contracts/phase-6b.md).
+Every transition (a service `down` and back `up`, a source `stale` and `recovered`) becomes one alert message, sent to every notification channel of the site that wants it (`notify.channels`: Discord, Slack, a webhook (plain or signed), ntfy, Telegram, email or SMS; each with its `events`, and for `down` and `up` optionally its `services`). The contract is in [contracts/phase-6b.md](contracts/phase-6b.md).
 
 - **Discord** keeps the cards it always had: a red card for `down` (service, target, runner, since, reason), a green one with the outage duration for `up`, a dark red one for a silent source (last report, expected interval, still reporting) and a green one when it is back (silent for, beats backfilled).
 - **Slack** gets the same facts in Block Kit with the event's colour, **ntfy** a text notification (priority 5 for down, 4 for stale, 3 for back, a click to the status page), **Telegram** an HTML message, **email** a plain text and an HTML part (subject `[Uptellis] Checkout is down`), **SMS** one short plain text of at most 160 characters (`DOWN: Checkout (Acme Cloud) since 14:02 UTC. status.example.com`).

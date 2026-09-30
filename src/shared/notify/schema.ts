@@ -1,6 +1,6 @@
 /**
  * Phase 6b contract (lead): notification channels in the site config. A channel is one destination (a
- * Discord or Slack webhook, a signed webhook, an ntfy topic, a Telegram chat, email addresses, a phone
+ * Discord or Slack webhook, a webhook (plain or signed), an ntfy topic, a Telegram chat, email addresses, a phone
  * number for SMS) with the
  * events it wants. Secrets are never in the config: a channel names the Worker secret or env var that holds
  * its URL or token (`NOTIFY_*`, or the historical `DISCORD_WEBHOOK_URL`), read with
