@@ -159,3 +159,17 @@ return <canvas ref={rain} aria-hidden className="pointer-events-none absolute in
 ```
 
 Under reduced motion `useDecrypt` returns the text, `useMatrixRain` draws nothing, the state dot ping and the topology edge flow stop (`motion-safe:`), and themes should turn `useStateChangeGlow` into a 1px outline with `motion-reduce:`.
+
+## Accessibility
+
+`bun run a11y` audits every registered theme with [axe-core](https://github.com/dequelabs/axe-core) in headless Chromium: each theme on the `default`, `stale` and `incident` fixtures (`/_preview`), at 1440x900 and 390x844, in light and dark (emulated `prefers-color-scheme`). It checks the WCAG 2.0, 2.1 and 2.2 A and AA rules, colour contrast included, plus axe's best-practice rules (landmarks, heading order), prints the findings grouped by theme and rule, and exits 1 on any serious or critical one. It is not part of `verify`, because it needs a browser and the dev server.
+
+```sh
+bun run a11y --out a11y-report.json            # uses vite dev on :5173, or starts one on a free port
+bun run a11y --url http://localhost:5391 --theme d-classic,i-minimal --fixture incident
+CHROME_PATH=/usr/bin/google-chrome bun run a11y  # another Chromium than playwright-core's own revision
+```
+
+The browser is driven by `playwright-core` (the driver only, no browser download): it launches the Chromium of its revision from `~/.cache/ms-playwright` (`bunx playwright-core install chromium-headless-shell` fetches it) unless `CHROME_PATH` is set. The JSON report holds every finding with its element and the variants it fails in, the exclusions that matched, and axe's "needs review" counts (text over a gradient or a pseudo element, whose contrast axe cannot compute; these do not fail the run, so check them by hand when a theme changes such a surface).
+
+Fix a finding in the theme's tokens or components: `--color-muted`, and `--color-faint` wherever a theme sets text in it, must keep 4.5:1 on `base`, `panel` and `raised`. When a finding is a false positive or intended (decorative text, say), add a narrow entry to `EXCLUSIONS` in `scripts/a11y-audit.ts`: one rule, one theme, a target selector pattern and the reason. Never switch a rule off.
