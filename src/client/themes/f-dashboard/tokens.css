@@ -1,4 +1,96 @@
-/* Dashboard theme tokens (Phase 7b), scoped to [data-theme="f"]. */
+/*
+ * Theme F "Dashboard" (mockups/dashboard): soft cards on a tinted background, charts up front, Manrope.
+ * Light by default, dark from prefers-color-scheme. Semantic tokens override the kit defaults under
+ * [data-theme="f"] only; `--f-*` tokens are private to this theme's components.
+ */
+@font-face {
+  font-family: "Manrope";
+  src: url("/fonts/Manrope-Variable.woff2") format("woff2");
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+
 [data-theme="f"] {
   --color-base: #f3f5f9;
+  --color-panel: #ffffff;
+  --color-line: #e4e7ee;
+  --color-ink: #121826;
+  --color-muted: #6b7385;
+  --color-accent: #4f46e5;
+  --color-up: #16a34a;
+  --color-degraded: #f59e0b;
+  --color-down: #e5484d;
+  --color-maint: #3b82f6;
+  --color-stale: #8b8fa3;
+  --gradient-brand: linear-gradient(135deg, #4f46e5 0%, #14b8a6 100%);
+  --font-sans: "Manrope", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --color-faint: #8b8fa3;
+  --color-raised: #f7f8fb;
+  --color-hair: #eef0f5;
+  --color-frame: #4f46e5;
+
+  --f-bg-grad:
+    radial-gradient(1200px 500px at 10% -10%, #e6e9ff 0%, transparent 60%),
+    radial-gradient(900px 420px at 100% 0%, #e3f4f1 0%, transparent 55%);
+  --f-text-2: #4b5467;
+  --f-accent-soft: #eef0ff;
+  --f-teal: #14b8a6;
+  --f-shadow: 0 1px 2px rgb(16 24 40 / 0.04), 0 8px 24px -12px rgb(16 24 40 / 0.12);
+  --f-empty-tick: #e3e6ed;
+  /* Readable text and soft fills per state (the solid colours are the --color-* above). */
+  --f-up-text: #15803d;
+  --f-up-soft: #e8f7ee;
+  --f-degraded-text: #a15c07;
+  --f-degraded-soft: #fdf3e1;
+  --f-down-text: #c42b30;
+  --f-down-soft: #fdecec;
+  --f-maint-text: #1d5fc9;
+  --f-maint-soft: #e8f0fe;
+  --f-stale-text: #5b6072;
+  --f-stale-soft: #eef0f4;
+  /* Ink on a solid amber icon (white fails contrast there). */
+  --f-on-amber: #1f1400;
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-theme="f"] {
+    --color-base: #0b0e16;
+    --color-panel: #141925;
+    --color-line: #252c3b;
+    --color-ink: #eef1f7;
+    --color-muted: #8d95a8;
+    --color-accent: #8b87ff;
+    --color-up: #2fbf6b;
+    --color-degraded: #f5b13d;
+    --color-down: #f2555a;
+    --color-maint: #5b9bff;
+    --color-stale: #7d8396;
+    --color-faint: #7d8396;
+    --color-raised: #19202e;
+    --color-hair: #1d2331;
+    --color-frame: #8b87ff;
+
+    --f-bg-grad:
+      radial-gradient(1200px 500px at 10% -10%, rgb(99 102 241 / 0.16) 0%, transparent 60%),
+      radial-gradient(900px 420px at 100% 0%, rgb(20 184 166 / 0.1) 0%, transparent 55%);
+    --f-text-2: #b3bacb;
+    --f-accent-soft: rgb(139 135 255 / 0.14);
+    --f-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 12px 32px -16px rgb(0 0 0 / 0.6);
+    --f-empty-tick: #262d3c;
+    --f-up-text: #5ad58c;
+    --f-up-soft: rgb(47 191 107 / 0.14);
+    --f-degraded-text: #f7c56b;
+    --f-degraded-soft: rgb(245 177 61 / 0.14);
+    --f-down-text: #ff8a8d;
+    --f-down-soft: rgb(242 85 90 / 0.15);
+    --f-maint-text: #8cb8ff;
+    --f-maint-soft: rgb(91 155 255 / 0.15);
+    --f-stale-text: #b0b5c4;
+    --f-stale-soft: rgb(125 131 150 / 0.16);
+
+    color-scheme: dark;
+  }
 }
