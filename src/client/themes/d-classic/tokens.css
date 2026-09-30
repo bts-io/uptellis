@@ -1,4 +1,61 @@
-/* Classic theme tokens (Phase 7b), scoped to [data-theme="d"]. */
+/*
+ * Theme D "Classic" (mockups/classic): the familiar hosted status page. Light, calm, Inter, a coloured
+ * verdict band, bordered groups with a 90-day tick bar per service. Semantic tokens override the kit
+ * defaults under [data-theme="d"] only (theme A owns the :root defaults). `--d-*` tokens are private to
+ * this theme's components: the darker `*-text` shades keep state words at AA contrast on white.
+ */
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/Inter-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 [data-theme="d"] {
   --color-base: #f6f7f9;
+  --color-panel: #ffffff;
+  --color-line: #e3e6ea;
+  --color-ink: #1b2230;
+  --color-muted: #5b6573;
+  --color-accent: #3a74d8;
+  --color-up: #1f9d57;
+  --color-degraded: #e3a008;
+  --color-down: #d93f3f;
+  --color-maint: #3a74d8;
+  --color-stale: #6b7482;
+  --gradient-brand: linear-gradient(90deg, #1f9d57 0%, #3a74d8 100%);
+  --font-sans:
+    "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --color-faint: #8a93a0;
+  --color-raised: #fafbfc;
+  --color-hair: #e3e6ea;
+  --color-frame: #3a74d8;
+
+  --d-border-strong: #d3d8de;
+  --d-head: #fafbfc;
+  --d-up-text: #17753f;
+  --d-up-tint: #e8f6ee;
+  --d-degraded-text: #8a5a00;
+  --d-degraded-tint: #fdf5e1;
+  --d-degraded-band: #b97d00;
+  --d-down-text: #b42323;
+  --d-down-tint: #fdecec;
+  --d-down-border: #f0c4c4;
+  --d-maint-text: #2659b3;
+  --d-maint-tint: #eaf1fc;
+  --d-maint-border: #bcd0f2;
+  --d-stale-text: #4d5562;
+  --d-stale-tint: #eef0f3;
+  --d-stale-border: #e0c27a;
+  --d-stale-ink: #5c4a1f;
+  --d-nodata: #dfe3e8;
+  --d-paused: #b9c0c9;
+  --d-on-band: #ffffff;
+  --d-shadow: rgb(16 24 40 / 0.06);
+  --d-mark-bg: #1b2230;
+  --d-mark-line: #3ecf7a;
+
+  color-scheme: light;
 }
