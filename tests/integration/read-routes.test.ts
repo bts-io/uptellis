@@ -131,7 +131,8 @@ describe("read API and site visibility", () => {
     expect(await res.json()).toEqual({
       site: "demo",
       now: fx.now,
-      generatedAt: fx.now,
+      // The page's `generatedAt`: the newest `lastSeenAt` of the listed sources (Kuma).
+      generatedAt: "2026-09-27T23:57:26Z",
       sources: [
         {
           id: "kuma:watch-1",

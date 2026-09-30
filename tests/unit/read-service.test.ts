@@ -121,11 +121,12 @@ describe("buildSourcesReport", () => {
     expect(r.sources.find((s) => s.id === "facts:app-1")?.freshness).toBe("fresh");
   });
 
-  it("lists configured sources the store has never seen as empty, and keeps extra model sources", async () => {
+  it("lists configured sources the store has never seen as empty, and leaves out retired model sources", async () => {
     const withExtra = parseSiteConfig({
       ...demo,
       sources: [...demo.sources, { id: "webhook:ci", kind: "webhook", expectedIntervalS: 300 }],
     });
+    const later = isoSeconds(Date.parse(fx.now) + 20_000);
     const model = await new MemoryStore({
       demo: {
         sources: [
@@ -135,8 +136,8 @@ describe("buildSourcesReport", () => {
             site: "demo",
             kind: "probe",
             expectedIntervalS: 60,
-            lastSeenAt: fx.now,
-            lastOkAt: fx.now,
+            lastSeenAt: later,
+            lastOkAt: later,
           },
         ],
       },
@@ -147,9 +148,10 @@ describe("buildSourcesReport", () => {
       ["facts:app-1", "fresh", 780],
       ["probe:cf", "empty", null],
       ["webhook:ci", "empty", null],
-      ["probe:edge", "fresh", 0],
     ]);
     expect(r.sources[3]).toMatchObject({ lastSeenAt: null, lastOkAt: null, expectedIntervalS: 300 });
+    // The retired `probe:edge` reported last, yet `generatedAt` is the page's: the newest listed source.
+    expect(r.generatedAt).toBe("2026-09-27T23:57:26Z");
   });
 
   it("counts clock skew into the future as age 0", async () => {

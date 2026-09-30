@@ -18,7 +18,8 @@ function Slot({ slot }: { slot: SourceKeyList["keys"][number]["current"] }) {
 
 /**
  * Ingest keys per source (never their secrets), creating a source with its key, and rotation. A created or
- * rotated key's secret is held only while the one-time dialog is open.
+ * rotated key's secret is held only while the one-time dialog is open. A key whose source was removed from
+ * the config stays listed, marked "not in the config", so it can still be rotated.
  */
 export function Sources({
   site,
@@ -93,7 +94,10 @@ export function Sources({
             {list.keys.map((k) => (
               <tr key={k.keyId} className="border-t border-hair align-top">
                 <td className="py-2 pr-3 font-mono">{k.keyId}</td>
-                <td className="py-2 pr-3 font-mono">{k.source}</td>
+                <td className="py-2 pr-3">
+                  <span className="font-mono">{k.source}</span>
+                  {!k.inConfig && <span className="ml-2 text-xs text-muted">not in the config</span>}
+                </td>
                 <td className="py-2 pr-3">{k.store}</td>
                 <td className="py-2 pr-3 text-xs">
                   <Slot slot={k.current} />

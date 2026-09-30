@@ -128,7 +128,7 @@ export class KeyStore implements StoredKeys {
   }
 
   /** The site's keys. No secrets, sealed or not, leave this method. */
-  async list(site: string): Promise<SourceKey[]> {
+  async list(site: string): Promise<Omit<SourceKey, "inConfig">[]> {
     const rows = await this.db
       .select()
       .from(ingestKeys)
@@ -143,7 +143,7 @@ export class KeyStore implements StoredKeys {
           store: "d1",
           current: r.currentSealed ? state(r.currentCreatedAt ?? r.createdAt, r.lastUsedAt) : null,
           next: r.nextSealed ? state(r.nextCreatedAt, null) : null,
-        }) satisfies SourceKey,
+        }) satisfies Omit<SourceKey, "inConfig">,
     );
   }
 

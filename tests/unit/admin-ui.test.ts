@@ -224,9 +224,22 @@ describe("sources and the one-time secret", () => {
         store: "d1",
         current: { createdAt: "2026-09-01T00:00:00Z", lastUsedAt: "2026-09-27T09:00:00Z" },
         next: null,
+        inConfig: true,
       },
     ],
   };
+
+  it("keeps a key whose source left the config, marked and rotatable", () => {
+    const retired = { ...list.keys[0]!, keyId: "old-1", source: "kuma:old" as const, inConfig: false };
+    mount(
+      createElement(Sources, { site: "demo", list: { keys: [...list.keys, retired] }, onReload: vi.fn() }),
+    );
+    const rows = [...document.querySelectorAll("tbody tr")].map((r) => r.textContent ?? "");
+    expect(rows[0]).not.toContain("not in the config");
+    expect(rows[1]).toContain("kuma:old");
+    expect(rows[1]).toContain("not in the config");
+    expect(button("Rotate old-1").disabled).toBe(false);
+  });
 
   it("shows a rotated key's secret once, with a warning and copy, and forgets it on close", async () => {
     const writeText = vi.fn(() => Promise.resolve());

@@ -16,8 +16,9 @@
  * Retired sources: `config.sources` is the effective list (the read routes pass `siteSources`: configured
  * plus the implied monitor runners). A source it does not list is retired: its services (`retiredServiceOf`),
  * with their heartbeats and incidents, and its facts are left out the same way, so no section, count, fact
- * group, highlight, headline or topology is built from them. A monitor's service follows its monitor, not
- * its runner's source. The store keeps every row.
+ * group, highlight, headline or topology is built from them, and `generatedAt` (the newest `lastSeenAt` of
+ * the listed sources, else the model's) never counts them. A monitor's service follows its monitor, not its
+ * runner's source. The store keeps every row.
  */
 
 import type { SiteConfig } from "../config";
@@ -209,7 +210,7 @@ export function buildSiteView(input: ViewInput): SiteView {
   return {
     v: 1,
     now: iso(nowMs),
-    generatedAt: newestSeen(model.sources) ?? model.generatedAt,
+    generatedAt: newestSeen(perSource) ?? model.generatedAt,
     site: { slug: config.slug, name: config.name, hostnames: config.hostnames },
     theme: config.theme,
     branding: {
@@ -314,8 +315,12 @@ function withoutLeftOut(model: ViewInput["model"], config: SiteConfig): ViewInpu
   };
 }
 
-/** The newest `lastSeenAt` of any source: when the newest data was produced. */
-function newestSeen(sources: readonly { lastSeenAt: string | null }[]) {
+/**
+ * The newest `lastSeenAt` of `sources`: when the newest data was produced. Callers pass the listed sources
+ * only (`config.sources` joined with the model), so a retired source never moves the page's `generatedAt`;
+ * null when none has reported, and callers fall back to the model's `generatedAt`.
+ */
+export function newestSeen(sources: readonly { lastSeenAt: string | null }[]) {
   return sources.reduce<string | null>(
     (n, s) => (s.lastSeenAt && (!n || toMs(s.lastSeenAt) > toMs(n)) ? s.lastSeenAt : n),
     null,

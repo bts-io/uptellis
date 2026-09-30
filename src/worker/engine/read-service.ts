@@ -6,7 +6,7 @@
  */
 import type { SiteConfig } from "../../shared/config";
 import { type Source, type SourceFreshness, sourceAgeS, sourceFreshness } from "../../shared/model";
-import { buildSiteView, type SiteView } from "../../shared/view";
+import { buildSiteView, newestSeen, type SiteView } from "../../shared/view";
 import type { ConfigSource } from "./sites";
 import type { ModelCache, SiteModel, Store } from "./store";
 
@@ -86,33 +86,30 @@ export interface SourcesReport {
 }
 
 /**
- * Every source of the site with its freshness at `nowMs`. Configured sources come first in config order
- * (a configured source the store has never seen reports `empty`), then any extra sources the model holds.
- * The model's `expectedIntervalS` wins over the config's when both exist, since that is what staleness
- * sweeps use.
+ * Every source the site watches (`config.sources`: the read routes pass `siteSources`) with its freshness at
+ * `nowMs`, in config order; one the store has never seen reports `empty`. A source the model holds that the
+ * config does not list (retired) is left out, as on the page. The model's `expectedIntervalS` wins over the
+ * config's when both exist, since that is what staleness sweeps use. `generatedAt` is the page's
+ * (`newestSeen` of these sources, else the model's).
  */
 export function buildSourcesReport(config: SiteConfig, model: SiteModel, nowMs: number): SourcesReport {
   const byId = new Map(model.sources.map((s) => [s.id, s]));
-  const rows: Pick<Source, "id" | "kind" | "expectedIntervalS" | "lastSeenAt" | "lastOkAt">[] = [];
-  for (const c of config.sources) {
-    const s = byId.get(c.id);
-    rows.push(
-      s ?? {
-        id: c.id,
-        kind: c.kind,
-        expectedIntervalS: c.expectedIntervalS,
-        lastSeenAt: null,
-        lastOkAt: null,
-      },
+  const rows: Pick<Source, "id" | "kind" | "expectedIntervalS" | "lastSeenAt" | "lastOkAt">[] =
+    config.sources.map(
+      (c) =>
+        byId.get(c.id) ?? {
+          id: c.id,
+          kind: c.kind,
+          expectedIntervalS: c.expectedIntervalS,
+          lastSeenAt: null,
+          lastOkAt: null,
+        },
     );
-    byId.delete(c.id);
-  }
-  rows.push(...byId.values());
 
   return {
     site: config.slug,
     now: isoSeconds(nowMs),
-    generatedAt: model.generatedAt,
+    generatedAt: newestSeen(rows) ?? model.generatedAt,
     sources: rows.map((s) => {
       const age = sourceAgeS(s, nowMs);
       return {

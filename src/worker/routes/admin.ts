@@ -9,6 +9,9 @@
  * `currentVersion`; creating or rotating a key without `SOURCE_MASTER_KEY` answers 503 `unavailable`.
  * Secrets appear only in the `IssuedKey` of a create or rotate. Every response is `Cache-Control: no-store`.
  *
+ * `GET /sites/:site/sources` lists every ingest key of the site with `inConfig`: false for a key whose source
+ * the site no longer watches (removed from the config), which stays listed and rotatable.
+ *
  * `GET /sites/:site/notifications?limit=50` (`config.edit`, like the notification test) lists the site's
  * recent deliveries, newest first (`DeliveryList`; `limit` 1 to 200, default 50).
  *
@@ -47,6 +50,7 @@ import { D1ConfigStore, type SaveOutcome } from "../engine/config-store";
 import { listDeliveries } from "../engine/delivery-log";
 import { KeyStore } from "../engine/key-store";
 import { MasterKeyMissing } from "../engine/seal";
+import { siteSources } from "../engine/sites";
 import { isSameOrigin } from "../middleware/same-origin";
 import { sendTestCard, TEST_CARD_KINDS } from "../notify";
 
@@ -255,10 +259,17 @@ export function adminRoutes() {
     return c.json({ deliveries } satisfies DeliveryList);
   });
 
+  // Every key of the site, marked by whether the site still watches its source (`siteSources`). A key of a
+  // retired source stays listed: it still verifies until rotated, so hiding it would hide a credential.
   app.get("/sites/:site/sources", async (c) => {
     const slug = c.req.param("site");
-    if (!(await configs(c).load(slug))) return notFound(c);
-    return c.json({ keys: await keys(c).list(slug) } satisfies SourceKeyList);
+    const current = await configs(c).load(slug);
+    if (!current) return notFound(c);
+    const watched = new Set(siteSources(current.config, c.var.platform.runtime).map((s) => s.id));
+    const list = await keys(c).list(slug);
+    return c.json({
+      keys: list.map((k) => ({ ...k, inConfig: watched.has(k.source) })),
+    } satisfies SourceKeyList);
   });
 
   app.post("/sites/:site/sources", async (c) => {

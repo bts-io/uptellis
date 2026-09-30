@@ -945,6 +945,49 @@ describe("sources the config no longer lists (retired)", () => {
     expect(JSON.stringify(v)).not.toContain("webhook:ci");
   });
 
+  it("never count a retired source in `generatedAt`, even when it reported last", () => {
+    const base = edited(() => {});
+    expect(base.generatedAt).toBe("2026-09-27T23:57:26Z");
+    const retiredLate = {
+      id: "webhook:ci",
+      site: "demo",
+      kind: "webhook" as const,
+      expectedIntervalS: 300,
+      lastSeenAt: NOW,
+      lastOkAt: NOW,
+    };
+    const v = edited((i) => {
+      i.model.sources.push(retiredLate);
+    });
+    expect(v.generatedAt).toBe(base.generatedAt);
+    // Listed, the same source does move it.
+    expect(
+      edited((i) => {
+        i.config = withWebhook(i.config);
+        i.model.sources.push(retiredLate);
+      }).generatedAt,
+    ).toBe(NOW);
+  });
+
+  it("fall back to the model's `generatedAt` when only retired sources have reported", () => {
+    const fallback = minutesBefore(NOW, 30);
+    const v = edited((i) => {
+      i.config = { ...i.config, sources: [] };
+      i.model.generatedAt = fallback;
+      i.model.sources.push({
+        id: "webhook:ci",
+        site: "demo",
+        kind: "webhook",
+        expectedIntervalS: 300,
+        lastSeenAt: NOW,
+        lastOkAt: NOW,
+      });
+    });
+    // Every fixture source is retired too, and each reported after the fallback.
+    expect(v.freshness.perSource).toEqual([]);
+    expect(v.generatedAt).toBe(fallback);
+  });
+
   it("keep the monitors of an implied runner (`probe:cf`) the config does not list", () => {
     const edge = service({
       id: "probe:api-health",

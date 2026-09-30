@@ -12,7 +12,7 @@
  * - `POST   /api/admin/sites/:site/config/import?dryRun=1`  body: the file text -> ImportResult (with `dryRun=1` nothing is saved)
  * - `GET    /api/admin/sites/:site/config/revisions`        -> RevisionList
  * - `POST   /api/admin/sites/:site/config/revisions/:version/restore` -> SaveConfigResponse (restoring saves a new revision)
- * - `GET    /api/admin/sites/:site/sources`                 -> SourceKeyList
+ * - `GET    /api/admin/sites/:site/sources`                 -> SourceKeyList (every key of the site, `inConfig` per key)
  * - `POST   /api/admin/sites/:site/sources`                 CreateSourceRequest -> IssuedKey (source added to the config as a new revision)
  * - `POST   /api/admin/sites/:site/sources/:keyId/rotate`   -> IssuedKey (the new key is `next`; see KeyState)
  * - `GET    /api/admin/sites/:site/notifications?limit=50`  -> DeliveryList (`config.edit`; newest first, at most 200)
@@ -118,6 +118,12 @@ export const SourceKey = z.object({
   store: z.literal("d1"),
   current: KeyState.nullable(),
   next: KeyState.nullable(),
+  /**
+   * Contract addition: whether the site still watches the key's source (`siteSources`). False for a source
+   * removed from the config (retired): the key stays listed and rotatable, since hiding it would hide a
+   * credential that still verifies.
+   */
+  inConfig: z.boolean(),
 });
 export type SourceKey = z.infer<typeof SourceKey>;
 export const SourceKeyList = z.object({ keys: z.array(SourceKey) });

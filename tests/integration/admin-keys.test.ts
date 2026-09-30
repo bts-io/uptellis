@@ -2,7 +2,8 @@
  * Ingest keys through the admin API and signed ingest, end to end over D1: the seeded keys verify, rotation
  * accepts the old key until the new one is first used (then rejects it), a row left from an env key of an
  * earlier release answers 401 with a hint until it is rotated, a new source is added to the config with its
- * key, secrets are sealed at rest and never logged.
+ * key, secrets are sealed at rest and never logged. A key whose source leaves the config stays listed (marked
+ * `inConfig: false`) and rotatable, while the sources report stops listing that source.
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { IssuedKey, SourceKeyList } from "@/shared/schemas/admin";
@@ -75,9 +76,9 @@ afterAll(() => {
 describe("ingest keys", () => {
   it("lists the D1 keys without secrets, and they verify", async () => {
     const keys = await keysOf();
-    expect(keys.map((k) => [k.keyId, k.source, k.kind, k.store])).toEqual([
-      ["collector-1", "kuma:watch-1", "kuma", "d1"],
-      ["facts-1", "facts:app-1", "facts", "d1"],
+    expect(keys.map((k) => [k.keyId, k.source, k.kind, k.store, k.inConfig])).toEqual([
+      ["collector-1", "kuma:watch-1", "kuma", "d1", true],
+      ["facts-1", "facts:app-1", "facts", "d1", true],
     ]);
     expect(keys[0]).toMatchObject({ current: { lastUsedAt: null }, next: null });
     expect(JSON.stringify(keys)).not.toContain(TEST_KEYS["collector-1"]);
@@ -222,5 +223,34 @@ describe("ingest keys", () => {
     );
     expect(rotate.status).toBe(503);
     expect(await json(rotate)).toMatchObject({ error: "unavailable" });
+  });
+
+  it("keeps the key of a source removed from the config, marked, while the sources report drops it", async () => {
+    const report = async () => {
+      const res = await handle("/api/sites/demo/sources", { headers: { cookie: await adminCookie() } });
+      expect(res.status).toBe(200);
+      return (await json(res)).sources.map((s: { id: string }) => s.id) as string[];
+    };
+    // `facts:extra` has reported (the ingests above), so the model holds it.
+    expect(await report()).toContain("facts:extra");
+
+    const state = await json(await api.get("/sites/demo/config"));
+    const config = {
+      ...state.config,
+      sources: state.config.sources.filter((s: { id: string }) => s.id !== "facts:extra"),
+    };
+    const saved = await api.put("/sites/demo/config", { config, baseVersion: state.version });
+    expect(saved.status).toBe(200);
+
+    expect(await report()).not.toContain("facts:extra");
+    expect(await report()).toEqual(expect.arrayContaining(["kuma:watch-1", "facts:app-1"]));
+    expect((await keysOf()).map((k) => [k.keyId, k.inConfig])).toEqual([
+      ["collector-1", true],
+      ["facts-1", true],
+      ["legacy-1", true],
+      ["extra", false],
+    ]);
+    const key = await issue(await api.post("/sites/demo/sources/extra/rotate"));
+    expect(key).toMatchObject({ keyId: "extra", source: "facts:extra", slot: "next" });
   });
 });
