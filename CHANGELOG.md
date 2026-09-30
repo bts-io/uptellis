@@ -30,6 +30,7 @@ All notable changes to Uptellis are recorded here. The format follows [Conventio
 * A source removed from the config (a retired collector, facts pusher or webhook) leaves the page: its services and facts are no longer shown as stale forever, and an open incident of one of its services is resolved quietly by the five-minute job, with a note and no card. Its history is kept.
 * The accessibility audit now also covers Dashboard and Minimal (it skipped registry entries written over several lines) and the maintenance fixture.
 * A check without a latency that is not down (maintenance, paused) no longer reads as a failure: sys.status, Control Room and Session say "timeout" or "no response" only for a down check and show a dash otherwise, Dashboard's latency bars stay faint instead of red, and sys.status fits the status word ("maint") in its recent checks.
+* A topology with no facts at all (a new install before its pusher reports, or a retired facts source) no longer claims "replication stopped": sys.status, Control Room and Session draw the edge muted as "no data" without an error count, and the Forgejo HA profile's headline and wal row say nothing is known. A replication fact that says stopped still shows red. Themes get `edgeState` from `@/shared/view` (contract addition).
 
 ## 0.4.0 (2026-09-29)
 
