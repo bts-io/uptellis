@@ -64,7 +64,13 @@ function Row({ service: s, beat }: { service: ServiceView; beat: ServiceView["re
         className={cx("row-span-2 h-full rounded-xs md:row-span-1 md:h-5", RULE[beat.status] ?? "bg-faint")}
       />
       <span className="hidden md:inline">
-        <Chip level={down ? "crit" : beat.status === "up" ? "ok" : "warn"}>{beat.status}</Chip>
+        <Chip
+          level={
+            down ? "crit" : beat.status === "up" ? "ok" : beat.status === "maintenance" ? "maint" : "warn"
+          }
+        >
+          {beat.status}
+        </Chip>
       </span>
       <span className="truncate font-sans text-[13px] font-medium">{s.name}</span>
       <span className="col-span-2 col-start-3 truncate text-muted md:col-span-1 md:col-start-auto">
@@ -75,7 +81,11 @@ function Row({ service: s, beat }: { service: ServiceView; beat: ServiceView["re
         <em className={cx("not-italic", down ? "text-down" : "text-ink")}>{beat.message ?? beat.status}</em>
       </span>
       <span className="col-start-4 row-start-1 text-right md:col-start-auto md:row-start-auto">
-        {beat.latencyMs === null ? <span className="text-down">--</span> : `${beat.latencyMs} ms`}
+        {beat.latencyMs === null ? (
+          <span className={down ? "text-down" : "text-muted"}>--</span>
+        ) : (
+          `${beat.latencyMs} ms`
+        )}
       </span>
     </li>
   );

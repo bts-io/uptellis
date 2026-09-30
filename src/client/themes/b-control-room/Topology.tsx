@@ -221,7 +221,15 @@ function NodeCard({ view, node, stale }: { view: SiteView; node: Node; stale: bo
       {ssh && (
         <Row label="ssh">
           <StateDot state={ssh.state} />
-          {ssh.latencyMs === null ? <span className="text-down">timeout</span> : `${ssh.latencyMs} ms`}
+          {ssh.latencyMs === null ? (
+            ssh.state === "down" ? (
+              <span className="text-down">timeout</span>
+            ) : (
+              <span className="text-muted">{DASH}</span>
+            )
+          ) : (
+            `${ssh.latencyMs} ms`
+          )}
         </Row>
       )}
       {gauges.map((d) => (

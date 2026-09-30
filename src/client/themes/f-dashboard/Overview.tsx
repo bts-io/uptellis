@@ -249,7 +249,10 @@ function LatencyBars({ services }: { services: ServiceView[] }) {
       className="block h-[34px] w-full"
     >
       {services.map((s, i) => {
-        const h = s.latencyMs === null ? 3 : Math.max(3, (s.latencyMs / max) * H);
+        // No latency: a full-strength down bar only for a down service; otherwise (maintenance, paused) faint.
+        const silent = s.latencyMs === null;
+        const failed = silent && s.state === "down";
+        const h = silent ? 3 : Math.max(3, (s.latencyMs! / max) * H);
         return (
           <rect
             key={s.id}
@@ -258,10 +261,10 @@ function LatencyBars({ services }: { services: ServiceView[] }) {
             width={Math.max(2, bw - 4).toFixed(1)}
             height={h.toFixed(1)}
             rx="2"
-            fill={s.latencyMs === null ? "var(--color-down)" : "var(--color-accent)"}
-            fillOpacity={s.latencyMs === null ? 1 : 0.75}
+            fill={failed ? "var(--color-down)" : silent ? "var(--color-faint)" : "var(--color-accent)"}
+            fillOpacity={failed ? 1 : 0.75}
           >
-            <title>{`${s.name}: ${s.latencyMs === null ? "no response" : `${s.latencyMs} ms`}`}</title>
+            <title>{`${s.name}: ${failed ? "no response" : silent ? "no latency" : `${s.latencyMs} ms`}`}</title>
           </rect>
         );
       })}

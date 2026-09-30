@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { BeatBar, Gauge, Panel, Sparkline, StateDot } from "@/client/kit";
-import type { ServiceView, TopologyView } from "@/shared/view";
+import type { BeatView, ServiceView, TopologyView } from "@/shared/view";
 import {
   checkType,
   cx,
@@ -225,13 +225,20 @@ function HostLine({ service: s, node }: { service: ServiceView; node: Node | nul
   );
 }
 
+/** A check's status word, short enough for the status column ("maint" as in the summary line). */
+const CHECK_WORD: Partial<Record<BeatView["status"], string>> = { maintenance: "maint" };
+
+/**
+ * The last checks: time, status, message and latency. "timeout" only for a down check without a latency;
+ * a check with none for another reason (maintenance, paused) shows a dash.
+ */
 function RecentChecks({ service: s, stale }: { service: ServiceView; stale: boolean }) {
   const rows = s.recent.slice(0, RECENT_ROWS);
   if (!rows.length) return null;
   return (
     <ul aria-label="recent checks" className="mt-2 border-t border-dashed border-hair pt-2 text-[11.5px]">
       {rows.map((b) => (
-        <li key={b.ts} className="grid grid-cols-[62px_40px_minmax(0,1fr)_auto] items-center gap-2">
+        <li key={b.ts} className="grid grid-cols-[62px_64px_minmax(0,1fr)_auto] items-center gap-2">
           <span className="text-muted">{hhmmss(b.ts)}</span>
           <span
             className={cx(
@@ -239,12 +246,16 @@ function RecentChecks({ service: s, stale }: { service: ServiceView; stale: bool
               stale ? "text-muted" : STATE_TEXT[b.status],
             )}
           >
-            {b.status}
+            {CHECK_WORD[b.status] ?? b.status}
           </span>
           <span className="truncate text-muted">{b.message ?? DASH}</span>
           <span className="text-right">
             {b.latencyMs === null ? (
-              <span className="text-down">timeout</span>
+              b.status === "down" ? (
+                <span className="text-down">timeout</span>
+              ) : (
+                <span className="text-muted">{DASH}</span>
+              )
             ) : (
               <>
                 {b.latencyMs} <span className="text-muted">ms</span>

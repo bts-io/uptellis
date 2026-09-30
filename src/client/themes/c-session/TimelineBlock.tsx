@@ -193,7 +193,11 @@ function Lane({
       <div className="flex justify-between pt-1 pb-2.5 font-mono text-xs leading-none text-muted md:hidden">
         <span>
           {s.latencyMs === null ? (
-            <b className="font-normal text-down">no response</b>
+            s.state === "down" ? (
+              <b className="font-normal text-down">no response</b>
+            ) : (
+              DASH
+            )
           ) : (
             <>
               <b className="font-normal text-ink">{s.latencyMs}</b> ms

@@ -193,6 +193,27 @@ describe("theme A page", () => {
     expect(html).toContain("7/8 up");
   });
 
+  it("shows timeout only for a down check without latency, and a short word for maintenance", () => {
+    const v = view("default");
+    const s = v.sections[0]!.services[0]!;
+    const at = (m: number) => new Date(Date.parse(v.now) - m * 60_000).toISOString();
+    s.recent = [
+      { ts: at(1), status: "maintenance", latencyMs: null, message: "maintenance", important: false },
+      { ts: at(2), status: "paused", latencyMs: null, message: null, important: false },
+      { ts: at(3), status: "down", latencyMs: null, message: "timed out", important: true },
+    ];
+    const html = render(v);
+    const list = html.match(/<ul aria-label="recent checks"[^>]*>(.*?)<\/ul>/)![1]!;
+    const rows = [...list.matchAll(/<li[^>]*>(.*?)<\/li>/g)].map((m) => m[1]!);
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toContain(">maint</span>");
+    expect(rows[0]).not.toContain("timeout");
+    expect(rows[1]).not.toContain("timeout");
+    expect(rows[2]).toContain("timeout");
+    // The status column fits the longest word it shows ("degraded").
+    expect(list).toContain("grid-cols-[62px_64px_minmax(0,1fr)_auto]");
+  });
+
   it("fills the pair cards from the node details: serving, postgres role, disk, and the standby down in an incident", () => {
     const html = render(view("default"));
     expect(html).toContain("replica");

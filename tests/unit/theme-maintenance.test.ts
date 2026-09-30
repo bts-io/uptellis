@@ -67,3 +67,21 @@ describe("every service in maintenance (site-wide window)", () => {
     expect(t).not.toMatch(/\ball (?:the )?\d+ [^.]{0,40}?\bup\b/i);
   });
 });
+
+describe("checks without a latency outside an outage", () => {
+  // Every service in maintenance with no latency, and its recent checks too: nothing reads as a failure.
+  const quiet: SiteView = (() => {
+    const v = buildSiteView(fixtureInput("maintenance"));
+    for (const s of [...v.sections.flatMap((x) => x.services), ...v.unsectioned]) {
+      s.latencyMs = null;
+      s.recent = s.recent.map((b) => ({ ...b, status: "maintenance", latencyMs: null }));
+    }
+    return v;
+  })();
+
+  it.each(registered)("%s never says timeout or no response for them", (id) => {
+    const html = render(id, quiet).toLowerCase();
+    expect(html).not.toMatch(/>\s*timeout\s*</);
+    expect(html).not.toContain("no response");
+  });
+});
