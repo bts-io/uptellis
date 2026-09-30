@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Status wallboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700;800&display=swap">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="board" id="board">
+    <header class="top">
+      <div class="brand">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13" fill="none" stroke="currentColor" stroke-width="3"/><path d="M8 17h5l3-7 3 12 3-5h3" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <div>
+          <p class="site-name" id="site-name"></p>
+          <p class="site-host" id="site-host"></p>
+        </div>
+      </div>
+      <p class="fresh" id="fresh" aria-live="polite"></p>
+    </header>
+
+    <main class="main">
+      <section class="verdict" id="verdict" aria-labelledby="verdict-label">
+        <span class="verdict-icon" id="verdict-icon" aria-hidden="true"></span>
+        <div class="verdict-text">
+          <h1 class="verdict-label" id="verdict-label"></h1>
+          <p class="verdict-counts" id="verdict-counts"></p>
+        </div>
+      </section>
+
+      <div class="alerts" id="alerts"></div>
+
+      <section class="services" aria-labelledby="services-h">
+        <div class="services-head">
+          <h2 id="services-h" class="eyebrow">Services</h2>
+          <div class="pager" id="pager" hidden>
+            <button type="button" class="pager-btn" id="prev" aria-label="Previous page">&#8249;</button>
+            <p class="pager-label" id="pager-label" aria-live="polite"></p>
+            <button type="button" class="pager-btn" id="next" aria-label="Next page">&#8250;</button>
+            <span class="pager-bar" aria-hidden="true"><span id="pager-fill"></span></span>
+          </div>
+        </div>
+        <div class="grid" id="grid"></div>
+      </section>
+
+      <section class="history" aria-labelledby="history-h">
+        <h2 id="history-h" class="eyebrow">Recent incidents</h2>
+        <ol class="history-list" id="history"></ol>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <p id="summary"></p>
+      <ul class="links" id="links"></ul>
+    </footer>
+  </div>
+
+  <script src="../data/demo.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
