@@ -31,6 +31,7 @@ export const TYPE_LABEL: Record<ChannelType, string> = {
   ntfy: "ntfy",
   telegram: "Telegram",
   email: "Email",
+  sms: "SMS (Twilio)",
 };
 
 export const EVENT_LABEL: Record<NotifyEvent, string> = {
@@ -47,6 +48,7 @@ const SECRET_LABEL: Record<Exclude<ChannelType, "email">, string> = {
   webhook: "Endpoint URL secret",
   ntfy: "Topic URL secret",
   telegram: "Bot token secret",
+  sms: "Auth token secret",
 };
 
 /**
@@ -82,7 +84,13 @@ export function newChannel(taken: readonly ChannelConfig[]): ChannelConfig {
   };
 }
 
-/** The channel as `type`, keeping the common fields and the main secret where both types have one. */
+/** The events an SMS channel starts with (the schema's default for `sms`): every text costs money. */
+export const SMS_DEFAULT_EVENTS: NotifyEvent[] = ["down", "up"];
+
+/**
+ * The channel as `type`, keeping the common fields and the main secret where both types have one. A
+ * channel that becomes `sms` with every event still checked drops to `SMS_DEFAULT_EVENTS`.
+ */
 export function withChannelType(ch: ChannelConfig, type: ChannelType): ChannelConfig {
   if (ch.type === type) return ch;
   const { id, name, events, services, enabled } = ch;
@@ -100,6 +108,19 @@ export function withChannelType(ch: ChannelConfig, type: ChannelType): ChannelCo
       return { ...common, type, secret, chatId: "" };
     case "email":
       return { ...common, type, to: [""] };
+    case "sms": {
+      const all = events.length === NOTIFY_EVENTS.length;
+      return {
+        ...common,
+        events: all ? [...SMS_DEFAULT_EVENTS] : events,
+        type,
+        provider: "twilio",
+        accountSid: "",
+        secret,
+        from: "",
+        to: "",
+      };
+    }
   }
 }
 
@@ -394,6 +415,40 @@ function ChannelRow({
             onChange={(e) => set({ chatId: e.target.value.trim() })}
           />
         )}
+        {ch.type === "sms" && (
+          <>
+            <SelectField label="Provider" value={ch.provider} disabled>
+              <option value="twilio">Twilio</option>
+            </SelectField>
+            <Field
+              label="Account SID"
+              value={ch.accountSid}
+              issues={at("accountSid")}
+              className="font-mono"
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="AC followed by 32 hex characters"
+              onChange={(e) => set({ accountSid: e.target.value.trim() })}
+            />
+            <Field
+              label="From"
+              value={ch.from}
+              issues={at("from")}
+              autoComplete="off"
+              placeholder="Twilio number (+15551234567) or MG... service"
+              onChange={(e) => set({ from: e.target.value.replace(/\s/g, "") })}
+            />
+            <Field
+              label="To"
+              type="tel"
+              value={ch.to}
+              issues={at("to")}
+              autoComplete="off"
+              placeholder="One number, E.164 (+15551234567)"
+              onChange={(e) => set({ to: e.target.value.replace(/\s/g, "") })}
+            />
+          </>
+        )}
         {ch.type === "email" && (
           <>
             <div className="flex flex-col gap-2">
@@ -443,6 +498,13 @@ function ChannelRow({
       {ch.type === "email" && (
         <p className="mt-1 text-xs text-muted">
           Sent by this instance's email sender; without one, deliveries fail with email_unavailable.
+        </p>
+      )}
+      {ch.type === "sms" && (
+        <p className="mt-1 text-xs text-muted">
+          One short text per event to one number (add a channel per person). Every text costs money at Twilio,
+          so an SMS channel starts with Service down and Service back up only; check the source events to get
+          those too. A Twilio trial texts only numbers verified in its console.
         </p>
       )}
 

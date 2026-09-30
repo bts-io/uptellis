@@ -276,6 +276,52 @@ describe("channel editor", () => {
     });
   });
 
+  it("edits an SMS channel: Twilio fields, down and up by default, and each field's issue", async () => {
+    // Fictional numbers (555-01xx); the SID is assembled here for the repo-wide literal scan.
+    const sid = `AC${"0123456789abcdef".repeat(2)}`;
+    editor();
+    act(() => button("Add channel").click());
+    const g = () => group("Channel channel-1");
+    choose(field("Type", g()), "sms");
+    expect(field("Provider", g()).value).toBe("twilio");
+    expect(field("Provider", g()).disabled).toBe(true);
+    expect(field("Auth token secret", g()).value).toBe("NOTIFY_CHANNEL_1");
+    expect(text(g())).toContain("costs money");
+    expect(box("Service down", g()).checked).toBe(true);
+    expect(box("Service back up", g()).checked).toBe(true);
+    expect(box("Source silent", g()).checked).toBe(false);
+    expect(box("Source back", g()).checked).toBe(false);
+
+    for (const [label, bad, message] of [
+      ["Account SID", "AC123", "Expected a Twilio Account SID"],
+      ["From", "5555550100", "Expected an E.164 number"],
+      ["To", "+1 555", "Expected one E.164 number"],
+    ] as const) {
+      type(field(label, g()), bad);
+      expect(issuesOf(field(label, g())), label).toContain(message);
+    }
+    expect(button("Review changes").disabled).toBe(true);
+    type(field("Account SID", g()), sid);
+    type(field("Auth token secret", g()), "NOTIFY_TWILIO_TOKEN");
+    type(field("From", g()), "+1 555 555 0100");
+    type(field("To", g()), "+15555550123");
+    for (const label of ["Account SID", "From", "To"]) expect(issuesOf(field(label, g())), label).toBe("");
+    const sent = await reviewed();
+    expect(sent.notify.channels[0]).toEqual({
+      id: "channel-1",
+      name: "New channel",
+      type: "sms",
+      provider: "twilio",
+      accountSid: sid,
+      secret: "NOTIFY_TWILIO_TOKEN",
+      from: "+15555550100",
+      to: "+15555550123",
+      events: ["down", "up"],
+      services: [],
+      enabled: true,
+    });
+  });
+
   it("needs at least one event and limits down and up to chosen services", async () => {
     editor({ notify: { ...config.notify, channels: [OPS] } });
     const g = group("Channel ops");
@@ -624,6 +670,13 @@ describe("contracts and helpers", () => {
     expect(ChannelConfig.safeParse(hook).success).toBe(true);
     expect(ChannelConfig.safeParse(withChannelType(OPS, "ntfy")).success).toBe(true);
     expect(withChannelType(OPS, "slack")).toBe(OPS);
+    // SMS starts at down and up when every event was checked, and keeps a narrower choice.
+    expect(withChannelType(OPS, "sms")).toMatchObject({
+      type: "sms",
+      provider: "twilio",
+      events: ["down", "up"],
+    });
+    expect(withChannelType({ ...OPS, events: ["stale"] }, "sms").events).toEqual(["stale"]);
     const first = newChannel([]);
     expect(first.id).toBe("channel-1");
     expect(ChannelConfig.safeParse(first).success).toBe(true);
