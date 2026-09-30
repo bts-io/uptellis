@@ -9,7 +9,6 @@ import { getRequestUrl } from "@tanstack/react-start/server";
 import type { ThemeId } from "@/shared/config";
 import { AUTH_PAGES, Me } from "@/shared/schemas/auth";
 import type { SiteView, VerdictView } from "@/shared/view";
-import { themeFor } from "../themes";
 import { ApiError, api } from "./api";
 import { siteForHost } from "./site-host";
 
@@ -74,7 +73,7 @@ export async function loadPage(): Promise<PageData> {
 
 /**
  * The page with `theme` shown instead of the site's own (`?theme=` preview): `view.theme` drives the page,
- * `data-theme` and `theme-color`, so every consumer follows it. Nothing is stored.
+ * `data-theme`, `theme-color` and the font preloads, so every consumer follows it. Nothing is stored.
  */
 export function withPreviewTheme(data: PageData, theme: ThemeId | undefined): PageData {
   if (!theme || theme === data.view.theme) return data;
@@ -121,14 +120,14 @@ export function faviconHref(v: VerdictView): string {
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
-/** Route `head` for a site page; the root route supplies the rest (fonts, robots, stylesheet). */
+/**
+ * Route `head` for a site page; the root route supplies the rest (robots, stylesheet), and the root document
+ * the shown theme's `theme-color` and font preloads (`themeHead`, src/client/themes).
+ */
 export function pageHead(data: PageData | undefined) {
   if (!data) return {};
   return {
-    meta: [
-      { title: pageTitle(data.view) },
-      { name: "theme-color", content: themeFor(data.view.theme).themeColor },
-    ],
+    meta: [{ title: pageTitle(data.view) }],
     links: [{ rel: "icon", type: "image/svg+xml", href: faviconHref(data.view.verdict) }],
   };
 }

@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { THEMES, themeFor } from "@/client/themes";
-import { hFriendly, THEME_COLOR } from "@/client/themes/h-friendly";
+import { FONTS, hFriendly, THEME_COLOR } from "@/client/themes/h-friendly";
 import { ago, duration, heroText, listNames, pct } from "@/client/themes/h-friendly/format";
 import { findForbiddenLiterals } from "@/shared/model";
 import { buildSiteView, type SiteView } from "@/shared/view";
@@ -71,7 +71,7 @@ describe("theme H audit", () => {
 describe("theme H page", () => {
   it("registers as h-friendly on data-theme h with its warm base colour", () => {
     expect(hFriendly).toMatchObject({ id: "h-friendly", label: "Friendly", dataTheme: "h" });
-    expect(THEMES["h-friendly"]).toEqual({ module: hFriendly, themeColor: THEME_COLOR });
+    expect(THEMES["h-friendly"]).toEqual({ module: hFriendly, themeColor: THEME_COLOR, fonts: FONTS });
     expect(themeFor("h-friendly").module).toBe(hFriendly);
     expect(THEME_COLOR).toBe("#fff8f1");
   });

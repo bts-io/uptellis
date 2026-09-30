@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { THEMES, themeFor } from "@/client/themes";
-import { gWallboard, THEME_COLOR } from "@/client/themes/g-wallboard";
+import { FONTS, gWallboard, THEME_COLOR } from "@/client/themes/g-wallboard";
 import { Board } from "@/client/themes/g-wallboard/Board";
 import {
   ago,
@@ -43,7 +43,7 @@ describe("theme G audit", () => {
 describe("theme G page", () => {
   it("registers as g-wallboard on data-theme g with its base colour", () => {
     expect(gWallboard).toMatchObject({ id: "g-wallboard", label: "Wallboard", dataTheme: "g" });
-    expect(THEMES["g-wallboard"]).toEqual({ module: gWallboard, themeColor: THEME_COLOR });
+    expect(THEMES["g-wallboard"]).toEqual({ module: gWallboard, themeColor: THEME_COLOR, fonts: FONTS });
     expect(themeFor("g-wallboard").module).toBe(gWallboard);
     expect(THEME_COLOR).toBe("#07090d");
   });

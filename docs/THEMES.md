@@ -45,6 +45,19 @@ Themes never name a fact group or key: what the site's facts mean comes from its
 
 `sections` holds the config's sections in config order, each with the services the model has, in the section's order (unknown ids are skipped). A section none of whose services is in the model (all its ids unknown, or none listed) is left out (contract addition, 0.5.0), so every entry has at least one service and no theme renders an empty header such as "Database UNKNOWN" with nothing under it. `unsectioned` is unchanged: the model's services no section lists.
 
+### Registry: theme-color and fonts
+
+Each theme is registered in `src/client/themes/index.ts` as a `RegisteredTheme`:
+
+| Field | What it is |
+|---|---|
+| `module` | the theme's `ThemeModule` |
+| `themeColor` | `<meta name="theme-color">`, the theme's `--color-base` (the folder's `THEME_COLOR`) |
+| `themeColorDark` | optional: the dark `--color-base` of a theme that follows `prefers-color-scheme` (`f-dashboard`, `i-minimal`; the folder's `THEME_COLOR_DARK`) |
+| `fonts` | the font files the page preloads: `KIT_FONTS` (Geist and JetBrains Mono) for A, B and C, the folder's `FONTS` (its own self-hosted `@font-face` files, empty for a system stack) for the others |
+
+The root document (`src/client/routes/__root.tsx`) renders the shown theme's head tags from `themeHead()`: one `theme-color`, or two with `media="(prefers-color-scheme: light)"` and `media="(prefers-color-scheme: dark)"` when `themeColorDark` is set, and a preload for each of its `fonts` only. They follow a `?theme=` preview. They are not route `meta`, because the router keeps one meta per `name`. `tests/support/registered-themes.ts` mirrors these fields for the SSR tests, and `tests/unit/client-preview.test.ts` keeps it in sync.
+
 ## Rules for themes
 
 - Import only `@/client/kit`, `@/client/effects`, `@/shared/view` types and the theme's own files. Never `@/client/lib/api`, worker, db or model code (a Biome rule enforces it).

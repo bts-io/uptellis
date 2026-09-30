@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { THEMES, themeFor } from "@/client/themes";
-import { fDashboard, THEME_COLOR } from "@/client/themes/f-dashboard";
+import { FONTS, fDashboard, THEME_COLOR, THEME_COLOR_DARK } from "@/client/themes/f-dashboard";
 import { dur, historyStats, pct, siteDays, sparkPaths, when } from "@/client/themes/f-dashboard/format";
 import { ServiceCard } from "@/client/themes/f-dashboard/ServiceCard";
 import { findForbiddenLiterals } from "@/shared/model";
@@ -67,7 +67,12 @@ describe("theme F audit", () => {
 describe("theme F page", () => {
   it("registers as f-dashboard on data-theme f with its base colour", () => {
     expect(fDashboard).toMatchObject({ id: "f-dashboard", label: "Dashboard", dataTheme: "f" });
-    expect(THEMES["f-dashboard"]).toEqual({ module: fDashboard, themeColor: THEME_COLOR });
+    expect(THEMES["f-dashboard"]).toEqual({
+      module: fDashboard,
+      themeColor: THEME_COLOR,
+      themeColorDark: THEME_COLOR_DARK,
+      fonts: FONTS,
+    });
     expect(themeFor("f-dashboard").module).toBe(fDashboard);
     expect(THEME_COLOR).toBe("#f3f5f9");
   });

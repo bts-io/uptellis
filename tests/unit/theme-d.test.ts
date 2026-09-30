@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { THEMES, themeFor } from "@/client/themes";
-import { dClassic, THEME_COLOR } from "@/client/themes/d-classic";
+import { dClassic, FONTS, THEME_COLOR } from "@/client/themes/d-classic";
 import { fmtDur, fmtPct, tickTitle, worstState } from "@/client/themes/d-classic/format";
 import { findForbiddenLiterals } from "@/shared/model";
 import { buildSiteView, type SiteView } from "@/shared/view";
@@ -69,7 +69,7 @@ describe("theme D audit", () => {
 describe("theme D page", () => {
   it("registers as d-classic on data-theme d with its base colour", () => {
     expect(dClassic).toMatchObject({ id: "d-classic", label: "Classic", dataTheme: "d" });
-    expect(THEMES["d-classic"]).toEqual({ module: dClassic, themeColor: THEME_COLOR });
+    expect(THEMES["d-classic"]).toEqual({ module: dClassic, themeColor: THEME_COLOR, fonts: FONTS });
     expect(themeFor("d-classic").module).toBe(dClassic);
     expect(THEME_COLOR).toBe("#f6f7f9");
   });

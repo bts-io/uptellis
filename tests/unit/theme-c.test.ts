@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { BlockHeader } from "@/client/kit";
-import { THEMES, themeFor } from "@/client/themes";
+import { KIT_FONTS, THEMES, themeFor } from "@/client/themes";
 import { cSession, THEME_COLOR } from "@/client/themes/c-session";
 import { findForbiddenLiterals } from "@/shared/model";
 import { buildSiteView, type SiteView } from "@/shared/view";
@@ -40,7 +40,7 @@ describe("theme C audit", () => {
 describe("theme C page", () => {
   it("registers as the c-session theme on data-theme c with its base colour", () => {
     expect(cSession).toMatchObject({ id: "c-session", label: "Session", dataTheme: "c" });
-    expect(THEMES["c-session"]).toEqual({ module: cSession, themeColor: THEME_COLOR });
+    expect(THEMES["c-session"]).toEqual({ module: cSession, themeColor: THEME_COLOR, fonts: KIT_FONTS });
     expect(themeFor("c-session").module).toBe(cSession);
     expect(THEME_COLOR).toBe("#050807");
   });

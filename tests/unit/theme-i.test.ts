@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { THEMES, themeFor } from "@/client/themes";
-import { iMinimal, THEME_COLOR } from "@/client/themes/i-minimal";
+import { FONTS, iMinimal, THEME_COLOR, THEME_COLOR_DARK } from "@/client/themes/i-minimal";
 import { cellTitle, dur, pct } from "@/client/themes/i-minimal/format";
 import { findForbiddenLiterals } from "@/shared/model";
 import { buildSiteView, type SiteView } from "@/shared/view";
@@ -70,7 +70,12 @@ describe("theme I audit", () => {
 describe("theme I page", () => {
   it("registers as i-minimal on data-theme i with its base colour", () => {
     expect(iMinimal).toMatchObject({ id: "i-minimal", label: "Minimal", dataTheme: "i" });
-    expect(THEMES["i-minimal"]).toEqual({ module: iMinimal, themeColor: THEME_COLOR });
+    expect(THEMES["i-minimal"]).toEqual({
+      module: iMinimal,
+      themeColor: THEME_COLOR,
+      themeColorDark: THEME_COLOR_DARK,
+      fonts: FONTS,
+    });
     expect(themeFor("i-minimal").module).toBe(iMinimal);
     expect(THEME_COLOR).toBe("#ffffff");
   });

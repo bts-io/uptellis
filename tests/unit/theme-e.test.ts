@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { THEMES, themeFor } from "@/client/themes";
-import { eEditorial, THEME_COLOR } from "@/client/themes/e-editorial";
+import { eEditorial, FONTS, THEME_COLOR } from "@/client/themes/e-editorial";
 import { duration, pct, standfirst } from "@/client/themes/e-editorial/format";
 import { findForbiddenLiterals } from "@/shared/model";
 import { buildSiteView, type SiteView } from "@/shared/view";
@@ -71,7 +71,7 @@ describe("theme E audit", () => {
 describe("theme E page", () => {
   it("registers as e-editorial on data-theme e with its paper colour", () => {
     expect(eEditorial).toMatchObject({ id: "e-editorial", label: "Editorial", dataTheme: "e" });
-    expect(THEMES["e-editorial"]).toEqual({ module: eEditorial, themeColor: THEME_COLOR });
+    expect(THEMES["e-editorial"]).toEqual({ module: eEditorial, themeColor: THEME_COLOR, fonts: FONTS });
     expect(themeFor("e-editorial").module).toBe(eEditorial);
     expect(THEME_COLOR).toBe("#fbf8f3");
   });

@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { THEMES, themeFor } from "@/client/themes";
+import { KIT_FONTS, THEMES, themeFor } from "@/client/themes";
 import { bControlRoom, THEME_COLOR } from "@/client/themes/b-control-room";
 import { combinedBeats } from "@/client/themes/b-control-room/format";
 import { Kpis } from "@/client/themes/b-control-room/Kpis";
@@ -40,7 +40,11 @@ describe("theme B audit", () => {
 describe("theme B page", () => {
   it("registers as b-control-room on data-theme b with its base colour", () => {
     expect(bControlRoom).toMatchObject({ id: "b-control-room", label: "Control Room", dataTheme: "b" });
-    expect(THEMES["b-control-room"]).toEqual({ module: bControlRoom, themeColor: THEME_COLOR });
+    expect(THEMES["b-control-room"]).toEqual({
+      module: bControlRoom,
+      themeColor: THEME_COLOR,
+      fonts: KIT_FONTS,
+    });
     expect(themeFor("b-control-room").module).toBe(bControlRoom);
     expect(THEME_COLOR).toBe("#0a0c10");
   });

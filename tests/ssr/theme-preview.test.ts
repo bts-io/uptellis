@@ -16,6 +16,9 @@ const page = async (q: string) => {
 
 const htmlTag = (html: string) => /<html[^>]*>/.exec(html)?.[0] ?? "";
 const themeColor = (html: string) => /<meta name="theme-color" content="([^"]+)"/.exec(html)?.[1];
+const themeColorTags = (html: string) => html.match(/<meta name="theme-color"[^>]*>/g) ?? [];
+const preloads = (html: string) =>
+  [...html.matchAll(/<link rel="preload" href="(\/fonts\/[^"]+)" as="font"/g)].map((m) => m[1]).sort();
 
 beforeAll(async () => {
   await seed("default");
@@ -26,7 +29,19 @@ describe("?theme= preview", () => {
     const html = await page(`?theme=${id}`);
     expect(htmlTag(html)).toContain(`data-theme="${theme!.dataTheme}"`);
     expect(themeColor(html)).toBe(theme!.themeColor);
-    expect(html.match(/name="theme-color"/g)).toHaveLength(1);
+    const tags = themeColorTags(html);
+    if (theme!.themeColorDark) {
+      // A theme that follows prefers-color-scheme sends a light and a dark bar colour.
+      expect(tags).toHaveLength(2);
+      expect(tags[0]).toContain('media="(prefers-color-scheme: light)"');
+      expect(tags[1]).toContain(`content="${theme!.themeColorDark}"`);
+      expect(tags[1]).toContain('media="(prefers-color-scheme: dark)"');
+    } else {
+      expect(tags).toHaveLength(1);
+      expect(tags[0]).not.toContain("media=");
+    }
+    // Only the shown theme's fonts are preloaded: a Phase 7 theme never preloads Geist.
+    expect(preloads(html)).toEqual([...theme!.fonts].sort());
     // The bar shows only while the preview differs from the site's own theme (a-sys-status).
     expect(html.includes("Theme preview")).toBe(id !== "a-sys-status");
   });
