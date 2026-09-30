@@ -1,4 +1,65 @@
-/* Minimal theme tokens (Phase 7b), scoped to [data-theme="i"]. */
+/*
+ * Theme I "Minimal" (mockups/minimal): one line with the verdict, a compact service list with a tiny
+ * 90-day strip, near-monochrome with colour only for state. System font stack (no web font), light and
+ * dark from `prefers-color-scheme`. Semantic tokens override the kit defaults under [data-theme="i"] only
+ * (theme A owns the :root defaults). `--i-*` tokens are private to this theme's components.
+ */
 [data-theme="i"] {
   --color-base: #ffffff;
+  --color-panel: #ffffff;
+  --color-line: #ececef;
+  --color-ink: #16181c;
+  --color-muted: #5f6570;
+  --color-accent: #3b73d6;
+  --color-up: #1a9a52;
+  --color-degraded: #d29200;
+  --color-down: #dc3b3b;
+  --color-maint: #3b73d6;
+  --color-stale: #8b919b;
+  --gradient-brand: linear-gradient(90deg, #16181c 0%, #5f6570 100%);
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --color-faint: #8b919b;
+  --color-raised: #f6f6f8;
+  --color-hair: #ececef;
+  --color-frame: #3b73d6;
+
+  --i-cell-none: #e6e7ea;
+  --i-up-text: #147a41;
+  --i-degraded-text: #8a5f00;
+  --i-down-text: #b52727;
+  --i-maint-text: #2a5bb5;
+  --i-stale-text: #5f6570;
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-theme="i"] {
+    --color-base: #111214;
+    --color-panel: #111214;
+    --color-line: #25272b;
+    --color-ink: #ececef;
+    --color-muted: #a3a8b1;
+    --color-accent: #5b8ff0;
+    --color-up: #34c472;
+    --color-degraded: #e6ad27;
+    --color-down: #ef5a5a;
+    --color-maint: #5b8ff0;
+    --color-stale: #7d838d;
+    --gradient-brand: linear-gradient(90deg, #ececef 0%, #a3a8b1 100%);
+    --color-faint: #7d838d;
+    --color-raised: #1a1b1e;
+    --color-hair: #25272b;
+    --color-frame: #5b8ff0;
+
+    --i-cell-none: #2a2c31;
+    --i-up-text: #4fd488;
+    --i-degraded-text: #f0c14d;
+    --i-down-text: #ff7b7b;
+    --i-maint-text: #86abf5;
+    --i-stale-text: #a3a8b1;
+
+    color-scheme: dark;
+  }
 }
