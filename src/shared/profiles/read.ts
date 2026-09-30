@@ -3,7 +3,7 @@
  * key's level, and builders for summary parts.
  */
 import type { Fact } from "../model";
-import { factFresh, worse } from "../view/format";
+import { factFresh, formatRelative, toMs, worse } from "../view/format";
 import type { Level } from "../view/types";
 import type { FactGroupDef, ProfileContext, SummaryPart } from "./types";
 
@@ -32,6 +32,25 @@ export const own = {
 /** True while the fact is inside its `freshForS` window and its source is not stale. */
 export const current = (ctx: ProfileContext, f: Fact | undefined): f is Fact =>
   !!f && factFresh(f, ctx.nowMs) && !ctx.sourceStale(f.source);
+
+/**
+ * How long ago a fact that is no longer `current` was observed ("20 min ago"); null while it is current or
+ * when it never arrived. For a last known value shown past its `freshForS` window.
+ */
+export function staleAge(ctx: ProfileContext, key: string): string | null {
+  const f = ctx.facts.get(key);
+  if (!f || (factFresh(f, ctx.nowMs) && !ctx.sourceStale(f.source))) return null;
+  return formatRelative(Math.max(0, (ctx.nowMs - toMs(f.observedAt)) / 1000));
+}
+
+/**
+ * A fact's text as its last known value: as is while the fact is current, else followed by its age
+ * ("lag 0 s, 20 min ago"), so a stale value is marked, never replaced by a word that hides it.
+ */
+export function lastKnown(ctx: ProfileContext, key: string, text: string): string {
+  const age = staleAge(ctx, key);
+  return age === null ? text : `${text}, ${age}`;
+}
 
 /** A fact's level as its row shows it: the worse of the producer's severity and the key's `level` hook. */
 export function keyLevel(ctx: ProfileContext, groups: readonly FactGroupDef[], key: string): Level | null {

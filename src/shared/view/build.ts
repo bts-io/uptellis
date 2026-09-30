@@ -28,7 +28,7 @@ import {
 import { activeWindows } from "../monitors/maintenance";
 import { removedMonitorOf } from "../monitors/schema";
 import { activeProfiles } from "../profiles";
-import { buildFactViews, latestFacts, profileContext } from "./facts";
+import { buildFactViews, latestFacts, markTopologyGroups, profileContext } from "./facts";
 import { clock, formatDuration, formatPercent, iso, mean, round, toMs } from "./format";
 import type { DayCell, ViewInput } from "./input";
 import { worstState } from "./state";
@@ -162,6 +162,12 @@ export function buildSiteView(input: ViewInput): SiteView {
   const profiles = activeProfiles(config);
   const factCtx = { nowMs, thresholds: config.thresholds, config, profiles, sourceStale };
   const facts = buildFactViews(currentFacts.values(), factCtx);
+  const topology = buildTopology({
+    topology: config.topology,
+    profiles,
+    ctx: profileContext(currentFacts, factCtx),
+    services: all,
+  });
 
   const nameOf = (id: string) => services.get(id)?.name ?? id;
   const subjectOf = (i: Incident) => (i.serviceId ? nameOf(i.serviceId) : (i.sourceId ?? i.id));
@@ -227,13 +233,8 @@ export function buildSiteView(input: ViewInput): SiteView {
     },
     sections,
     unsectioned: all.filter((v) => !placed.has(v.id)),
-    topology: buildTopology({
-      topology: config.topology,
-      profiles,
-      ctx: profileContext(currentFacts, factCtx),
-      services: all,
-    }),
-    factGroups: facts.groups,
+    topology,
+    factGroups: markTopologyGroups(facts.groups, topology, profiles),
     factIndex: facts.index,
     highlights: facts.highlights,
     headline: facts.headline,

@@ -263,6 +263,13 @@ export interface FactGroupView {
   observedAt: string;
   /** False once the newest row is older than its `freshForS`. */
   fresh: boolean;
+  /**
+   * True when the site's topology already draws this group's facts (contract addition, from
+   * `FactGroupDef.inTopology`), e.g. replication as the pair's edge and card rows, the fence as its stamp.
+   * A theme that draws that part of the topology may leave the group out of its fact lists; a theme
+   * without a topology diagram, or a site without a topology (always false then), lists it as usual.
+   */
+  inTopology: boolean;
   rows: FactRowView[];
 }
 

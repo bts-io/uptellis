@@ -5,7 +5,7 @@ A **profile** teaches Uptellis about one kind of system. Producers push typed fa
 - which **groups and keys** its producer sends, with a label, a format, a unit and a level for each key;
 - how to **fold** keys into others (`runners.total` into `runners.online` as "2 of 2") and a one-line **summary** per group, as a string or as coloured **summary parts**;
 - which facts deserve a place in a theme's summary (**highlights**, with an optional badge), and one **headline** sentence;
-- how facts **shape the topology**: node states, notes and card rows, edge liveness and detail, the fence stamp and its detail (`fence.detail`, contract addition, e.g. "tl 1/1");
+- how facts **shape the topology**: node states, notes and card rows, edge liveness and detail, the fence stamp and its detail (`fence.detail`, contract addition, e.g. "tl 1/1"), and which groups the topology already draws (`inTopology`, contract addition);
 - where its **producer's install guide** lives.
 
 The view-model and the themes never name a group or key. They apply the active profiles and render what those declare, so adding a profile needs no view-model or theme change.
@@ -70,6 +70,14 @@ summaryParts: (ctx) =>
   ), // 16.0.5 · HTTP 200 · serving app-1
 ```
 
+## Last known values
+
+A fact has a freshness window (`freshForS`). Past it, or while its source is stale, a profile keeps showing the fact's last value and marks it, never replacing it with a word that hides the number. `src/shared/profiles/read.ts` has two helpers for any profile: `staleAge(ctx, "group.key")` is how long ago such a fact was observed ("13 min ago", null while current or never seen) and `lastKnown(ctx, "group.key", text)` appends it ("lag 0 s, 13 min ago"). `forgejo-ha` shows a stale replication lag this way on the edge, on the standby's `wal` card row (state `stale`), in the group's summary (muted) and in the headline ("replication lag 0 s, 40 min ago"), unless the replication state says why nothing streams ("no standby streaming").
+
+## Groups the topology draws
+
+A group's `inTopology(topology)` hook (contract addition) returns true when the profile's topology hook already draws the group's facts into the refined topology. `forgejo-ha` marks `replication` while the topology has a replication edge (its liveness and lag, the pair's `postgres` and `wal` card rows) and `fence` while it has a fence stamp (decision, reason, timelines). The view sets `FactGroupView.inTopology` from it, and always false when the site has no topology. A theme that draws that part of the topology (B and C draw the failover pair) leaves such a group out of its fact tiles or lines; a theme without a topology diagram, or a site without a topology, lists it as usual.
+
 ## Highlight slots
 
 A highlight's `slot` (contract addition) places it in a theme's summary: lower slots come first, highlights without a slot follow in profile order. The figures a theme draws itself hold fixed slots (`SUMMARY_SLOTS` in `src/shared/view`: monitors 10, avg response 20, health 40, uptime 24h 50, uptime 30d 60, snapshot 80), so a highlight can sit between two of them. The built-ins use 30 for the Kuma version and database size (after the average response), 70 for the collector's host and timezone (before the snapshot) and 90 for the watchdog (last), which gives theme A's summary box its three columns: monitors, avg resp, kuma | health, uptime 24h, uptime 30d | collector, snapshot, watchdog. Highlights sharing a label form one slot and should share its number.
@@ -120,4 +128,4 @@ export const acmeQueue: Profile = {
 
 ## How themes use it
 
-Themes read the result, never the profile: `factGroups` (title, icon, summary and its parts, level and rows), `highlights` (label, row and note; highlights sharing a label form one summary slot), `headline`, and `topology` (node notes and `details`, edge `live` and `detail`, the fence). See [THEMES.md](THEMES.md#facts-highlights-and-topology).
+Themes read the result, never the profile: `factGroups` (title, icon, summary and its parts, level, rows and `inTopology`), `highlights` (label, row and note; highlights sharing a label form one summary slot), `headline`, and `topology` (node notes and `details`, edge `live` and `detail`, the fence). See [THEMES.md](THEMES.md#facts-highlights-and-topology).

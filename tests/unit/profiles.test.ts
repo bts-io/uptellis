@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { Fact } from "@/shared/model";
 import { activeProfiles, listProfiles, type Profile, registerProfile } from "@/shared/profiles";
+import { lastKnown, staleAge } from "@/shared/profiles/read";
 import { buildSiteView, type SiteView, type ViewInput } from "@/shared/view";
-import { buildFactViews } from "@/shared/view/facts";
+import { buildFactViews, latestFacts, profileContext } from "@/shared/view/facts";
 import { fixtureConfig, fixtureInput } from "../fixtures/view";
 
 const NOW = Date.parse("2026-09-27T23:58:00Z");
@@ -147,5 +148,108 @@ describe("a site without profiles", () => {
     expect(plain.highlights.map((h) => h.row.group)).toEqual(["kuma", "kuma", "kuma", "kuma"]);
     expect(plain.topology!.fence).toBeNull();
     expect(plain.topology!.nodes.every((n) => n.details.length === 0)).toBe(true);
+  });
+});
+
+describe("forgejo-ha: a lag past its freshness window", () => {
+  /** The default fixture with the lag fact's window cut to `freshForS`; the state stays current. */
+  const lagWindow = (freshForS: number, edit: (i: ViewInput) => void = () => {}) =>
+    viewWith((i) => {
+      i.model.facts = i.model.facts.map((f) =>
+        f.group === "replication" && f.key === "lagSeconds" ? { ...f, freshForS } : f,
+      );
+      edit(i);
+    });
+  const wal = (v: SiteView) => v.topology!.nodes.find((n) => n.id === "app-2")!.details.at(-1);
+  const edge = (v: SiteView) => v.topology!.edges.find((e) => e.kind === "replication")!;
+  const lagPart = (v: SiteView) => {
+    const parts = v.factGroups.find((g) => g.id === "replication")!.summaryParts;
+    return parts[parts.findIndex((p) => p.text === "lag") + 1];
+  };
+
+  it("keeps showing the current lag plainly", () => {
+    const v = lagWindow(1800);
+    expect(wal(v)).toEqual({ label: "wal", value: "lag 0 s", state: "up" });
+    expect(edge(v)).toMatchObject({ live: true, detail: "lag 0 s" });
+    expect(lagPart(v)).toEqual({ text: "0 s", level: "ok", emphasis: false });
+  });
+
+  it("shows the last known lag with its age, stale, never a word in its place", () => {
+    // Observed at 23:45 with a 10 minute window: 13 minutes old at 23:58.
+    const v = lagWindow(600);
+    expect(wal(v)).toEqual({ label: "wal", value: "lag 0 s, 13 min ago", state: "stale" });
+    expect(edge(v)).toMatchObject({ live: true, detail: "lag 0 s, 13 min ago" });
+    expect(lagPart(v)).toEqual({ text: "0 s, 13 min ago", level: "info", emphasis: false });
+    expect(v.headline).toBe("Forgejo serving from app-1, replication streaming");
+    expect(JSON.stringify(v.topology)).not.toContain(':"live"');
+  });
+
+  it("keeps the last lag in the headline when every replication fact is past its window", () => {
+    const v = lagWindow(1800, (i) => {
+      i.now = "2026-09-28T00:25:00Z";
+      for (const s of i.model.sources) s.lastSeenAt = "2026-09-28T00:24:30Z";
+    });
+    expect(edge(v)).toMatchObject({ live: false, detail: "lag 0 s, 40 min ago" });
+    expect(wal(v)).toMatchObject({ value: "stopped" });
+    expect(v.headline).toBe("Forgejo serving from app-1, replication lag 0 s, 40 min ago");
+  });
+
+  it("still says why nothing streams once the state tells", () => {
+    const v = lagWindow(600, (i) => {
+      const state = i.model.facts.find((f) => f.group === "replication" && f.key === "state")!;
+      state.value = { type: "string", value: "none" };
+    });
+    expect(edge(v)).toMatchObject({ live: false, detail: "no standby streaming" });
+  });
+});
+
+describe("groups the topology carries", () => {
+  const carried = (v: SiteView) => v.factGroups.filter((g) => g.inTopology).map((g) => g.id);
+
+  it("marks replication and fence on a site with the pair, nothing else", () => {
+    expect(carried(viewWith(() => {}))).toEqual(["replication", "fence"]);
+  });
+
+  it("marks nothing on a site without a topology or without the profile", () => {
+    expect(carried(viewWith((i) => (i.config = { ...i.config, topology: undefined })))).toEqual([]);
+    expect(carried(viewWith((i) => (i.config = { ...i.config, profiles: [] })))).toEqual([]);
+  });
+
+  it("asks the profile with the refined topology: no replication edge, no replication mark", () => {
+    const v = viewWith((i) => {
+      const t = i.config.topology!;
+      i.config = { ...i.config, topology: { ...t, edges: t.edges.filter((e) => e.kind !== "replication") } };
+    });
+    expect(carried(v)).toEqual(["fence"]);
+  });
+});
+
+describe("last known values (read helpers, any profile)", () => {
+  const ctx = (facts: Fact[], stale: string[] = []) =>
+    profileContext(latestFacts(facts), {
+      nowMs: NOW,
+      thresholds: fixtureConfig.thresholds,
+      sourceStale: (id) => stale.includes(id),
+    });
+  const depth = (over: Partial<Fact> = {}) => fact("queue", "depth", { type: "number", value: 7 }, over);
+
+  it("leaves a current value as is and has no age for it", () => {
+    const c = ctx([depth()]);
+    expect(staleAge(c, "queue.depth")).toBeNull();
+    expect(lastKnown(c, "queue.depth", "7 waiting")).toBe("7 waiting");
+  });
+
+  it("marks a value past its window, or from a stale source, with its age", () => {
+    expect(lastKnown(ctx([depth({ freshForS: 60 })]), "queue.depth", "7 waiting")).toBe(
+      "7 waiting, 13 min ago",
+    );
+    expect(lastKnown(ctx([depth()], ["facts:app-1"]), "queue.depth", "7 waiting")).toBe(
+      "7 waiting, 13 min ago",
+    );
+  });
+
+  it("has no age for a fact that never arrived", () => {
+    expect(staleAge(ctx([]), "queue.depth")).toBeNull();
+    expect(lastKnown(ctx([]), "queue.depth", "-")).toBe("-");
   });
 });

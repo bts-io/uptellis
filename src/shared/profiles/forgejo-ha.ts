@@ -7,7 +7,7 @@
 import type { Fact } from "../model";
 import { formatBytes, formatDuration, formatRelative, toMs } from "../view/format";
 import type { DisplayState, Level, TopologyView } from "../view/types";
-import { bool, current, keyLevel, num, own, part, quiet, runs, str } from "./read";
+import { bool, current, keyLevel, lastKnown, num, own, part, quiet, runs, staleAge, str } from "./read";
 import type { FactKeyDef, Profile, ProfileContext } from "./types";
 
 /** Seconds from a timestamp fact's value to now (negative when it lies ahead). */
@@ -50,18 +50,26 @@ const httpCode = (code: number) => `HTTP ${code}`;
 const streaming = (ctx: ProfileContext) =>
   str(ctx, "replication.state") === "streaming" && current(ctx, ctx.facts.get("replication.state"));
 
-/** `lag 0 s` while the lag is current, else why nothing streams; null when nothing is known. */
+/**
+ * `lag 0 s` while the lag is current; the last known lag with its age (`lag 0 s, 20 min ago`) once it is
+ * past its window, unless the state says why nothing streams; null when nothing is known.
+ */
 const replicationDetail = (ctx: ProfileContext) => {
   const lag = lagDisplay(ctx);
   const state = str(ctx, "replication.state");
-  return lag !== null && current(ctx, ctx.facts.get("replication.lagSeconds"))
-    ? `lag ${lag}`
+  const lagFact = ctx.facts.get("replication.lagSeconds");
+  return lag !== null && (current(ctx, lagFact) || state === null || state === "streaming")
+    ? lastKnown(ctx, "replication.lagSeconds", `lag ${lag}`)
     : state === "none"
       ? "no standby streaming"
       : state && state !== "streaming"
         ? state
         : null;
 };
+
+/** The headline's replication clause: a lag reads "replication lag 0 s, 20 min ago". */
+const replicationLine = (detail: string | null) =>
+  detail === null ? "replication stopped" : detail.startsWith("lag ") ? `replication ${detail}` : detail;
 
 const watchdogText = (ctx: ProfileContext) => {
   const reachable = bool(ctx, "watchdog.reachable");
@@ -146,6 +154,8 @@ export const forgejoHa: Profile = {
       title: "Replication",
       icon: "database",
       order: 20,
+      // The pair's replication edge (live, lag) and its card rows (postgres role, wal) carry it.
+      inTopology: (t) => t.edges.some((e) => e.kind === "replication"),
       keys: [
         {
           key: "state",
@@ -172,6 +182,8 @@ export const forgejoHa: Profile = {
       summaryParts: (ctx) => {
         const state = str(ctx, "replication.state");
         const lag = lagDisplay(ctx);
+        // A lag past its window keeps its number, muted, with its age: "lag 0 s, 20 min ago".
+        const lagStale = staleAge(ctx, "replication.lagSeconds") !== null;
         const role = str(ctx, "replication.role");
         const peer = str(ctx, "replication.peer");
         const reachable = text(ctx, "replication.peerReachable");
@@ -180,7 +192,11 @@ export const forgejoHa: Profile = {
           [
             state !== null && part(state, lvl(ctx, "replication.state"), true),
             lag !== null && part("lag", "info"),
-            lag !== null && part(lag, lvl(ctx, "replication.lagSeconds")),
+            lag !== null &&
+              part(
+                lastKnown(ctx, "replication.lagSeconds", lag),
+                lagStale ? "info" : lvl(ctx, "replication.lagSeconds"),
+              ),
           ],
           [role !== null && part(role, "info")],
           [
@@ -201,6 +217,8 @@ export const forgejoHa: Profile = {
       title: "Fence",
       icon: "shield",
       order: 30,
+      // The fence stamp (decision, reason, timelines) beside the pair carries it.
+      inTopology: (t) => t.fence !== null,
       keys: [
         {
           key: "decision",
@@ -436,7 +454,7 @@ export const forgejoHa: Profile = {
       ? null
       : streaming(ctx)
         ? `replication ${str(ctx, "replication.state")}`
-        : (replicationDetail(ctx) ?? "replication stopped");
+        : replicationLine(replicationDetail(ctx));
     return [`Forgejo serving from ${serving}`, replication].filter(Boolean).join(", ");
   },
   topology: refineTopology,
@@ -483,7 +501,7 @@ function refineTopology(ctx: ProfileContext, topology: TopologyView): TopologyVi
   };
 
   const lag = lagDisplay(ctx);
-  const lagCurrent = lag !== null && current(ctx, fact("replication.lagSeconds"));
+  const lagCurrent = current(ctx, fact("replication.lagSeconds"));
   const disk = num(ctx, "disk.percent");
 
   /** The rows of a pair node's card: forgejo, postgres, then the disk (reporter) or the WAL stream (peer). */
@@ -512,11 +530,16 @@ function refineTopology(ctx: ProfileContext, topology: TopologyView): TopologyVi
         ? disk === null
           ? null
           : { label: "disk", value: `${disk}%`, state: disk >= 90 ? "down" : disk >= 80 ? "degraded" : "up" }
-        : {
-            label: "wal",
-            value: live ? (lagCurrent ? `lag ${lag}` : "live") : "stopped",
-            state: live ? "up" : "down",
-          };
+        : !live
+          ? { label: "wal", value: "stopped", state: "down" }
+          : lag === null
+            ? { label: "wal", value: "live", state: "up" }
+            : // A lag past its window shows its last value and age, stale: "lag 0 s, 20 min ago".
+              {
+                label: "wal",
+                value: lastKnown(ctx, "replication.lagSeconds", `lag ${lag}`),
+                state: lagCurrent ? "up" : "stale",
+              };
     return [forgejo, postgres, ...(last ? [last] : [])];
   };
 

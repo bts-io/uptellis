@@ -79,6 +79,14 @@ export interface FactGroupDef {
    * without this hook, the view makes `summary` one plain part.
    */
   summaryParts?(ctx: ProfileContext): SummaryPart[] | null;
+  /**
+   * True when the profile's topology hook already draws this group's facts into the topology (contract
+   * addition), e.g. the replication state and lag as the replication edge and the pair's card rows, or the
+   * fence decision as the fence stamp. It gets the refined topology and is asked only when the site has one.
+   * The view marks such a group `inTopology`, and a theme that draws that part of the topology may leave
+   * the group out of its fact lists; a theme without a topology diagram keeps listing it.
+   */
+  inTopology?(topology: TopologyView): boolean;
 }
 
 /** A fact a theme may place in its summary box, with a short label. */

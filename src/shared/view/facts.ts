@@ -19,7 +19,14 @@ import {
   toMs,
   worse,
 } from "./format";
-import type { FactGroupView, FactRowView, HighlightView, Level, SummaryPartView } from "./types";
+import type {
+  FactGroupView,
+  FactRowView,
+  HighlightView,
+  Level,
+  SummaryPartView,
+  TopologyView,
+} from "./types";
 
 /** Display order of the built-in profiles' groups (`FactGroupDef.order`); undeclared groups follow alphabetically. */
 export const FACT_GROUP_ORDER = listProfiles()
@@ -198,6 +205,22 @@ function summaryOf(
   return { summary: text, summaryParts: text === null ? [] : [{ text, level: null, emphasis: false }] };
 }
 
+/**
+ * Marks the groups the topology already draws (`FactGroupDef.inTopology`, asked with the refined topology);
+ * every group stays unmarked when the site has no topology.
+ */
+export function markTopologyGroups(
+  groups: readonly FactGroupView[],
+  topology: TopologyView | null,
+  profiles: readonly Profile[] = listProfiles(),
+): FactGroupView[] {
+  const decls = declarations(profiles);
+  return groups.map((g) => ({
+    ...g,
+    inTopology: topology !== null && decls.get(g.id)?.def.inTopology?.(topology) === true,
+  }));
+}
+
 /** Groups, rows, highlights and the headline for facts that are already one per `group.key` (see `latestFacts`). */
 export function buildFactViews(facts: Iterable<Fact>, ctx: FactViewContext): FactViews {
   const profiles = ctx.profiles ?? listProfiles();
@@ -245,6 +268,7 @@ export function buildFactViews(facts: Iterable<Fact>, ctx: FactViewContext): Fac
         ),
         observedAt: newest.observedAt,
         fresh: factFresh(newest, ctx.nowMs),
+        inTopology: false,
         rows,
       };
     });

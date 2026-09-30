@@ -673,11 +673,45 @@ describe("facts and topology", () => {
     expect(v.topology!.edges.find((e) => e.kind === "watches")!.live).toBe(false);
   });
 
-  it("no topology in config: null", () => {
+  it("no topology in config: null, and no group is marked as drawn by it", () => {
     const v = edited((i) => {
       i.config = { ...config, topology: undefined };
     });
     expect(v.topology).toBeNull();
+    expect(v.factGroups.every((g) => g.inTopology === false)).toBe(true);
+  });
+
+  it("marks the groups the topology draws (inTopology), from the profiles", () => {
+    const v = edited(() => {});
+    expect(v.factGroups.map((g) => [g.id, g.inTopology])).toEqual([
+      ["forgejo", false],
+      ["replication", true],
+      ["fence", true],
+      ["backup", false],
+      ["runners", false],
+      ["disk", false],
+      ["watchdog", false],
+      ["kuma", false],
+    ]);
+  });
+
+  it("a stale lag keeps its last value and age on the edge and the standby's card, never a word", () => {
+    const v = edited((i) => {
+      const lag = i.model.facts.find((f) => f.group === "replication" && f.key === "lagSeconds")!;
+      lag.freshForS = 300;
+      lag.value = { type: "number", value: 4 };
+    });
+    expect(v.topology!.edges.find((e) => e.kind === "replication")).toMatchObject({
+      live: true,
+      detail: "lag 4 s, 13 min ago",
+    });
+    expect(v.topology!.nodes.find((n) => n.id === "app-2")!.details.at(-1)).toEqual({
+      label: "wal",
+      value: "lag 4 s, 13 min ago",
+      state: "stale",
+    });
+    // The row keeps its plain value; the group is fresh, as its newest fact is.
+    expect(v.factIndex["replication.lagSeconds"]!.display).toBe("4 s");
   });
 });
 
