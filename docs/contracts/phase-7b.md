@@ -35,4 +35,4 @@ Read a mock-up with `git show p7/mockups:mockups/<name>/app.js` (also `index.htm
 - Code, tests and verify only: no screenshots, no browsers, no visual iteration. The lead reviews screenshots. If the contract is unclear or a conformance test seems wrong for a theme, stop and report.
 - No commits (the lead signs). Give a commit plan: Conventional Commits, lower-case subject, header at most 100 characters.
 - No em dashes or en dashes anywhere. No real host names (use the demo data).
-- Before finishing: `bunx biome check --write .`, `bun run verify` and `bun run leak-check`, each exit 0, output under `/home/hani/.claude/jobs/d904cf4e/tmp/p7b-<name>/`.
+- Before finishing: `bunx biome check --write .`, `bun run verify` and `bun run leak-check`, each exit 0, output saved in your job tmp folder.
