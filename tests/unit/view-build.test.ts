@@ -10,6 +10,12 @@ const svc = (v: SiteView, id: string): ServiceView =>
 const minutesBefore = (iso: string, m: number) =>
   new Date(Date.parse(iso) - m * 60_000).toISOString().replace(".000Z", "Z");
 
+/** `c` with a `webhook:ci` source listed after the fixture's own. */
+const withWebhook = (c: ViewInput["config"]): ViewInput["config"] => ({
+  ...c,
+  sources: [...c.sources, { id: "webhook:ci", kind: "webhook", expectedIntervalS: 300 }],
+});
+
 /** The default fixture with `edit` applied to a copy of its input. */
 function edited(edit: (i: ViewInput) => void, name: "default" | "stale" | "incident" = "default"): SiteView {
   const input = fixtureInput(name);
@@ -306,8 +312,9 @@ describe("freshness and verdict", () => {
     expect(v.verdict.state).toBe("operational");
   });
 
-  it("a service of a source the model has never seen shows stale", () => {
+  it("a service of a listed source the model has never seen shows stale", () => {
     const v = edited((i) => {
+      i.config = withWebhook(i.config);
       i.model.services.push(service({ id: "webhook:ci", source: "webhook:ci", kind: "push" }));
     });
     const ci = svc(v, "webhook:ci");
@@ -315,8 +322,9 @@ describe("freshness and verdict", () => {
     expect(v.unsectioned.map((s) => s.id)).toEqual(["webhook:ci"]);
   });
 
-  it("an unconfigured source that reports fresh keeps its services live", () => {
+  it("a listed webhook source that reports fresh keeps its services live", () => {
     const v = edited((i) => {
+      i.config = withWebhook(i.config);
       i.model.sources.push({
         id: "webhook:ci",
         site: "demo",
@@ -330,7 +338,12 @@ describe("freshness and verdict", () => {
       );
     });
     expect(svc(v, "webhook:ci").state).toBe("degraded");
-    expect(v.freshness.perSource.map((p) => p.id)).toEqual(["kuma:watch-1", "facts:app-1", "probe:cf"]);
+    expect(v.freshness.perSource.map((p) => p.id)).toEqual([
+      "kuma:watch-1",
+      "facts:app-1",
+      "probe:cf",
+      "webhook:ci",
+    ]);
     expect(v.verdict).toMatchObject({ state: "degraded", label: "1 service degraded", degraded: 1 });
   });
 
@@ -771,5 +784,116 @@ describe("services whose source reports no averages or uptime", () => {
     expect(v.uptime24h).toBe(v.beats90d.at(-1)!.uptime);
     expect(v.uptime30d).not.toBeNull();
     expect(v.health.score).not.toBeNull();
+  });
+});
+
+describe("sources the config no longer lists (retired)", () => {
+  /** `c` without the source `id`. */
+  const without = (c: ViewInput["config"], id: string): ViewInput["config"] => ({
+    ...c,
+    sources: c.sources.filter((s) => s.id !== id),
+  });
+  const ids = (v: SiteView) => [...v.sections.flatMap((s) => s.services), ...v.unsectioned].map((s) => s.id);
+
+  it("leave out a retired facts source's groups, highlights and headline", () => {
+    const before = edited((i) => {
+      i.model.facts.push(fact("acceptance", "check", { type: "string", value: "ok" }));
+    });
+    expect(before.factGroups.map((g) => g.id)).toContain("acceptance");
+    expect(before.headline).toContain("Forgejo");
+    expect(before.highlights.map((h) => h.label)).toContain("watchdog");
+
+    const v = edited((i) => {
+      i.config = without(i.config, "facts:app-1");
+      i.model.facts.push(fact("acceptance", "check", { type: "string", value: "ok" }));
+    });
+    // Only the Kuma collector's own facts stay.
+    expect(v.factGroups.map((g) => g.id)).toEqual(["kuma"]);
+    expect(Object.keys(v.factIndex).every((k) => k.startsWith("kuma."))).toBe(true);
+    expect(v.highlights.every((h) => h.row.group === "kuma")).toBe(true);
+    expect(v.headline ?? "").not.toContain("Forgejo");
+    expect(JSON.stringify(v)).not.toContain("acceptance");
+    expect(v.freshness.perSource.map((p) => p.id)).toEqual(["kuma:watch-1", "probe:cf"]);
+    // Services of the listed sources are untouched.
+    expect(ids(v)).toEqual(ids(before));
+  });
+
+  it("leave out a retired kuma source's services from sections, unsectioned, counts and verdict", () => {
+    const before = edited(() => {}, "incident");
+    expect(before.verdict.state).toBe("outage");
+    expect(before.incidents.open.length).toBeGreaterThan(0);
+
+    const v = edited((i) => {
+      i.config = without(i.config, "kuma:watch-1");
+    }, "incident");
+    expect(v.sections).toEqual([]);
+    expect(v.unsectioned).toEqual([]);
+    expect(v.summary).toMatchObject({ total: 0, up: 0, down: 0, degraded: 0 });
+    expect(v.verdict).toMatchObject({ state: "operational", down: 0, degraded: 0 });
+    expect(v.incidents.open).toEqual([]);
+    expect(v.activity.every((a) => a.serviceId === null)).toBe(true);
+    // Its own facts (the `kuma` group) go too; the facts collector's stay.
+    expect(v.factGroups.map((g) => g.id)).not.toContain("kuma");
+    expect(v.factGroups.map((g) => g.id)).toContain("forgejo");
+  });
+
+  it("leave out a retired webhook source's services and their incidents", () => {
+    const ci = service({ id: "webhook:ci", source: "webhook:ci", kind: "push", status: "down" });
+    const incident: Incident = {
+      id: `webhook:ci:${minutesBefore(NOW, 5)}`,
+      site: "demo",
+      kind: "down",
+      serviceId: "webhook:ci",
+      sourceId: null,
+      startedAt: minutesBefore(NOW, 5),
+      endedAt: null,
+      title: "webhook:ci down",
+      notes: null,
+    };
+    const base = edited(() => {});
+    const v = edited((i) => {
+      i.model.sources.push({
+        id: "webhook:ci",
+        site: "demo",
+        kind: "webhook",
+        expectedIntervalS: 300,
+        lastSeenAt: minutesBefore(NOW, 1),
+        lastOkAt: null,
+      });
+      i.model.services.push(ci);
+      i.model.recentHeartbeats.push(
+        beat("webhook:ci", minutesBefore(NOW, 5), { status: "down", important: true }),
+      );
+      i.model.openIncidents.push(incident);
+    });
+    expect(ids(v)).not.toContain("webhook:ci");
+    expect(v.unsectioned).toEqual([]);
+    expect(v.summary).toEqual(base.summary);
+    expect(v.verdict).toEqual(base.verdict);
+    expect(v.incidents.open).toEqual([]);
+    expect(JSON.stringify(v)).not.toContain("webhook:ci");
+  });
+
+  it("keep the monitors of an implied runner (`probe:cf`) the config does not list", () => {
+    const edge = service({
+      id: "probe:api-health",
+      source: "probe:cf",
+      externalId: "api-health",
+      name: "API health (edge)",
+    });
+    const v = edited((i) => {
+      i.config = without(i.config, "probe:cf");
+      i.model.sources.push({
+        id: "probe:cf",
+        site: "demo",
+        kind: "probe",
+        expectedIntervalS: 60,
+        lastSeenAt: minutesBefore(NOW, 1),
+        lastOkAt: null,
+      });
+      i.model.services.push(edge);
+    });
+    expect(ids(v)).toContain("probe:api-health");
+    expect(svc(v, "probe:api-health").state).toBe("up");
   });
 });

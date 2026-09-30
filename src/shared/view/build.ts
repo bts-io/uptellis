@@ -12,6 +12,12 @@
  *
  * Removed monitors: a `probe:` service the config no longer defines (`removedMonitorOf`) is left out with
  * its heartbeats and incidents, as if it never existed; its rows stay in the store.
+ *
+ * Retired sources: `config.sources` is the effective list (the read routes pass `siteSources`: configured
+ * plus the implied monitor runners). A source it does not list is retired: its services (`retiredServiceOf`),
+ * with their heartbeats and incidents, and its facts are left out the same way, so no section, count, fact
+ * group, highlight, headline or topology is built from them. A monitor's service follows its monitor, not
+ * its runner's source. The store keeps every row.
  */
 
 import type { SiteConfig } from "../config";
@@ -26,7 +32,7 @@ import {
   sourceFreshness,
 } from "../model";
 import { activeWindows } from "../monitors/maintenance";
-import { removedMonitorOf } from "../monitors/schema";
+import { removedMonitorOf, retiredServiceOf } from "../monitors/schema";
 import { activeProfiles } from "../profiles";
 import { buildFactViews, latestFacts, markTopologyGroups, profileContext } from "./facts";
 import { clock, formatDuration, formatPercent, iso, mean, round, toMs } from "./format";
@@ -67,11 +73,12 @@ const meanOf = (xs: (number | null)[], digits: number) => {
 
 export function buildSiteView(input: ViewInput): SiteView {
   const { config } = input;
-  const model = withoutRemovedMonitors(input.model, config);
+  const model = withoutLeftOut(input.model, config);
   const nowMs = toMs(input.now);
 
-  // Configured sources in config order. Services of a source the config does not list still get its
-  // freshness from the model, so an unconfigured producer cannot keep a green dot either.
+  // Listed sources in config order. Services and facts of a source the config does not list are already
+  // left out (`withoutLeftOut`); a monitor's service whose runner source is unlisted (a paused monitor)
+  // gets that source's freshness from the model, so it cannot keep a green dot on silent data either.
   const modelSource = new Map(model.sources.map((s) => [s.id, s]));
   const perSource: SourceView[] = config.sources.map((spec) => {
     const lastSeenAt = modelSource.get(spec.id)?.lastSeenAt ?? null;
@@ -275,20 +282,28 @@ const VERDICT_LABEL: Record<VerdictState, (down: number, degraded: number) => st
   empty: () => "No data yet",
 };
 
-/** The newest `lastSeenAt` of any source: when the newest data was produced. */
-/** The model without the services, heartbeats and incidents of monitors `config` no longer defines. */
-function withoutRemovedMonitors(model: ViewInput["model"], config: SiteConfig): ViewInput["model"] {
-  const removed = removedMonitorOf(config);
+/**
+ * The model without what the view leaves out: the services (with their heartbeats and incidents) of monitors
+ * `config` no longer defines and of sources it no longer lists, and the facts of those sources.
+ */
+function withoutLeftOut(model: ViewInput["model"], config: SiteConfig): ViewInput["model"] {
+  const removedMonitor = removedMonitorOf(config);
+  const retired = retiredServiceOf(config);
+  const listed = new Set(config.sources.map((s) => s.id));
+  const gone = new Set(model.services.filter((s) => removedMonitor(s.id) || retired(s)).map((s) => s.id));
+  const removed = (serviceId: string) => gone.has(serviceId) || removedMonitor(serviceId);
   const kept = (i: Incident) => !i.serviceId || !removed(i.serviceId);
   return {
     ...model,
-    services: model.services.filter((s) => !removed(s.id)),
+    services: model.services.filter((s) => !gone.has(s.id)),
     recentHeartbeats: model.recentHeartbeats.filter((h) => !removed(h.serviceId)),
     openIncidents: model.openIncidents.filter(kept),
     recentIncidents: model.recentIncidents.filter(kept),
+    facts: model.facts.filter((f) => listed.has(f.source)),
   };
 }
 
+/** The newest `lastSeenAt` of any source: when the newest data was produced. */
 function newestSeen(sources: readonly { lastSeenAt: string | null }[]) {
   return sources.reduce<string | null>(
     (n, s) => (s.lastSeenAt && (!n || toMs(s.lastSeenAt) > toMs(n)) ? s.lastSeenAt : n),

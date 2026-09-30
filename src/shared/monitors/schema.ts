@@ -286,3 +286,19 @@ export function removedMonitorOf(config: Parameters<typeof monitorsOf>[0]): (ser
   const kept = new Set(monitorsOf(config).map((m) => monitorServiceId(m.id)));
   return (serviceId) => serviceId.startsWith("probe:") && !kept.has(serviceId);
 }
+
+/**
+ * Whether a service belongs to a source the site no longer lists (a retired collector, Kuma instance or
+ * webhook): its `source` is not in `config.sources`. Callers pass the effective list (`siteSources` in
+ * src/worker/engine/sites.ts: configured plus the implied monitor runners), so a runner the config only
+ * implies still counts as listed. A monitor's service (`probe:<id>`) never is: it follows its monitor
+ * (`removedMonitorOf`), not its runner's source, so a paused monitor whose runner implies no source still
+ * shows. Its rows stay in the store; the view leaves it out and the five-minute job resolves its open
+ * `down` incident with `RETIRED_NOTE` (src/worker/engine/incidents.ts).
+ */
+export function retiredServiceOf(config: {
+  sources: readonly { id: SourceId }[];
+}): (service: { id: string; source: SourceId }) => boolean {
+  const listed = new Set(config.sources.map((s) => s.id));
+  return (service) => !service.id.startsWith("probe:") && !listed.has(service.source);
+}
