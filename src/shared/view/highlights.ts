@@ -1,4 +1,4 @@
-import type { FactRowView, HighlightView, SiteView } from "./types";
+import type { FactRowView, HighlightView, SiteView, SummaryPartView } from "./types";
 
 /**
  * The slots of the figures a theme draws itself from `SiteView.summary` (`Highlight.slot`, contract
@@ -51,4 +51,22 @@ export function highlightedGroups(view: Pick<SiteView, "highlights">): Set<strin
 export function sourceName(view: Pick<SiteView, "freshness">, kind: string): string | null {
   const id = view.freshness.perSource.find((s) => s.kind === kind)?.id;
   return id ? id.slice(id.indexOf(":") + 1) : null;
+}
+
+/**
+ * A summary line (`FactGroupView.summaryParts`) split into its runs at the secondary "·" separators the
+ * profiles put between them (`streaming lag 0 s`, `primary`, `peer app-2 (reachable yes)`), separators
+ * dropped, so a theme can set the first run apart and wrap the rest onto a line of its own.
+ */
+export function summaryRuns(parts: readonly SummaryPartView[]): SummaryPartView[][] {
+  const runs: SummaryPartView[][] = [];
+  let run: SummaryPartView[] = [];
+  for (const p of parts) {
+    if (p.text === "·" && p.level === "info") {
+      if (run.length) runs.push(run);
+      run = [];
+    } else run.push(p);
+  }
+  if (run.length) runs.push(run);
+  return runs;
 }

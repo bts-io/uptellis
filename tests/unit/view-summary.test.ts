@@ -6,6 +6,7 @@ import {
   highlightSlots,
   type SiteView,
   SUMMARY_SLOTS,
+  summaryRuns,
   type ViewInput,
 } from "@/shared/view";
 import { fixtureInput } from "../fixtures/view";
@@ -65,6 +66,31 @@ describe("group summary parts", () => {
     });
     expect(group(v, "queue").summaryParts).toEqual([{ text: "3 waiting", level: null, emphasis: false }]);
     expect(group(v, "misc")).toMatchObject({ summary: null, summaryParts: [] });
+  });
+});
+
+describe("summary runs", () => {
+  it("splits a summary line at its secondary separators, keeping each run's parts", () => {
+    const d = view("default");
+    const replication = d.factGroups.find((g) => g.id === "replication")!;
+    const runs = summaryRuns(replication.summaryParts);
+    expect(runs.map((r) => r.map((p) => p.text).join(" "))).toEqual([
+      "streaming lag 0 s",
+      "primary",
+      "peer app-2 (reachable yes)",
+      "standby connected yes",
+    ]);
+    expect(runs[0]![0]).toEqual({ text: "streaming", level: "ok", emphasis: true });
+  });
+
+  it("keeps a coloured dot that is not a separator, and drops empty runs", () => {
+    const p = (text: string, level: "ok" | "info" | null = null) => ({ text, level, emphasis: false });
+    expect(summaryRuns([])).toEqual([]);
+    expect(summaryRuns([p("·", "info"), p("a"), p("·", "info"), p("·", "info"), p("b")])).toEqual([
+      [p("a")],
+      [p("b")],
+    ]);
+    expect(summaryRuns([p("a"), p("·", "ok")])).toEqual([[p("a"), p("·", "ok")]]);
   });
 });
 
