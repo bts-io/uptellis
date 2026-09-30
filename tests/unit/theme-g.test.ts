@@ -240,6 +240,26 @@ describe("theme G under alert pressure (wall screen)", () => {
       expect(h[1]).toBe(h[3]);
     }
   });
+
+  it("gives the tile name the full tile width: the state word sits on its own row below it", () => {
+    const html = render(view("incident"));
+    const heads = [
+      ...html.matchAll(
+        /<div data-g-head="" class="([^"]*)"><h3 title="[^"]*" class="([^"]*)">[^<]*<\/h3><span[^>]*>/g,
+      ),
+    ];
+    // Every service tile and fact tile has one head; the name is the head's first row, alone on it.
+    expect(heads.length).toBe(html.match(/<h3 /g)!.length);
+    for (const [, box, name] of heads) {
+      expect(box).toContain("flex-col");
+      expect(box).not.toContain("justify-between");
+      // One line on a wall screen, at a size that fits a typical 24-character name in a 4-column tile.
+      expect(name).toContain("min-[900px]:truncate");
+      expect(name).toContain("min-[900px]:text-[1.5rem]");
+    }
+    const down = tile(html, services(view("incident")).find((s) => s.state === "down")!.id);
+    expect(down).toMatch(/<\/h3><span[^>]*>.*DOWN<\/span><\/div>/i);
+  });
 });
 
 describe("theme G helpers", () => {

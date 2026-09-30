@@ -19,9 +19,12 @@ const TILE_BOX =
   "flex min-w-0 flex-col gap-2 rounded-[0.9rem] border-[0.15rem] border-t-[0.55rem] border-line border-t-(--g-c) bg-panel px-[1.1rem] pt-4 pb-[0.9rem]";
 
 /**
- * Name and the state as icon plus word, in the state's colour. On a wall screen the name keeps to one line
- * and ends in an ellipsis (the full name in its title), so a long name never wraps into a clipped second line;
- * on a phone the tile is wide and the name wraps.
+ * Name, then the state as icon plus word on its own row, in the state's colour. The name has the tile's full
+ * width: on a wall screen a 4-column tile is about 16rem wide inside (1440x900 and 1920x1080 alike, the root
+ * font follows the viewport), and at 1.5rem a typical name of up to about 24 characters (about 10.4em in
+ * Barlow Semi Condensed bold) fits. The name keeps to one line and ends in an ellipsis only beyond that (the
+ * full name in its title), so a long name never wraps into a clipped second line; on a phone the tile is wide
+ * and the name wraps.
  */
 function Head({
   name,
@@ -35,18 +38,18 @@ function Head({
   muted?: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between gap-2.5">
+    <div data-g-head="" className="flex min-w-0 flex-col gap-1">
       <h3
         title={name}
         className={cx(
-          "min-w-0 text-[1.6rem] leading-[1.05] font-bold [overflow-wrap:anywhere] min-[900px]:truncate min-[900px]:text-[1.9rem] min-[900px]:leading-[1.15]",
+          "min-w-0 text-[1.6rem] leading-[1.05] font-bold [overflow-wrap:anywhere] min-[900px]:truncate min-[900px]:text-[1.5rem] min-[900px]:leading-[1.15]",
           muted && "text-muted",
         )}
       >
         {name}
       </h3>
-      <span className="inline-flex items-center gap-1.5 text-[1.3rem] font-extrabold tracking-[0.04em] whitespace-nowrap text-(--g-c) uppercase min-[900px]:text-[1.6rem]">
-        <BoardIcon name={stateIcon(state)} className="size-[1.6rem]" />
+      <span className="inline-flex items-center gap-1.5 text-[1.3rem] leading-[1.2] font-extrabold tracking-[0.04em] whitespace-nowrap text-(--g-c) uppercase min-[900px]:text-[1.2rem]">
+        <BoardIcon name={stateIcon(state)} className="size-[1.3rem]" />
         {word}
       </span>
     </div>

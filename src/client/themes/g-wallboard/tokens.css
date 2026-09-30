@@ -73,8 +73,11 @@
   --g-maint-ink: #04142a;
   --g-well: #05070a;
 
-  /* The services board's floor on a wall screen: its heading, one group title and one row of tiles. */
-  --g-board-min: 14rem;
+  /*
+   * The services board's floor on a wall screen: its heading, one group title and one row of tiles (the
+   * tile's name and state word on two rows, Tile.tsx).
+   */
+  --g-board-min: 15.5rem;
 
   color-scheme: dark;
 }
