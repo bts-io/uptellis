@@ -21,7 +21,7 @@ function OpenIncident({ incident: inc, now }: { incident: IncidentView; now: str
   return (
     <article className="mb-3 rounded-lg border border-(--d-down-border) border-l-4 border-l-down bg-panel px-5 py-[18px]">
       <header className="flex flex-wrap items-baseline justify-between gap-3">
-        <h3 className="m-0 text-base font-semibold text-(--d-down-text)">{inc.title}</h3>
+        <h3 className="m-0 text-[16px] font-semibold text-(--d-down-text)">{inc.title}</h3>
         <span className="text-[13px] text-muted">
           Ongoing for <LiveAge seconds={inc.durationS} now={now} ago={false} />
         </span>

@@ -13,6 +13,43 @@ import { fixtureInput } from "../fixtures/view";
 const view = (name: FixtureName) => buildSiteView(fixtureInput(name));
 const render = (v: SiteView) =>
   renderToStaticMarkup(createElement(fDashboard.Page, { view: v, commit: "cbe27a13" }));
+
+/**
+ * The live demo's state: every source silent, one stale-source and one down incident open, and a stale
+ * service last seen in maintenance (the longest "last seen" note).
+ */
+const staleWithOpen = () => {
+  const input = fixtureInput("stale");
+  const startedAt = "2026-09-27T23:50:00Z";
+  input.model.services = input.model.services.map((s, n) => (n === 0 ? { ...s, status: "maintenance" } : s));
+  input.model.openIncidents = [
+    {
+      id: "stale:facts:app-1",
+      site: "demo",
+      kind: "stale",
+      serviceId: null,
+      sourceId: "facts:app-1",
+      startedAt,
+      endedAt: null,
+      title: "Source facts:app-1 stale",
+      notes: null,
+    },
+    {
+      id: "kuma:5:open",
+      site: "demo",
+      kind: "down",
+      serviceId: "kuma:5",
+      sourceId: null,
+      startedAt,
+      endedAt: null,
+      title: "API health (edge) down",
+      notes: null,
+    },
+  ];
+  return buildSiteView(input);
+};
+// `text-base` is a colour here (the page background, from --color-base), not Tailwind's 16px size.
+const PAGE_COLOUR_TEXT = /class="[^"]*(?<![\w-])text-base(?![\w-])[^"]*"/;
 const services = (v: SiteView) => v.sections.flatMap((s) => s.services);
 const text = (html: string) => html.replace(/<[^>]+>/g, "").replace(/&amp;/g, "&");
 
@@ -225,5 +262,16 @@ describe("theme F format", () => {
     expect(a).toEqual(sparkPaths([10, 20, 15], 200, 44));
     expect(a.line).toBe("M0.0 40.0 L100.0 4.0 L200.0 22.0");
     expect(a.area.endsWith("L200 44 L0 44 Z")).toBe(true);
+  });
+});
+
+describe("theme F stale with open incidents", () => {
+  it("keeps the stale heading and the incident titles readable: no page-background text colour", () => {
+    const v = staleWithOpen();
+    const html = render(v);
+    expect(html).not.toMatch(PAGE_COLOUR_TEXT);
+    expect(/<h2 id="f-stale-h" class="([^"]*)">/.exec(html)?.[1]).toContain("text-(--f-degraded-text)");
+    for (const title of ["Source facts:app-1 stale", "API health (edge) down"])
+      expect(html).toMatch(new RegExp(`<h3 class="[^"]*">${title.replace(/[()]/g, "\\$&")}</h3>`));
   });
 });

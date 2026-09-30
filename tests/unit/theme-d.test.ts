@@ -12,6 +12,43 @@ import { fixtureInput } from "../fixtures/view";
 const view = (name: FixtureName) => buildSiteView(fixtureInput(name));
 const render = (v: SiteView) =>
   renderToStaticMarkup(createElement(dClassic.Page, { view: v, commit: "cbe27a13" }));
+
+/**
+ * The live demo's state: every source silent, one stale-source and one down incident open, and a stale
+ * service last seen in maintenance (the longest "last seen" note).
+ */
+const staleWithOpen = () => {
+  const input = fixtureInput("stale");
+  const startedAt = "2026-09-27T23:50:00Z";
+  input.model.services = input.model.services.map((s, n) => (n === 0 ? { ...s, status: "maintenance" } : s));
+  input.model.openIncidents = [
+    {
+      id: "stale:facts:app-1",
+      site: "demo",
+      kind: "stale",
+      serviceId: null,
+      sourceId: "facts:app-1",
+      startedAt,
+      endedAt: null,
+      title: "Source facts:app-1 stale",
+      notes: null,
+    },
+    {
+      id: "kuma:5:open",
+      site: "demo",
+      kind: "down",
+      serviceId: "kuma:5",
+      sourceId: null,
+      startedAt,
+      endedAt: null,
+      title: "API health (edge) down",
+      notes: null,
+    },
+  ];
+  return buildSiteView(input);
+};
+// `text-base` is a colour here (the page background, from --color-base), not Tailwind's 16px size.
+const PAGE_COLOUR_TEXT = /class="[^"]*(?<![\w-])text-base(?![\w-])[^"]*"/;
 const services = (v: SiteView) => v.sections.flatMap((s) => s.services);
 const text = (html: string) => html.replace(/<[^>]+>/g, "").replace(/&amp;/g, "&");
 const banner = (html: string) => /<section role="status"[\s\S]*?<\/section>/.exec(html)?.[0] ?? "";
@@ -169,5 +206,18 @@ describe("theme D format", () => {
     const [a, b] = services(view("incident")).filter((s) => s.id === "kuma:3" || s.id === "kuma:5");
     expect(worstState([a!, b!])).toBe("down");
     expect(worstState([])).toBe("unknown");
+  });
+});
+
+describe("theme D stale with open incidents", () => {
+  it("keeps the incident titles in the dark down colour, never the page-background colour", () => {
+    const v = staleWithOpen();
+    expect(v.freshness.state).toBe("stale");
+    const html = render(v);
+    expect(html).not.toMatch(PAGE_COLOUR_TEXT);
+    for (const title of ["Source facts:app-1 stale", "API health (edge) down"]) {
+      const h3 = new RegExp(`<h3 class="([^"]*)">${title.replace(/[()]/g, "\\$&")}</h3>`).exec(html);
+      expect(h3?.[1]).toContain("text-(--d-down-text)");
+    }
   });
 });

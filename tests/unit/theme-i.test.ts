@@ -12,6 +12,43 @@ import { fixtureInput } from "../fixtures/view";
 const view = (name: FixtureName) => buildSiteView(fixtureInput(name));
 const render = (v: SiteView) =>
   renderToStaticMarkup(createElement(iMinimal.Page, { view: v, commit: "cbe27a13" }));
+
+/**
+ * The live demo's state: every source silent, one stale-source and one down incident open, and a stale
+ * service last seen in maintenance (the longest "last seen" note).
+ */
+const staleWithOpen = () => {
+  const input = fixtureInput("stale");
+  const startedAt = "2026-09-27T23:50:00Z";
+  input.model.services = input.model.services.map((s, n) => (n === 0 ? { ...s, status: "maintenance" } : s));
+  input.model.openIncidents = [
+    {
+      id: "stale:facts:app-1",
+      site: "demo",
+      kind: "stale",
+      serviceId: null,
+      sourceId: "facts:app-1",
+      startedAt,
+      endedAt: null,
+      title: "Source facts:app-1 stale",
+      notes: null,
+    },
+    {
+      id: "kuma:5:open",
+      site: "demo",
+      kind: "down",
+      serviceId: "kuma:5",
+      sourceId: null,
+      startedAt,
+      endedAt: null,
+      title: "API health (edge) down",
+      notes: null,
+    },
+  ];
+  return buildSiteView(input);
+};
+// `text-base` is a colour here (the page background, from --color-base), not Tailwind's 16px size.
+const PAGE_COLOUR_TEXT = /class="[^"]*(?<![\w-])text-base(?![\w-])[^"]*"/;
 const services = (v: SiteView) => v.sections.flatMap((s) => s.services);
 const text = (html: string) => html.replace(/<[^>]+>/g, "").replace(/&amp;/g, "&");
 /** The services block (the facts below it age with the facts probe, not the monitors). */
@@ -143,5 +180,11 @@ describe("theme I format", () => {
     expect(cellTitle({ day: "2026-09-15", worst: null, uptime: null, minutesDown: 0 })).toBe(
       "Sep 15: no data",
     );
+  });
+});
+
+describe("theme I stale with open incidents", () => {
+  it("never paints text in the page-background colour", () => {
+    expect(render(staleWithOpen())).not.toMatch(PAGE_COLOUR_TEXT);
   });
 });

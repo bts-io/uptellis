@@ -33,7 +33,7 @@ export function StaleNotice({ view }: { view: SiteView }) {
         <Glyph name="clock" size={20} />
       </span>
       <div className="min-w-0">
-        <h2 id="f-stale-h" className="m-0 text-base font-extrabold text-(--f-degraded-text)">
+        <h2 id="f-stale-h" className="m-0 text-[16px] font-extrabold text-(--f-degraded-text)">
           {title}
         </h2>
         <p className="m-0 mt-0.5 text-sm text-(--f-text-2)">
@@ -73,7 +73,7 @@ export function MaintenanceBanners({ view }: { view: SiteView }) {
           <Glyph name="wrench" size={20} />
         </span>
         <div className="min-w-0">
-          <h2 className="m-0 text-base font-extrabold text-(--f-maint-text)">Maintenance: {m.title}</h2>
+          <h2 className="m-0 text-[16px] font-extrabold text-(--f-maint-text)">Maintenance: {m.title}</h2>
           <p className="m-0 mt-0.5 text-sm text-(--f-text-2)">
             {when(m.start)} to {when(m.end)}. Affects: {covers}.
           </p>
@@ -119,7 +119,7 @@ function OpenIncident({ view, incident: i }: { view: SiteView; incident: Inciden
       className="grid grid-cols-1 gap-x-4 gap-y-1 rounded-xl border border-line bg-panel px-4 py-3.5 sm:grid-cols-[minmax(0,1fr)_auto]"
     >
       <div className="min-w-0">
-        <h3 className="m-0 text-base font-bold">{i.title}</h3>
+        <h3 className="m-0 text-[16px] font-bold">{i.title}</h3>
         <p className="m-0 text-[13px] text-(--f-text-2)">
           {i.subject} · started {when(i.startedAt)}
         </p>

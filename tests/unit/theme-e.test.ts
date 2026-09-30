@@ -12,6 +12,43 @@ import { fixtureInput } from "../fixtures/view";
 const view = (name: FixtureName) => buildSiteView(fixtureInput(name));
 const render = (v: SiteView) =>
   renderToStaticMarkup(createElement(eEditorial.Page, { view: v, commit: "cbe27a13" }));
+
+/**
+ * The live demo's state: every source silent, one stale-source and one down incident open, and a stale
+ * service last seen in maintenance (the longest "last seen" note).
+ */
+const staleWithOpen = () => {
+  const input = fixtureInput("stale");
+  const startedAt = "2026-09-27T23:50:00Z";
+  input.model.services = input.model.services.map((s, n) => (n === 0 ? { ...s, status: "maintenance" } : s));
+  input.model.openIncidents = [
+    {
+      id: "stale:facts:app-1",
+      site: "demo",
+      kind: "stale",
+      serviceId: null,
+      sourceId: "facts:app-1",
+      startedAt,
+      endedAt: null,
+      title: "Source facts:app-1 stale",
+      notes: null,
+    },
+    {
+      id: "kuma:5:open",
+      site: "demo",
+      kind: "down",
+      serviceId: "kuma:5",
+      sourceId: null,
+      startedAt,
+      endedAt: null,
+      title: "API health (edge) down",
+      notes: null,
+    },
+  ];
+  return buildSiteView(input);
+};
+// `text-base` is a colour here (the page background, from --color-base), not Tailwind's 16px size.
+const PAGE_COLOUR_TEXT = /class="[^"]*(?<![\w-])text-base(?![\w-])[^"]*"/;
 const text = (html: string) =>
   html
     .replace(/<[^>]+>/g, "")
@@ -147,5 +184,22 @@ describe("theme E page", () => {
     expect(standfirst(empty, null)).toBe(
       "No monitor has reported yet, so there is nothing to say about the 8 services on this page.",
     );
+  });
+});
+
+describe("theme E stale with open incidents", () => {
+  it("wraps the stale note inside the state column so it never runs over the uptime figure", () => {
+    const html = render(staleWithOpen());
+    expect(html).not.toMatch(PAGE_COLOUR_TEXT);
+    const rows = html.match(/<li id="svc-[^"]+"[^>]*data-state="stale"[\s\S]*?<\/li>/g) ?? [];
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.join("")).toContain("(last seen maintenance)");
+    for (const row of rows) {
+      const tag = /<span data-state="stale" class="([^"]*)"/.exec(row)?.[1] ?? "";
+      expect(tag).toContain("flex-wrap");
+      const note = /<small data-note="" class="([^"]*)"/.exec(row)?.[1] ?? "";
+      expect(note).toContain("basis-full");
+      expect(note).toContain("whitespace-normal");
+    }
   });
 });
