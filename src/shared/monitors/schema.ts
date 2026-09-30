@@ -274,3 +274,15 @@ export function monitorsOf(config: {
   const ids = new Set(config.monitors.map((m) => m.id));
   return [...config.monitors, ...config.probes.filter((p) => !ids.has(p.id)).map(probeAsMonitor)];
 }
+
+/**
+ * Whether a service belongs to a monitor the config no longer defines: a `probe:<id>` service whose id is
+ * not in `monitorsOf(config)` (monitors plus migrated legacy probes; paused ones still count). Its rows stay
+ * in the store; the view leaves it out and the five-minute job resolves its open `down` incident with
+ * `REMOVED_MONITOR_NOTE` (src/worker/engine/incidents.ts). Services of any other kind are never removed
+ * monitors.
+ */
+export function removedMonitorOf(config: Parameters<typeof monitorsOf>[0]): (serviceId: string) => boolean {
+  const kept = new Set(monitorsOf(config).map((m) => monitorServiceId(m.id)));
+  return (serviceId) => serviceId.startsWith("probe:") && !kept.has(serviceId);
+}

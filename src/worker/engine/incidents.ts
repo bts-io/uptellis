@@ -179,6 +179,32 @@ export function deriveDownIncidents(input: DownInput): IncidentTransitions {
   return out;
 }
 
+/** The note on a `down` incident resolved because its monitor is no longer in the config. */
+export const REMOVED_MONITOR_NOTE = "Monitor removed from the config";
+
+/** Notes of incidents resolved by a config change rather than by the subject itself: they send no card. */
+export const QUIET_NOTES: ReadonlySet<string> = new Set([RETIRED_NOTE, REMOVED_MONITOR_NOTE]);
+
+export interface RemovedMonitorInput {
+  /** Known incidents of the site: at least every open `down` one. */
+  incidents: readonly Incident[];
+  now: string;
+  /** Whether a service is a monitor the config no longer defines (`removedMonitorOf`). */
+  removed: (serviceId: string) => boolean;
+}
+
+/**
+ * Open `down` incidents of removed monitors, resolved at `now` with `REMOVED_MONITOR_NOTE` (the service will
+ * never report again, so nothing else would close them). Opens nothing.
+ */
+export function deriveRemovedMonitorIncidents(input: RemovedMonitorInput): IncidentTransitions {
+  const now = ms(input.now);
+  const resolved = input.incidents
+    .filter((i) => i.kind === "down" && !i.endedAt && i.serviceId && input.removed(i.serviceId))
+    .map((i) => ({ ...i, endedAt: iso(Math.max(now, ms(i.startedAt))), notes: REMOVED_MONITOR_NOTE }));
+  return { opened: [], resolved };
+}
+
 /** `stale` incidents opened or resolved by source freshness at `now`. */
 export function deriveStaleIncidents(input: StaleInput): IncidentTransitions {
   const out: IncidentTransitions = { opened: [], resolved: [] };

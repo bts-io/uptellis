@@ -9,6 +9,9 @@
  * Verdict precedence: `empty` (nothing reported) > `outage` (a service is down on current data) >
  * `stale` (a source is stale) > `degraded` > `operational`. A down service on a fresh source outranks
  * another source going stale, and stale services never count as down, so stale data cannot fake an outage.
+ *
+ * Removed monitors: a `probe:` service the config no longer defines (`removedMonitorOf`) is left out with
+ * its heartbeats and incidents, as if it never existed; its rows stay in the store.
  */
 
 import type { SiteConfig } from "../config";
@@ -23,6 +26,7 @@ import {
   sourceFreshness,
 } from "../model";
 import { activeWindows } from "../monitors/maintenance";
+import { removedMonitorOf } from "../monitors/schema";
 import { activeProfiles } from "../profiles";
 import { buildFactViews, latestFacts, profileContext } from "./facts";
 import { clock, formatDuration, formatPercent, iso, mean, round, toMs } from "./format";
@@ -62,7 +66,8 @@ const meanOf = (xs: (number | null)[], digits: number) => {
 };
 
 export function buildSiteView(input: ViewInput): SiteView {
-  const { model, config } = input;
+  const { config } = input;
+  const model = withoutRemovedMonitors(input.model, config);
   const nowMs = toMs(input.now);
 
   // Configured sources in config order. Services of a source the config does not list still get its
@@ -264,6 +269,19 @@ const VERDICT_LABEL: Record<VerdictState, (down: number, degraded: number) => st
 };
 
 /** The newest `lastSeenAt` of any source: when the newest data was produced. */
+/** The model without the services, heartbeats and incidents of monitors `config` no longer defines. */
+function withoutRemovedMonitors(model: ViewInput["model"], config: SiteConfig): ViewInput["model"] {
+  const removed = removedMonitorOf(config);
+  const kept = (i: Incident) => !i.serviceId || !removed(i.serviceId);
+  return {
+    ...model,
+    services: model.services.filter((s) => !removed(s.id)),
+    recentHeartbeats: model.recentHeartbeats.filter((h) => !removed(h.serviceId)),
+    openIncidents: model.openIncidents.filter(kept),
+    recentIncidents: model.recentIncidents.filter(kept),
+  };
+}
+
 function newestSeen(sources: readonly { lastSeenAt: string | null }[]) {
   return sources.reduce<string | null>(
     (n, s) => (s.lastSeenAt && (!n || toMs(s.lastSeenAt) > toMs(n)) ? s.lastSeenAt : n),
