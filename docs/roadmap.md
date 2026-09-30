@@ -1,10 +1,10 @@
 # Roadmap
 
-Where Uptellis is going. Today it is a status page and monitor that runs on Cloudflare or in Docker: native monitors (HTTP, TCP, ping, TLS) run from the instance and from agents in private networks, next to the Uptime Kuma collector, facts pushers and signed webhooks; failures are confirmed before they page, alerts go to six kinds of channel, and a site can publish a public summary, badges and a widget ([architecture.md](architecture.md)).
+Where Uptellis is going. Today it is a status page and monitor that runs on Cloudflare or in Docker: native monitors (HTTP, TCP, ping, TLS) run from the instance and from agents in private networks, next to the Uptime Kuma collector, facts pushers and signed webhooks; failures are confirmed before they page, alerts go to seven kinds of channel (SMS included), and a site can publish a public summary, badges and a widget ([architecture.md](architecture.md)).
 
 Uptellis stays on 0.x releases for now; there is no 1.0 date. A 1.0 comes when the project decides the product is finished and proven, not at the end of a particular phase.
 
-Phases 1 to 4 built the prototype. **Phase 5 is done** (0.2.0): profiles, the Docker runtime, accounts and public or private pages. **Phase 6a is done** (0.3.0): native monitors, the private-network agent, confirmation, maintenance windows and down and up cards. **Phase 6b is done** (0.4.0): notification channels (Discord, Slack, signed webhooks, ntfy, Telegram, email) and public summaries, badges and an embeddable widget. **Phase 7 is done** (0.5.0): six new themes (classic, editorial, dashboard, wallboard, friendly, minimal) and the polish of the first three. Phase 8 (packaging) is next.
+Phases 1 to 4 built the prototype. **Phase 5 is done** (0.2.0): profiles, the Docker runtime, accounts and public or private pages. **Phase 6a is done** (0.3.0): native monitors, the private-network agent, confirmation, maintenance windows and down and up cards. **Phase 6b is done** (0.4.0): notification channels (Discord, Slack, signed webhooks, ntfy, Telegram, email) and public summaries, badges and an embeddable widget. **Phase 7 is done** (0.5.0): six new themes (classic, editorial, dashboard, wallboard, friendly, minimal) and the polish of the first three. **0.6.0** adds SMS through Twilio and plain webhooks. Next, Uptellis replaces Uptime Kuma for our own infrastructure; Phase 8 (packaging) follows.
 
 ```mermaid
 flowchart LR

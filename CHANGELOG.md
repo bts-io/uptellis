@@ -2,6 +2,22 @@
 
 All notable changes to Uptellis are recorded here. The format follows [Conventional Commits](https://www.conventionalcommits.org) and the project uses [Semantic Versioning](https://semver.org). Each release adds its section in the release PR, from the Conventional Commits since the previous tag.
 
+## 0.6.0 (2026-10-01)
+
+### Features
+
+* **SMS through Twilio:** a new `sms` channel texts one number per channel through your own Twilio account (`accountSid`, the auth token as a `NOTIFY_*` secret, a `from` number or Messaging Service, one `to` number). It sends `down` and `up` by default, since every text costs money. Texts are plain ASCII of at most 160 characters with the status page link kept, and Twilio's errors become short codes in the delivery log (`bad_token`, `invalid_number`, `unverified_number`, ...); a number, SID or token never appears in a log or anything public. Setup, including the trial account's limits, is in `docs/monitors.md`. Tested against Twilio's Messages API in the test suite; a live text from a real Twilio account is still to be checked.
+* **Plain webhooks:** a webhook channel's `signingSecret` is now optional; without it the alert is a plain JSON POST (no `X-Uptellis-Signature`). A new optional `authSecret` is sent as the `Authorization` header as is (for example `Bearer <token>`), for n8n, Home Assistant and similar receivers. Signed webhooks are unchanged.
+* **Admin:** the channel editor has the SMS fields and the optional webhook fields.
+
+### Bug Fixes
+
+* A source removed from the config no longer shows in the site's sources report, and the page's updated time counts only the sources the site lists. An ingest key of a retired source stays in Admin, Sources, marked "not in the config", and can still be rotated.
+
+### Documentation
+
+* Setup guides for Telegram, SMS (Twilio) and webhooks in `docs/monitors.md`; the roadmap moves Microsoft Teams to "Later".
+
 ## 0.5.0 (2026-10-01)
 
 ### ⚠ BREAKING CHANGES
