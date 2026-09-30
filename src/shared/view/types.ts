@@ -38,7 +38,10 @@ export interface SiteView {
   verdict: VerdictView;
   freshness: FreshnessView;
   summary: SummaryView;
-  /** Config sections in config order; services in the section's order. Unknown ids are skipped. */
+  /**
+   * Config sections in config order; services in the section's order. Unknown ids are skipped, and a section
+   * with no service in the model is left out (contract addition), so every entry has at least one service.
+   */
   sections: SectionView[];
   /** Services not placed in any section (so nothing silently disappears), in model order. */
   unsectioned: ServiceView[];

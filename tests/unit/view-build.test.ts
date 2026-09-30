@@ -408,6 +408,29 @@ describe("services", () => {
     expect(v.sections.find((s) => s.id === "workers")).toMatchObject({ state: "pending", exitCode: 1 });
   });
 
+  it("leaves out a section none of whose services is in the model; the others keep what exists", () => {
+    const v = edited((i) => {
+      const gone = new Set(["kuma:3", "kuma:5", "kuma:4"]);
+      i.model.services = i.model.services.filter((s) => !gone.has(s.id));
+      i.config = {
+        ...i.config,
+        sections: [...i.config.sections, { id: "empty", title: "Empty", services: [] }],
+      };
+    });
+    expect(v.sections.map((s) => s.id)).toEqual(["web", "access", "workers"]);
+    expect(v.sections.find((s) => s.id === "access")!.services.map((s) => s.id)).toEqual(["kuma:6"]);
+    for (const s of v.sections) expect(s.services.length).toBeGreaterThan(0);
+    expect(v.unsectioned.map((s) => s.id)).toEqual(edited(() => {}).unsectioned.map((s) => s.id));
+  });
+
+  it("an empty model leaves no section at all", () => {
+    const v = edited((i) => {
+      i.model.services = [];
+    });
+    expect(v.sections).toEqual([]);
+    expect(v.unsectioned).toEqual([]);
+  });
+
   it("missing history: 90 no-data cells ending today", () => {
     const v = edited((i) => {
       i.history = [];

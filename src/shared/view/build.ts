@@ -136,20 +136,26 @@ export function buildSiteView(input: ViewInput): SiteView {
     );
   }
 
+  // A section none of whose services is in the model (all ids unknown, or none listed) is left out, so no
+  // theme renders an empty header ("Database UNKNOWN" with nothing under it). Contract addition: every entry
+  // of `sections` has at least one service. A section with some services present keeps only those.
   const placed = new Set<string>();
-  const sections: SectionView[] = config.sections.map((sec) => {
+  const sections: SectionView[] = config.sections.flatMap((sec) => {
     const list = sec.services.flatMap((id) => {
       const v = services.get(id);
       if (v) placed.add(id);
       return v ? [v] : [];
     });
-    return {
-      id: sec.id,
-      title: sec.title,
-      state: worstState(list.map((v) => v.state)),
-      exitCode: list.every((v) => v.state === "up" || v.state === "maintenance") ? 0 : 1,
-      services: list,
-    };
+    if (list.length === 0) return [];
+    return [
+      {
+        id: sec.id,
+        title: sec.title,
+        state: worstState(list.map((v) => v.state)),
+        exitCode: list.every((v) => v.state === "up" || v.state === "maintenance") ? 0 : 1,
+        services: list,
+      },
+    ];
   });
   const all = [...services.values()];
   const count = (st: DisplayState) => all.filter((v) => v.state === st).length;

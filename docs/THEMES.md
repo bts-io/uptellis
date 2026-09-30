@@ -41,6 +41,10 @@ Themes never name a fact group or key: what the site's facts mean comes from its
 
 `factIndex` keeps every current fact by `group.key`, for tests and tools; themes do not look facts up by key.
 
+### Sections
+
+`sections` holds the config's sections in config order, each with the services the model has, in the section's order (unknown ids are skipped). A section none of whose services is in the model (all its ids unknown, or none listed) is left out (contract addition, 0.5.0), so every entry has at least one service and no theme renders an empty header such as "Database UNKNOWN" with nothing under it. `unsectioned` is unchanged: the model's services no section lists.
+
 ## Rules for themes
 
 - Import only `@/client/kit`, `@/client/effects`, `@/shared/view` types and the theme's own files. Never `@/client/lib/api`, worker, db or model code (a Biome rule enforces it).

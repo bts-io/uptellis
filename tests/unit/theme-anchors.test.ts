@@ -45,3 +45,19 @@ describe("Kuma update badge", () => {
     expect(html("2.6.0")).toMatch(/2\.6\.0 available/i);
   });
 });
+
+// A section whose services are all missing from the model is left out of the view (buildSiteView), so no
+// theme renders an empty header for it.
+describe("sections without services", () => {
+  const input = fixtureInput("default");
+  input.config = {
+    ...input.config,
+    sections: [...input.config.sections, { id: "ghost", title: "Ghost Section", services: ["kuma:404"] }],
+  };
+  const view = buildSiteView(input);
+  it.each(Object.keys(THEMES))("%s renders no header for a section with nothing in it", (id) => {
+    const theme = THEMES[id as keyof typeof THEMES]!;
+    const html = renderToStaticMarkup(createElement(theme.module.Page, { view, commit: null }));
+    expect(html.toLowerCase()).not.toContain("ghost section");
+  });
+});
