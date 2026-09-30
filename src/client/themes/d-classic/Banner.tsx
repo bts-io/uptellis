@@ -3,7 +3,7 @@ import { cx, plural } from "./format";
 import { type IconName, LiveAge, StatusIcon } from "./ui";
 
 const BAND: Record<VerdictState, string> = {
-  operational: "bg-up",
+  operational: "bg-(--d-up-text)",
   degraded: "bg-(--d-degraded-band)",
   outage: "bg-(--d-down-text)",
   stale: "bg-(--d-stale-text)",

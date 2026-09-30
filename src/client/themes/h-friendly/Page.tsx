@@ -201,7 +201,7 @@ function Foot({ view, commit }: { view: SiteView; commit: string | null }) {
               <li key={l.href}>
                 <a
                   href={l.href}
-                  className="inline-block rounded-full bg-panel px-4 py-[0.45rem] font-bold text-accent no-underline shadow-(--h-shadow)"
+                  className="inline-block rounded-full bg-panel px-4 py-[0.45rem] font-bold text-(--h-accent-ink) no-underline shadow-(--h-shadow)"
                 >
                   {l.label}
                 </a>

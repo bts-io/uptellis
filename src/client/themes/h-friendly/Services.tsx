@@ -27,7 +27,7 @@ export function Tech({
 }) {
   return (
     <details className={cx("group/tech mt-[0.45rem]", className)}>
-      <summary className="inline-flex cursor-pointer list-none items-center gap-[0.3rem] rounded-full text-[0.85rem] font-bold text-accent focus-visible:outline-3 focus-visible:outline-offset-[3px] focus-visible:outline-accent [&::-webkit-details-marker]:hidden">
+      <summary className="inline-flex cursor-pointer list-none items-center gap-[0.3rem] rounded-full text-[0.85rem] font-bold text-(--h-accent-ink) focus-visible:outline-3 focus-visible:outline-offset-[3px] focus-visible:outline-accent [&::-webkit-details-marker]:hidden">
         <span
           aria-hidden="true"
           className="inline-grid size-[1.1rem] place-items-center rounded-full bg-(--h-plus) text-[0.85rem] leading-none"

@@ -20,6 +20,8 @@
   --color-ink: #2f2a3b;
   --color-muted: #6c667d;
   --color-accent: #7a5cf0;
+  /* The accent as text (links, the details toggle): a shade darker so it keeps AA on the cream base. */
+  --h-accent-ink: #7256e0;
   /* State text colours (the pills' foregrounds), dark enough on their pastel fills and on white. */
   --color-up: #17643d;
   --color-degraded: #874600;
