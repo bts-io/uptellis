@@ -1,12 +1,15 @@
 /**
- * Phase 6b contract (lead): the signed webhook. The body is the `AlertMessage` as JSON (UTF-8). Headers:
+ * Phase 6b contract (lead): the webhook, signed when the channel names a signing secret and plain (no
+ * `X-Uptellis-Signature`) otherwise. The body is the `AlertMessage` as JSON (UTF-8). Headers:
  *
  * - `Content-Type: application/json`
  * - `User-Agent: uptellis/<version>`
  * - `X-Uptellis-Event: <event>` (`down`, `up`, `stale`, `recovered`)
  * - `X-Uptellis-Delivery: <id>`: unique per delivery attempt series; retries of one delivery reuse it
  * - `X-Uptellis-Signature: t=<unix seconds>,v1=<hex HMAC-SHA256>` over `<t>.<body>` with the channel's
- *   signing secret as the key (the Stripe scheme, so existing verifiers are easy to adapt)
+ *   signing secret as the key (the Stripe scheme, so existing verifiers are easy to adapt); only with a
+ *   signing secret
+ * - `Authorization: <value>`: only when the channel names an auth secret, its value as is
  *
  * A receiver recomputes the HMAC over `t + "." + rawBody`, compares in constant time and rejects a `t`
  * more than `WEBHOOK_TOLERANCE_S` away from its clock (replay). A 2xx answer is a delivery; anything else

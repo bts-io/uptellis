@@ -17,13 +17,14 @@ import { emailHtml, emailSubject } from "@/worker/notify/providers/email";
 import { headerSafe } from "@/worker/notify/providers/ntfy";
 import { slackEscape } from "@/worker/notify/providers/slack";
 import { htmlEscape, telegramText } from "@/worker/notify/providers/telegram";
-import { deliveryId } from "@/worker/notify/providers/webhook";
+import { deliveryId, headerValue } from "@/worker/notify/providers/webhook";
 
 // Never real endpoints: every request goes to the fake fetch below.
 const HOOK = "https://hooks.example.org/services/T0/B0/x";
 const NTFY = "https://ntfy.example.org/uptellis-ops";
 const BOT = `123456:${"a".repeat(30)}`;
 const SIGNING = "test-signing-secret";
+const AUTH = ["Bearer", "test-auth-token-123"].join(" ");
 const PAGE = "https://status.example.com/";
 const NOW = Date.parse("2026-09-27T10:07:30Z");
 const T = (hms: string) => `2026-09-27T${hms}Z`;
@@ -90,6 +91,9 @@ const SECRETS: Record<string, string> = {
   NOTIFY_NTFY_TOKEN: "tk_ntfytoken",
   NOTIFY_TG: BOT,
   NOTIFY_SIGNING: SIGNING,
+  NOTIFY_HOOK_AUTH: AUTH,
+  NOTIFY_HOOK_AUTH_CR: [AUTH, "X-Evil: 1"].join("\r\n"),
+  NOTIFY_HOOK_AUTH_LF: [AUTH, "X-Evil: 1"].join("\n"),
 };
 
 type Call = { url: string; headers: Headers; body: string };
@@ -270,6 +274,101 @@ describe("webhook provider", () => {
     expect(await PROVIDERS.webhook.send(down, noKey, context().ctx)).toMatchObject({
       error: "secret_missing",
     });
+  });
+
+  it("posts a plain webhook without a signing secret: same body and headers, no signature", async () => {
+    const plain = channel({ type: "webhook", secret: "NOTIFY_HOOK" });
+    const signed = context([new Response(null, { status: 204 })]);
+    await PROVIDERS.webhook.send(down, ch, signed.ctx);
+    const { ctx, calls } = context([new Response(null, { status: 204 })]);
+    expect(await PROVIDERS.webhook.send(down, plain, ctx)).toEqual({ ok: true, status: 204 });
+    const call = calls[0]!;
+    expect(call.url).toBe(HOOK);
+    expect(call.body).toBe(signed.calls[0]!.body);
+    expect(JSON.parse(call.body)).toEqual(down);
+    expect(call.headers.get("content-type")).toBe("application/json");
+    expect(call.headers.get("user-agent")).toBe("uptellis/9.9.9");
+    expect(call.headers.get(EVENT_HEADER)).toBe("down");
+    expect(call.headers.get(DELIVERY_HEADER)).toBe(signed.calls[0]!.headers.get(DELIVERY_HEADER));
+    expect(call.headers.get(SIGNATURE_HEADER)).toBeNull();
+    expect(call.headers.get("authorization")).toBeNull();
+    expect([...call.headers.keys()].sort()).toEqual(
+      ["content-type", "user-agent", EVENT_HEADER.toLowerCase(), DELIVERY_HEADER.toLowerCase()].sort(),
+    );
+  });
+
+  it("sends the auth secret as the Authorization header as is, and nowhere else", async () => {
+    const log = vi.spyOn(console, "log");
+    const warn = vi.spyOn(console, "warn");
+    const error = vi.spyOn(console, "error");
+    try {
+      const authed = channel({ type: "webhook", secret: "NOTIFY_HOOK", authSecret: "NOTIFY_HOOK_AUTH" });
+      const { ctx, calls } = context([new Response("nope", { status: 401 })]);
+      const outcome = await PROVIDERS.webhook.send(down, authed, ctx);
+      expect(outcome).toEqual({ ok: false, status: 401, error: "http_401", retryable: false });
+      expect(JSON.stringify(outcome)).not.toContain("test-auth-token-123");
+      const call = calls[0]!;
+      expect(call.headers.get("authorization")).toBe(AUTH);
+      expect(call.headers.get(SIGNATURE_HEADER)).toBeNull();
+      expect(call.body).not.toContain("test-auth-token-123");
+      const basic = channel({ type: "webhook", secret: "NOTIFY_HOOK", authSecret: "NOTIFY_BASIC" });
+      const b = context([], { secret: (n) => (n === "NOTIFY_BASIC" ? "Basic dXNlcjpwYXNz" : SECRETS[n]) });
+      expect(await PROVIDERS.webhook.send(down, basic, b.ctx)).toEqual({ ok: true, status: 200 });
+      expect(b.calls[0]!.headers.get("authorization")).toBe("Basic dXNlcjpwYXNz");
+      const logged = [log, warn, error].flatMap((s) => s.mock.calls).map((c) => JSON.stringify(c));
+      expect(logged.join("\n")).not.toContain("test-auth-token-123");
+    } finally {
+      log.mockRestore();
+      warn.mockRestore();
+      error.mockRestore();
+    }
+  });
+
+  it("signs and authorizes together", async () => {
+    const both = channel({
+      type: "webhook",
+      secret: "NOTIFY_HOOK",
+      signingSecret: "NOTIFY_SIGNING",
+      authSecret: "NOTIFY_HOOK_AUTH",
+    });
+    const signed = context([new Response(null, { status: 204 })]);
+    await PROVIDERS.webhook.send(down, ch, signed.ctx);
+    const { ctx, calls } = context([new Response(null, { status: 204 })]);
+    expect(await PROVIDERS.webhook.send(down, both, ctx)).toEqual({ ok: true, status: 204 });
+    const call = calls[0]!;
+    expect(call.headers.get("authorization")).toBe(AUTH);
+    const signature = call.headers.get(SIGNATURE_HEADER)!;
+    // The same signature as without the auth header: it signs only the timestamp and body.
+    expect(signature).toBe(signed.calls[0]!.headers.get(SIGNATURE_HEADER));
+    expect(await verifyWebhook(SIGNING, call.body, signature, Math.floor(NOW / 1000))).toBe(true);
+    expect(call.headers.get(EVENT_HEADER)).toBe("down");
+    expect(call.headers.get(DELIVERY_HEADER)).toMatch(/^[0-9a-f]{32}$/);
+  });
+
+  it("fails final without a request when a named auth secret is unset or could split the header", async () => {
+    const missing = channel({ type: "webhook", secret: "NOTIFY_HOOK", authSecret: "NOTIFY_NOPE" });
+    const m = context();
+    expect(await PROVIDERS.webhook.send(down, missing, m.ctx)).toEqual({
+      ok: false,
+      status: 0,
+      error: "secret_missing",
+      retryable: false,
+    });
+    for (const name of ["NOTIFY_HOOK_AUTH_CR", "NOTIFY_HOOK_AUTH_LF"]) {
+      for (const signingSecret of [undefined, "NOTIFY_SIGNING"]) {
+        const bad = channel({ type: "webhook", secret: "NOTIFY_HOOK", signingSecret, authSecret: name });
+        const c = context();
+        const outcome = await PROVIDERS.webhook.send(down, bad, c.ctx);
+        expect(outcome).toEqual({ ok: false, status: 0, error: "bad_auth_header", retryable: false });
+        expect(c.fetch).not.toHaveBeenCalled();
+      }
+    }
+    expect(m.fetch).not.toHaveBeenCalled();
+    expect(headerValue(AUTH)).toBe(true);
+    expect(headerValue("Bearer a\tb")).toBe(true);
+    expect(headerValue("Bearer a\rb")).toBe(false);
+    expect(headerValue("Bearer a\nb")).toBe(false);
+    expect(headerValue("Bearer \u00e9")).toBe(false);
   });
 });
 

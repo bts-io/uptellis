@@ -3,7 +3,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseSiteConfig, type SiteConfig } from "@/shared/config";
 import type { Incident } from "@/shared/model";
 import { MaintenanceWindow } from "@/shared/monitors";
-import { type OutgoingEmail, SIGNATURE_HEADER, verifyWebhook } from "@/shared/notify";
+import {
+  DELIVERY_HEADER,
+  EVENT_HEADER,
+  type OutgoingEmail,
+  SIGNATURE_HEADER,
+  verifyWebhook,
+} from "@/shared/notify";
 import { runJob } from "@/worker/cron";
 import { schema } from "@/worker/db";
 import { D1Store } from "@/worker/engine/d1-store";
@@ -353,6 +359,56 @@ describe("dispatch to channels", () => {
     ]);
     expect(emails[0]!.text).toContain("Last report: ");
     expect(posts.map((p) => p.to).sort()).toEqual(["discord", "slack", "webhook"]);
+  });
+});
+
+describe("a plain webhook", () => {
+  it("sends one unsigned delivery per transition, retried under one delivery id, auth never logged", async () => {
+    day = "2026-10-09";
+    const site = "t-chan-plain";
+    const token = ["Bearer", "plain-hook-token-42"].join(" ");
+    const plain = [
+      { id: "plain", name: "Plain", type: "webhook", secret: "NOTIFY_HOOK", authSecret: "NOTIFY_AUTH" },
+    ];
+    const logs = [vi.spyOn(console, "log"), vi.spyOn(console, "warn"), vi.spyOn(console, "error")];
+    const { notifier, posts, sleeps } = harness(
+      siteConfig(site, { notify: { discord: false, channels: plain } }),
+      { webhook: [503, 502] },
+      { ...SECRETS, NOTIFY_AUTH: token },
+    );
+    const t = await outage(site);
+
+    await notifier.notify(site, { opened: t.opened, resolved: [] });
+    // The implicit Discord channel wants only source events here: the webhook alone gets the down.
+    const downs = posts.filter((p) => p.to === "webhook");
+    expect(downs).toHaveLength(3);
+    expect(sleeps).toEqual([1000, 4000]);
+    const ids = new Set(downs.map((p) => p.headers.get(DELIVERY_HEADER)));
+    expect(ids.size).toBe(1);
+    expect([...ids][0]).toMatch(/^[0-9a-f]{32}$/);
+    for (const p of downs) {
+      expect(p.headers.get(SIGNATURE_HEADER)).toBeNull();
+      expect(p.headers.get(EVENT_HEADER)).toBe("down");
+      expect(p.headers.get("authorization")).toBe(token);
+      expect(p.body).toBe(downs[0]!.body);
+    }
+    expect(JSON.parse(downs[0]!.body)).toMatchObject({ event: "down", site: { slug: site } });
+    expect(await row(site, "plain", "open")).toMatchObject({ status: "sent", attempts: 3, error: null });
+
+    // The same transition again sends nothing; the up is one more delivery with an id of its own.
+    await notifier.notify(site, { opened: t.opened, resolved: [] });
+    await notifier.notify(site, { opened: [], resolved: t.resolved });
+    const all = posts.filter((p) => p.to === "webhook");
+    expect(all.map((p) => p.headers.get(EVENT_HEADER))).toEqual(["down", "down", "down", "up"]);
+    expect(all[3]!.headers.get(DELIVERY_HEADER)).not.toBe([...ids][0]);
+    expect(all[3]!.headers.get(SIGNATURE_HEADER)).toBeNull();
+    expect(await rows(site)).toEqual(["plain:open:sent", "plain:resolve:sent"]);
+
+    const stored = JSON.stringify(
+      await db.select().from(schema.notifications).where(eq(schema.notifications.site, site)),
+    );
+    const logged = logs.flatMap((l) => l.mock.calls).map((c) => JSON.stringify(c));
+    expect(`${stored}\n${logged.join("\n")}`).not.toContain("plain-hook-token-42");
   });
 });
 

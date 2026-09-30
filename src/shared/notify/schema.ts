@@ -51,12 +51,16 @@ export const ChannelConfig = z.discriminatedUnion("type", [
   z.object({ ...common, type: z.literal("discord"), secret: ChannelSecretName }),
   /** `secret`: the Slack incoming webhook URL. */
   z.object({ ...common, type: z.literal("slack"), secret: ChannelSecretName }),
-  /** `secret`: the endpoint URL; `signingSecret`: the HMAC key (src/shared/notify/webhook.ts). */
+  /**
+   * `secret`: the endpoint URL; `signingSecret`: an optional HMAC key (src/shared/notify/webhook.ts), without
+   * it a plain, unsigned POST; `authSecret`: an optional value sent as the `Authorization` header as is.
+   */
   z.object({
     ...common,
     type: z.literal("webhook"),
     secret: ChannelSecretName,
-    signingSecret: ChannelSecretName,
+    signingSecret: ChannelSecretName.optional(),
+    authSecret: ChannelSecretName.optional(),
   }),
   /** `secret`: the topic URL (`https://ntfy.sh/<topic>` or self-hosted); `tokenSecret`: an optional access token. */
   z.object({

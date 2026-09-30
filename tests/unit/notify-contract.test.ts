@@ -73,9 +73,29 @@ describe("channels", () => {
     const mail = { id: "mail", name: "Mail", type: "email" };
     expect(ChannelConfig.safeParse({ ...mail, to: [["ops", "example.org"].join("@")] }).success).toBe(true);
     expect(ChannelConfig.safeParse({ ...mail, to: [] }).success).toBe(false);
+  });
+
+  it("takes a webhook plain, with an auth header, signed, or signed with an auth header", () => {
+    const hook = { id: "h", name: "H", type: "webhook", secret: "NOTIFY_HOOK" } as const;
+    const plain = ChannelConfig.parse(hook);
+    expect(plain).toMatchObject({ type: "webhook", secret: "NOTIFY_HOOK" });
+    expect(plain).not.toHaveProperty("signingSecret");
+    expect(plain).not.toHaveProperty("authSecret");
+    expect(ChannelConfig.parse({ ...hook, authSecret: "NOTIFY_HOOK_AUTH" })).toMatchObject({
+      authSecret: "NOTIFY_HOOK_AUTH",
+    });
+    expect(ChannelConfig.parse({ ...hook, signingSecret: "NOTIFY_HOOK_SIGNING" })).toMatchObject({
+      signingSecret: "NOTIFY_HOOK_SIGNING",
+    });
     expect(
-      ChannelConfig.safeParse({ id: "h", name: "H", type: "webhook", secret: "NOTIFY_HOOK" }).success,
-    ).toBe(false);
+      ChannelConfig.parse({ ...hook, signingSecret: "NOTIFY_HOOK_SIGNING", authSecret: "NOTIFY_HOOK_AUTH" }),
+    ).toMatchObject({ signingSecret: "NOTIFY_HOOK_SIGNING", authSecret: "NOTIFY_HOOK_AUTH" });
+    // Secret names only: never a value, never a name outside NOTIFY_*.
+    for (const bad of [["Bearer", "abc123"].join(" "), "PATH", "notify_hook_auth", "NOTIFY_", ""]) {
+      expect(ChannelConfig.safeParse({ ...hook, authSecret: bad }).success).toBe(false);
+      expect(ChannelConfig.safeParse({ ...hook, signingSecret: bad }).success).toBe(false);
+    }
+    expect(ChannelConfig.safeParse({ ...hook, secret: undefined }).success).toBe(false);
   });
 
   it("rejects duplicate channel ids in a site config", () => {
