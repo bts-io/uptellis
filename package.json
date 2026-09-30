@@ -44,6 +44,7 @@
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
     "deploy": "bun run db:migrate:remote && bun run build && wrangler deploy",
     "leak-check": "bash scripts/leak-check.sh",
+    "a11y": "bun scripts/a11y-audit.ts",
     "deploy:config": "bun scripts/deploy-config.ts"
   },
   "dependencies": {
