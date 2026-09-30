@@ -83,10 +83,10 @@ Weekly windows use the given time zone, including daylight saving changes, and m
 
 ## Cards
 
-Every transition (a service `down` and back `up`, a source `stale` and `recovered`) becomes one alert message, sent to every notification channel of the site that wants it (`notify.channels`: Discord, Slack, a signed webhook, ntfy, Telegram or email; each with its `events`, and for `down` and `up` optionally its `services`). The contract is in [contracts/phase-6b.md](contracts/phase-6b.md).
+Every transition (a service `down` and back `up`, a source `stale` and `recovered`) becomes one alert message, sent to every notification channel of the site that wants it (`notify.channels`: Discord, Slack, a signed webhook, ntfy, Telegram, email or SMS; each with its `events`, and for `down` and `up` optionally its `services`). The contract is in [contracts/phase-6b.md](contracts/phase-6b.md).
 
 - **Discord** keeps the cards it always had: a red card for `down` (service, target, runner, since, reason), a green one with the outage duration for `up`, a dark red one for a silent source (last report, expected interval, still reporting) and a green one when it is back (silent for, beats backfilled).
-- **Slack** gets the same facts in Block Kit with the event's colour, **ntfy** a text notification (priority 5 for down, 4 for stale, 3 for back, a click to the status page), **Telegram** an HTML message, **email** a plain text and an HTML part (subject `[Uptellis] Checkout is down`).
+- **Slack** gets the same facts in Block Kit with the event's colour, **ntfy** a text notification (priority 5 for down, 4 for stale, 3 for back, a click to the status page), **Telegram** an HTML message, **email** a plain text and an HTML part (subject `[Uptellis] Checkout is down`), **SMS** one short plain text of at most 160 characters (`DOWN: Checkout (Acme Cloud) since 14:02 UTC. status.example.com`).
 - **Webhook** gets the message itself as JSON, with `X-Uptellis-Event` and an `X-Uptellis-Delivery` id that stays the same across retries of one delivery. It is signed with HMAC-SHA256 (`X-Uptellis-Signature: t=<unix>,v1=<hex>` over `<t>.<body>`) when the channel names a `signingSecret`, and plain otherwise; an optional `authSecret` is sent as the `Authorization` header ([Webhook setup](#webhook-setup)).
 
 Without configured channels a site behaves as before: the historical Discord channel on `DISCORD_WEBHOOK_URL` gets `stale` and `recovered` always, and `down` and `up` when `notify.discord` is on (admin, Config, "Alerts").
@@ -135,6 +135,33 @@ Signed, so the receiver can prove a POST came from this instance (add `authSecre
 ```
 
 A signed POST carries `X-Uptellis-Signature: t=<unix seconds>,v1=<hex>`, where `v1` is the HMAC-SHA256 of `<t>.<raw body>` keyed with the signing secret (the Stripe scheme). To verify, recompute it over the raw body as received, compare in constant time, and reject a `t` more than 300 seconds from your clock. `verifyWebhook` in `src/shared/notify/webhook.ts` does exactly this.
+
+### SMS setup (Twilio)
+
+An SMS channel texts one number through your own Twilio account. Every text costs money, so an SMS channel gets `down` and `up` unless you set its `events` (add `stale` and `recovered` explicitly if you want them). The texts are plain ASCII of at most 160 characters, with the service and site names shortened when needed and the status page link kept:
+
+```text
+DOWN: Checkout (Acme Cloud) since 14:02 UTC. status.example.com
+UP: Checkout (Acme Cloud) is back after 12 min. status.example.com
+STALE: source kuma:watch-1 (Acme Cloud) silent since 14:02 UTC.
+RECOVERED: source kuma:watch-1 (Acme Cloud) is reporting again.
+```
+
+A test starts with `TEST `.
+
+1. Create a Twilio account. A trial works, with two limits: it texts only numbers verified in the Twilio console (Phone Numbers, Verified Caller IDs), and every message starts with a trial notice.
+2. In the Twilio console, find the Account SID (`AC` and 32 hex characters) and the Auth Token on the account dashboard.
+3. Get a Twilio number that can send SMS (Phone Numbers, Buy a number; a trial account gets one for free), or create a Messaging Service and use its SID (`MG...`) as `from`.
+4. Store the auth token as a secret named `NOTIFY_<NAME>`, e.g. `bunx wrangler secret put NOTIFY_TWILIO_TOKEN` on Cloudflare (it prompts for the value) or `NOTIFY_TWILIO_TOKEN=` in `docker.env` for Docker. The Account SID and the numbers go in the config.
+5. Add the channel in admin (Config, Alerts, type "SMS (Twilio)") or in the config, then send a test with `POST /api/admin/notify/test?site=<slug>&kind=down&channel=<id>`:
+
+```json
+{ "id": "sms-oncall", "name": "SMS (on call)", "type": "sms", "provider": "twilio",
+  "accountSid": "ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "secret": "NOTIFY_TWILIO_TOKEN",
+  "from": "+15551234567", "to": "+15557654321" }
+```
+
+`from` is an E.164 number (`+`, country code, number) or a Messaging Service SID; `to` is exactly one E.164 number. To text a second person, add a second channel: each channel is sent each transition once and retried on its own. The numbers are personal data: they never appear in logs, the delivery log, error codes or anything public. A failed text is logged by a short code: `bad_token` (401 or 403, or a token that is not 32 hex characters), `invalid_number` (Twilio 21211, 21614), `unverified_number` (21608, a trial account texting an unverified number), `invalid_from` (21212, 21606, 21659, 21660), `opted_out` (21610, the recipient replied STOP), `region_disabled` (21408, enable the country in the console's Geo Permissions) or `twilio_<code>`; these are final, while a 429, 5xx or network error is retried.
 
 ## Agent API
 

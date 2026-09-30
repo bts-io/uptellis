@@ -65,7 +65,7 @@ flowchart LR
     build["buildSiteView<br/>(pure)"]
     read["/api/sites/:site/view"]
     page["theme Page (SSR)"]
-    notify["notifier<br/>channels: Discord, Slack,<br/>webhook, ntfy, Telegram, email"]
+    notify["notifier<br/>channels: Discord, Slack,<br/>webhook, ntfy, Telegram,<br/>email, SMS"]
   end
   col -->|"signed POST"| ing
   push -->|"signed POST"| ing
@@ -242,7 +242,7 @@ A private site's page sends a signed-out visitor to sign-in (the page loader ask
 
 ## Notifications
 
-Every incident transition (a service `down` or back `up`, a source going `stale` or `recovered`) becomes one `AlertMessage` (`src/shared/notify/message.ts`), which the dispatcher (`src/worker/notify`) sends to each of the site's channels that wants the event (`channelsOf` and `channelWants` in `src/shared/notify/schema.ts`): Discord, Slack, a webhook (plain or signed), ntfy, Telegram or email ([monitors.md](monitors.md#cards)).
+Every incident transition (a service `down` or back `up`, a source going `stale` or `recovered`) becomes one `AlertMessage` (`src/shared/notify/message.ts`), which the dispatcher (`src/worker/notify`) sends to each of the site's channels that wants the event (`channelsOf` and `channelWants` in `src/shared/notify/schema.ts`): Discord, Slack, a webhook (plain or signed), ntfy, Telegram, email or SMS through Twilio ([monitors.md](monitors.md#cards)).
 
 - Transitions come from the ingest path, the monitors path and the five-minute staleness sweep.
 - Each (incident, kind, channel) is claimed in the `notifications` table before it is sent, so it goes out at most once per channel however often a job retries. A retryable failure (429, 5xx, network) is retried in the request with backoff and then by the five-minute job for up to an hour; a failing channel never blocks the others.
