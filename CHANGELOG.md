@@ -2,6 +2,12 @@
 
 All notable changes to Uptellis are recorded here. The format follows [Conventional Commits](https://www.conventionalcommits.org) and the project uses [Semantic Versioning](https://semver.org). Each release adds its section in the release PR, from the Conventional Commits since the previous tag.
 
+## 0.7.0 (2026-10-01)
+
+### Features
+
+* **Push monitors:** a monitor of type `push` is up while a job or timer keeps calling its URL, and down when the calls stop for longer than its interval plus grace (`intervalS` 60 to 86400, `graceS` default 60). `GET` or `POST /api/push/<token>` takes Uptime Kuma's parameters (`status`, `msg`, `ping`), so a Kuma push timer only needs the new URL. The URL is created or rotated in admin (Config, Monitors) and shown once; only a hash of its token is stored (migration 0007), and it never appears in logs, cards or anything public. Pushes are rate limited per token (`PUSH_RATE_LIMIT`; on Cloudflare the limit is enforced per location, so it bounds bursts rather than being exact). Maintenance windows, pause, cards and every channel work as for any monitor.
+
 ## 0.6.0 (2026-10-01)
 
 ### Features
