@@ -44,6 +44,10 @@ The demo site in each theme (healthy state). Open any of them live with `?theme=
 | **Wallboard** (`g-wallboard`)<br/>For a TV across the room (dark) | **Friendly** (`h-friendly`)<br/>Plain language for non-technical readers (light) | **Minimal** (`i-minimal`)<br/>One line and a compact list (light and dark) |
 | <img src="docs/assets/screenshots/g-wallboard.png" alt="Wallboard theme" width="100%"> | <img src="docs/assets/screenshots/h-friendly.png" alt="Friendly theme" width="100%"> | <img src="docs/assets/screenshots/i-minimal.png" alt="Minimal theme" width="100%"> |
 
+**Admin panel.** Each site's config (theme, profiles, sections, monitors, notification channels), revisions, import and export, sources and their ingest keys, users and theme previews, at `/admin`.
+
+<img src="docs/assets/screenshots/admin.png" alt="Admin panel: a site's config form" width="100%">
+
 ## Architecture
 
 ```mermaid
