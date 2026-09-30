@@ -33,7 +33,7 @@ Uptellis collects health data from the tools you already run, keeps it in one no
 
 ## Screenshots
 
-Screenshots of the three themes and the admin panel will be added with the first public release.
+Screenshots of the themes and the admin panel are planned with the theme work (Phase 7 in the [roadmap](docs/roadmap.md)).
 
 ## Architecture
 
@@ -66,10 +66,10 @@ One app, two runtimes: a Cloudflare Worker (D1, KV, Cron Triggers) or a Docker c
 
 ## Install
 
-Both install paths are **coming in v1.0**.
+Two install paths are planned ([roadmap](docs/roadmap.md), Phase 8):
 
-- **Deploy to Cloudflare** (coming in v1.0): a one-click button that creates the Worker, D1 database and KV namespace in your Cloudflare account.
-- **Docker image** (coming in v1.0): `ghcr.io/bts-io/uptellis`, multi-arch, signed with cosign, with an SBOM and provenance attestation.
+- **Deploy to Cloudflare**: a one-click button that creates the Worker, D1 database and KV namespace in your Cloudflare account.
+- **Docker image**: `ghcr.io/bts-io/uptellis`, multi-arch, signed with cosign, with an SBOM and provenance attestation. It is built for every release but not public yet.
 
 Until then, run it from source as described below, or build and run the Docker image from a checkout: copy `docker.env.example` to `docker.env`, then `docker compose up -d --build` ([OPERATIONS.md](docs/OPERATIONS.md#docker)).
 
