@@ -4,6 +4,7 @@ import { SiteConfig } from "@/shared/config";
 import { monitorServiceId, monitorsOf } from "@/shared/monitors";
 import { listProfiles } from "@/shared/profiles";
 import type { ConfigDiffEntry, ConfigIssue, ConfigState, PushTokenSummary } from "@/shared/schemas/admin";
+import { cx } from "../../kit/cx";
 import { registeredThemes } from "../../themes";
 import { ChannelsField } from "./ChannelsEditor";
 import { type AdminFailure, describeFailure, getPushTokens, importConfig, saveConfig } from "./client";
@@ -141,7 +142,16 @@ export function ConfigEditor({ site, state, services, onReload }: ConfigEditorPr
       onReload();
     });
 
+  // Every service a section can list, by name: reported services, then the config's monitors (so a new
+  // monitor has its name before its first check), with the config's display names over both. A raw id is
+  // only shown for a listed service nothing names.
   const known = new Map(services.map((s) => [s.id, s.name]));
+  for (const m of monitorsOf(draft)) {
+    const id = monitorServiceId(m.id);
+    if (!known.has(id)) known.set(id, m.name);
+  }
+  for (const [id, name] of Object.entries(draft.displayNames ?? {}))
+    if (known.has(id) && name) known.set(id, name);
   for (const id of draft.sections.flatMap((s) => s.services)) if (!known.has(id)) known.set(id, id);
   const themes = registeredThemes();
   // A maintenance window can cover any service: the known ones plus every monitor's, saved or not.
@@ -309,7 +319,7 @@ export function ConfigEditor({ site, state, services, onReload }: ConfigEditorPr
                     <ul className="mt-1 grid gap-1 sm:grid-cols-2">
                       {[...known].map(([id, name]) => (
                         <li key={id}>
-                          <label className="flex items-center gap-2 text-sm">
+                          <label className="flex items-center gap-2 text-sm" title={id}>
                             <input
                               type="checkbox"
                               checked={sec.services.includes(id)}
@@ -321,8 +331,7 @@ export function ConfigEditor({ site, state, services, onReload }: ConfigEditorPr
                                 })
                               }
                             />
-                            <span className="truncate">{name}</span>
-                            <span className="truncate font-mono text-xs text-faint">{id}</span>
+                            <span className={cx("truncate", name === id && "font-mono text-xs")}>{name}</span>
                           </label>
                         </li>
                       ))}

@@ -87,6 +87,39 @@ describe("config editor", () => {
   const editor = (onReload = vi.fn()) =>
     mount(createElement(ConfigEditor, { site: "demo", state, services, onReload }));
 
+  it("names every service in the section picker, even before any check has reported", () => {
+    // A fresh install: the config lists monitors, nothing has reported, so `services` is empty.
+    const fresh = parseSiteConfig({
+      ...demo,
+      monitors: [
+        {
+          id: "forgejo-health",
+          name: "Forgejo health",
+          type: "http",
+          url: "https://example.org/",
+          runners: ["builtin"],
+        },
+      ],
+      sections: [{ id: "web", title: "Web", services: ["probe:forgejo-health", "kuma:9"] }],
+      displayNames: { "kuma:9": "Workers" },
+    });
+    mount(
+      createElement(ConfigEditor, {
+        site: "demo",
+        state: { ...state, config: fresh },
+        services: [{ id: "kuma:9", name: "kuma:9" }],
+        onReload: vi.fn(),
+      }),
+    );
+    const picker = [...document.querySelectorAll('[aria-label="Section Web"] li label')];
+    const text = picker.map((l) => l.textContent?.trim());
+    expect(text).toContain("Forgejo health");
+    expect(text).toContain("Workers");
+    // The ids stay out of the visible label (they are only the hover title).
+    expect(text.some((t) => t?.includes("probe:forgejo-health"))).toBe(false);
+    expect(picker.map((l) => l.getAttribute("title"))).toContain("probe:forgejo-health");
+  });
+
   it("shows issues inline as you type and blocks review until they are fixed", () => {
     editor();
     const name = field("Name") as HTMLInputElement;
