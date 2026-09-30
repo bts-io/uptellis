@@ -313,7 +313,7 @@ describe("alerts", () => {
     const discord = box("Discord cards when a service goes down");
     expect(discord.checked).toBe(false);
     act(() => discord.click());
-    expect((await reviewed()).notify).toEqual({ discord: true, webhooks: [], channels: [] });
+    expect((await reviewed()).notify).toEqual({ discord: true, channels: [] });
   });
 });
 

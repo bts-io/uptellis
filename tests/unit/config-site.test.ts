@@ -77,10 +77,19 @@ describe("SiteConfig", () => {
       backupMaxAgeH: 26,
     });
     expect(cfg.public).toEqual({ enabled: false, fields: [] });
-    expect(cfg.notify).toEqual({ discord: false, webhooks: [], channels: [] });
+    expect(cfg.notify).toEqual({ discord: false, channels: [] });
     expect(cfg.links).toEqual([]);
     expect(cfg.displayNames).toEqual({});
     expect(cfg.branding.tokens).toEqual({});
+  });
+  it("still loads the deprecated notify.webhooks, then drops it from the config and the export", () => {
+    const old = { ...minimal, notify: { discord: true, webhooks: ["NOTIFY_OLD"], channels: [] } };
+    const cfg = parseSiteConfig(old);
+    expect(cfg.notify).toEqual({ discord: true, channels: [] });
+    expect(JSON.stringify(cfg)).not.toContain("webhooks");
+    const out = exportSiteConfig(old as SiteConfigInput);
+    expect(JSON.parse(out).notify).toEqual({ discord: true, channels: [] });
+    expect(exportSiteConfig(parseSiteConfig(out))).toBe(out);
   });
   it("exports with stable key order regardless of input order", () => {
     const shuffled = {

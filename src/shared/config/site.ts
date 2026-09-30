@@ -182,8 +182,14 @@ export const SiteConfig = z
       .object({
         /** Down and up cards on the historical Discord channel (`channelsOf` in src/shared/notify). */
         discord: z.boolean().default(false),
-        /** Unused since 0.4.0 (never read); kept so older configs still parse. Use `channels`. */
-        webhooks: z.array(SecretName).default([]),
+        /**
+         * @deprecated Never read (unused since 0.4.0); use `channels`. Still accepted and validated so older
+         * configs load, then dropped: a parsed config never has it, so exports and the admin UI omit it.
+         */
+        webhooks: z
+          .array(SecretName)
+          .transform(() => undefined)
+          .optional(),
         /** Notification channels (Phase 6b); read them through `channelsOf`. */
         channels: z.array(ChannelConfig).max(20).default([]),
       })

@@ -11,7 +11,8 @@ import { appBackend } from "@/worker/index";
 import { ingestRoutes } from "@/worker/ingest/routes";
 import { IncidentNotifier } from "@/worker/notify";
 import type { DiscordCard } from "@/worker/notify/card";
-import { fetchWith, testPlatform, workerEnv } from "../support/platform";
+import { fetchWith, testPlatform } from "../support/platform";
+import { TEST_KEYS } from "../support/signing";
 
 // Never a real webhook: the notifier posts through the fake sender below.
 const HOOK = "https://discord.test/api/webhooks/1/test";
@@ -41,7 +42,7 @@ function harness(onDay: string, edit: (c: SiteConfig) => SiteConfig = (c) => c) 
       if (!state) return null;
       return {
         ...state,
-        config: edit({ ...state.config, notify: { discord: true, webhooks: [], channels: [] } }),
+        config: edit({ ...state.config, notify: { discord: true, channels: [] } }),
       };
     },
     slugs: seedConfigs.slugs,
@@ -51,8 +52,8 @@ function harness(onDay: string, edit: (c: SiteConfig) => SiteConfig = (c) => c) 
   app.route(
     "/api/ingest",
     ingestRoutes(
-      (platform, keys) => ({
-        ...appBackend(platform, keys),
+      (platform) => ({
+        ...appBackend(platform),
         configs,
         notifier: new IncidentNotifier({
           db: platform.db,
@@ -104,7 +105,7 @@ function harness(onDay: string, edit: (c: SiteConfig) => SiteConfig = (c) => c) 
     });
     const path = "/api/ingest/kuma";
     const headers = await signRequest(
-      workerEnv.INGEST_KEY_COLLECTOR_1,
+      TEST_KEYS["collector-1"],
       "collector-1",
       "POST",
       path,
@@ -194,7 +195,7 @@ describe("down and up cards from ingest", () => {
   it("sends nothing for down and up when the site leaves notify.discord off", async () => {
     const { cards, kuma } = harness("2026-09-29", (c) => ({
       ...c,
-      notify: { discord: false, webhooks: [], channels: [] },
+      notify: { discord: false, channels: [] },
     }));
     await kuma("10:00:00", [{ ts: "09:59:30", status: 0 }]);
     await kuma("10:43:00", [{ ts: "10:42:30", status: 1 }]);

@@ -588,7 +588,7 @@ describe("contracts and helpers", () => {
   });
 
   it("tells a saved channel from an edited or new one", () => {
-    const saved = { discord: false, webhooks: [], channels: [OPS] };
+    const saved = { discord: false, channels: [OPS] };
     expect(isSaved(OPS, saved)).toBe(true);
     expect(isSaved({ ...OPS, name: "x" }, saved)).toBe(false);
     expect(isSaved({ ...OPS, id: "new" }, saved)).toBe(false);

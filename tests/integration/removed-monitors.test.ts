@@ -45,7 +45,7 @@ function siteConfig(monitors: MonitorConfig[]): SiteConfig {
     hostnames: ["removed.example.org"],
     visibility: "public",
     public: { enabled: true, fields: [...PUBLIC_FIELDS] },
-    notify: { discord: true, webhooks: [], channels: [] },
+    notify: { discord: true, channels: [] },
     sources: [{ id: "probe:cf", kind: "probe", expectedIntervalS: 60 }],
     probes: [],
     monitors,
