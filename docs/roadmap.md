@@ -36,7 +36,7 @@ Monitor without any other tool in front, while keeping the Kuma collector, facts
 
 ## Phase 6b: reach (done, 0.4.0)
 
-- **Notification providers.** Beyond Discord: email, Slack, Microsoft Teams, Telegram, ntfy, generic signed webhooks and more, per site and per incident kind.
+- **Notification providers.** Beyond Discord: Slack, generic signed webhooks, ntfy, Telegram and email, per site and per incident kind.
 - **Public summaries and embeds.** An allow-list of what a public page and its JSON summary show (the field list already exists in the site config), plus embeddable status badges and widgets.
 
 ## Phase 7: themes and polish (done, 0.5.0)
@@ -50,5 +50,9 @@ Monitor without any other tool in front, while keeping the Kuma collector, facts
 - **Docs site.** Installation for both runtimes, configuration reference, monitors and agents, channels, public status, profile and theme guides, the ingest API for writing your own producer.
 - **Public demo.** A demo instance anyone can open.
 - **Images.** Multi-arch images on GHCR, signed, with an SBOM and provenance, are already built for every release; they become public when the project decides.
+
+## Later
+
+- Microsoft Teams as a notification channel.
 
 Plans change with feedback: open an issue to discuss a feature or to help with one.
