@@ -23,10 +23,7 @@ let t: TempPlatform;
 let key = "";
 
 const send = async (path: string, init: RequestInit = {}) => {
-  const res = await app.fetch(new Request(`${ORIGIN}${path}`, init), {
-    platform: t.platform,
-    envIngestKeys: {},
-  });
+  const res = await app.fetch(new Request(`${ORIGIN}${path}`, init), { platform: t.platform });
   await t.platform.drain();
   return res;
 };

@@ -9,10 +9,10 @@ import { runJob } from "@/worker/cron";
 import { schema } from "@/worker/db";
 import { resetConfigCache } from "@/worker/engine/config-store";
 import app from "@/worker/index";
-import { envIngestKeys } from "@/worker/ingest/keys";
 import { loadFixture } from "../fixtures";
 import { factsPayloadFrom, kumaSnapshotFrom } from "../support/fixture-payloads";
-import { signedPost, TEST_ENV } from "../support/signing";
+import { seedTestKeys, TEST_MASTER_KEY } from "../support/ingest-keys";
+import { signedPost } from "../support/signing";
 import { type TempPlatform, tempPlatform } from "./support";
 
 const fx = loadFixture("default");
@@ -32,21 +32,23 @@ const json = (body: unknown): RequestInit => ({
 });
 
 const send = async (path: string, init: RequestInit = {}) => {
-  const res = await app.fetch(new Request(`${ORIGIN}${path}`, init), {
-    platform: t.platform,
-    envIngestKeys: envIngestKeys(TEST_ENV),
-  });
+  const res = await app.fetch(new Request(`${ORIGIN}${path}`, init), { platform: t.platform });
   await t.platform.drain();
   return res;
 };
 
-beforeAll(() => {
+beforeAll(async () => {
   resetConfigCache();
-  // Test-only secret.
+  // Test-only secrets.
   t = tempPlatform(
-    { SITE_DEFAULT: "demo", BETTER_AUTH_SECRET: "test-better-auth-secret-0123456789abcdef" },
+    {
+      SITE_DEFAULT: "demo",
+      BETTER_AUTH_SECRET: "test-better-auth-secret-0123456789abcdef",
+      SOURCE_MASTER_KEY: TEST_MASTER_KEY,
+    },
     NOW,
   );
+  await seedTestKeys(t.platform);
   spyOn(console, "log").mockImplementation(() => {});
 });
 afterAll(() => t.dispose());

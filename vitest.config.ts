@@ -6,9 +6,8 @@ import { defineConfig } from "vitest/config";
 const bindings = async () => ({
   TEST_MIGRATIONS: await readD1Migrations("./migrations"),
   BETTER_AUTH_SECRET: "test-better-auth-secret-0123456789abcdef",
-  // Same strings as TEST_KEYS in tests/support/signing.ts.
-  INGEST_KEY_COLLECTOR_1: "test-ingest-secret-collector-1",
-  INGEST_KEY_FACTS_1: "test-ingest-secret-facts-1",
+  // TEST_MASTER_KEY in tests/support/ingest-keys.ts: seals the test ingest keys seeded by the setup file.
+  SOURCE_MASTER_KEY: btoa("uptellis-test-master-key-32bytes"),
 });
 
 // Three projects: pure unit tests in Node, the Hono API in workerd with a migrated D1, and the built Worker

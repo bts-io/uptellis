@@ -8,10 +8,10 @@ import { PublicSummary } from "@/shared/public/summary";
 import { isWorkerOwned } from "@/worker/build";
 import { D1ConfigStore, resetConfigCache } from "@/worker/engine/config-store";
 import app from "@/worker/index";
-import { envIngestKeys } from "@/worker/ingest/keys";
 import { loadFixture } from "../fixtures";
 import { kumaSnapshotFrom } from "../support/fixture-payloads";
-import { signedPost, TEST_ENV } from "../support/signing";
+import { seedTestKeys, TEST_MASTER_KEY } from "../support/ingest-keys";
+import { signedPost } from "../support/signing";
 import { type TempPlatform, tempPlatform } from "./support";
 
 const fx = loadFixture("default");
@@ -21,17 +21,15 @@ let t: TempPlatform;
 
 const send = async (path: string, init: RequestInit = {}) => {
   expect(isWorkerOwned(new URL(path, ORIGIN).pathname)).toBe(true);
-  const res = await app.fetch(new Request(`${ORIGIN}${path}`, init), {
-    platform: t.platform,
-    envIngestKeys: envIngestKeys(TEST_ENV),
-  });
+  const res = await app.fetch(new Request(`${ORIGIN}${path}`, init), { platform: t.platform });
   await t.platform.drain();
   return res;
 };
 
 beforeAll(async () => {
   resetConfigCache();
-  t = tempPlatform({ SITE_DEFAULT: "demo" }, NOW);
+  t = tempPlatform({ SITE_DEFAULT: "demo", SOURCE_MASTER_KEY: TEST_MASTER_KEY }, NOW);
+  await seedTestKeys(t.platform);
   spyOn(console, "log").mockImplementation(() => {});
   const kuma = JSON.stringify(kumaSnapshotFrom(fx));
   expect((await send("/api/ingest/kuma", await signedPost("/api/ingest/kuma", kuma))).status).toBe(202);

@@ -8,13 +8,6 @@ export const TEST_KEYS = {
   ci: "test-ingest-secret-ci",
 } as const;
 
-/** Worker env holding the test secrets under their real variable names. */
-export const TEST_ENV = {
-  INGEST_KEY_COLLECTOR_1: TEST_KEYS["collector-1"],
-  INGEST_KEY_FACTS_1: TEST_KEYS["facts-1"],
-  INGEST_KEY_CI: TEST_KEYS.ci,
-} as const;
-
 let counter = 0;
 /** A unique 16-byte lower-case hex nonce, built at runtime. */
 export const nextNonce = () => (++counter).toString(16).padStart(32, "0");

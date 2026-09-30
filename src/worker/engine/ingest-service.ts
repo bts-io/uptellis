@@ -21,9 +21,8 @@ import { normalizeEvents } from "../adapters/events";
 import { normalizeFacts } from "../adapters/facts";
 import { normalizeKuma } from "../adapters/kuma";
 import { issue, PayloadRejected, zodIssues } from "../ingest/issues";
-import type { IngestRoute, KeyBinding } from "../ingest/keys";
+import type { IngestRoute, KeyBinding, StoredKeys } from "../ingest/keys";
 import type { IncidentNotifier } from "../notify";
-import type { KeyStore } from "./key-store";
 import { type ConfigSource, seedConfigs, syncSiteSources } from "./sites";
 import type { ModelCache, SiteModel, Store } from "./store";
 
@@ -32,8 +31,8 @@ export interface IngestBackend {
   cache: ModelCache;
   /** Site configs; the committed `sites/*.json` (`seedConfigs`) when absent. */
   configs?: ConfigSource;
-  /** Ingest keys stored in D1; without it only the env keys exist. */
-  keys?: KeyStore;
+  /** Ingest signing keys (`KeyStore` in D1); without it no signed request verifies. */
+  keys?: StoredKeys;
   /** Discord cards for `down` transitions and `stale` recoveries (src/worker/notify); none when absent. */
   notifier?: Pick<IncidentNotifier, "notify">;
   /** Where the instance runs: decides the builtin runner's implied source (`syncSiteSources`). */

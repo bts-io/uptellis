@@ -104,8 +104,7 @@ Worker secrets are set with `bunx wrangler secret put <NAME>`, which prompts for
 | --- | --- | --- |
 | `BETTER_AUTH_SECRET` | At least 32 random characters: signs the session cookies and encrypts the JWT signing keys. Without it there are no accounts | Everyone is signed out and the JWT keys must be replaced. See [Auth secret](#auth-secret) |
 | `GITHUB_CLIENT_SECRET`, `GOOGLE_CLIENT_SECRET` | Optional: the OAuth client secrets ([Sign-in with GitHub or Google](#sign-in-with-github-or-google)) | Create a new secret at the provider, put it, then delete the old one there |
-| `SOURCE_MASTER_KEY` | 32 random bytes, base64 (`openssl rand -base64 32`): seals the ingest keys stored in D1 | Every key sealed in D1 stops verifying. See [Master key](#master-key) |
-| `INGEST_KEY_<ID>` | Optional env fallback for a producer's HMAC key, used while its key id has no D1 row (binding in `src/worker/ingest/keys.ts`) | Rotate in admin instead, which moves the key into D1 ([Ingest keys](#ingest-keys)); then delete the env secret |
+| `SOURCE_MASTER_KEY` | 32 random bytes, base64 (`openssl rand -base64 32`): seals the ingest keys stored in D1. Signed ingest needs it | Every key sealed in D1 stops verifying. See [Master key](#master-key) |
 | `DISCORD_WEBHOOK_URL` | Optional: the Discord webhook the stale and recovered cards (and, for sites with `notify.discord`, the down and up cards) are posted to | In the channel settings create a new webhook, put its URL, send a test card (`POST /api/admin/notify/test`), then delete the old webhook |
 | `NOTIFY_<NAME>` | Optional: what a notification channel names in its config (`secret`, `signingSecret`, `tokenSecret`): a Slack or Discord webhook URL, a webhook endpoint and its signing key, an ntfy topic URL and token, a Telegram bot token. Only names matching `NOTIFY_[A-Z0-9_]` (or `DISCORD_WEBHOOK_URL`) are ever read | Put the new value, send a test to the channel (`POST /api/admin/notify/test?channel=<id>`), then revoke the old one at the service. A webhook's receiver must accept both signing keys while they change |
 
@@ -136,7 +135,14 @@ To rotate:
 2. Install it on the producer and restart it (collector: its key file, see `collector/README.md`; a facts pusher: the `INGEST_KEY=` line of its env file).
 3. The Sources tab shows the new key as current with a recent "last used".
 
-The admin API does the same: `POST /api/admin/sites/<slug>/sources/<keyId>/rotate`. A key that was env-only (`INGEST_KEY_<ID>`) moves into D1 on its first rotation; delete the Worker secret once the producer uses the new key (`bunx wrangler secret delete INGEST_KEY_<ID>`). For a manual rotation without admin, `INGEST_KEY_<ID>_NEXT` is accepted alongside the current env secret: set it, move the producer to it, copy it into the current slot, delete `_NEXT`.
+The admin API does the same: `POST /api/admin/sites/<slug>/sources/<keyId>/rotate`.
+
+Ingest keys live in D1 only. The `INGEST_KEY_<ID>` and `INGEST_KEY_<ID>_NEXT` Worker secrets (and Docker env vars) of earlier releases are no longer read: a producer still signing with one gets 401 `unknown_key`, the ingest log line carries a `hint`, and the Worker logs a `legacy_keys` notice naming the leftover secrets (never their values). To move such a producer, set `SOURCE_MASTER_KEY` if it is not set yet, then:
+
+- if its key id is listed in the Sources tab (a key that was listed or used before the upgrade, shown with no current secret), **Rotate** it and install the new secret; the first request signed with it makes it current;
+- otherwise **Add a source** with the same source id (and the old key id, or a new one) and install the secret it shows.
+
+Then delete the old secret (`bunx wrangler secret delete INGEST_KEY_<ID>`, or drop it from the Docker env).
 
 ### Master key
 
@@ -251,7 +257,7 @@ Without Docker, the same server runs from a checkout: `bun run build:docker && b
 | Variable | What it does |
 | --- | --- |
 | `SITE_DEFAULT` | the site a request renders when its host matches no site's `hostnames` (default in the image: `demo`) |
-| `BETTER_AUTH_SECRET`, `SOURCE_MASTER_KEY`, `DISCORD_WEBHOOK_URL`, `NOTIFY_<NAME>`, `GITHUB_CLIENT_SECRET`, `GOOGLE_CLIENT_SECRET`, `INGEST_KEY_<ID>` (deprecated) | as in [Secrets](#secrets); `NOTIFY_<NAME>` is read when a channel sends, so a new one needs no restart |
+| `BETTER_AUTH_SECRET`, `SOURCE_MASTER_KEY`, `DISCORD_WEBHOOK_URL`, `NOTIFY_<NAME>`, `GITHUB_CLIENT_SECRET`, `GOOGLE_CLIENT_SECRET` | as in [Secrets](#secrets); `NOTIFY_<NAME>` is read when a channel sends, so a new one needs no restart |
 | `EMAIL_FROM` | the default sender address of email channels |
 | `CLOUDFLARE_EMAIL_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | email channels send through the Cloudflare Email Service REST API (a token with Email Sending permission, the account id) when both are set |
 | `SMTP_URL` | otherwise, SMTP: `smtps://user:pass@host:465` (TLS from the start) or `smtp://user:pass@host:587` (STARTTLS when the server offers it; credentials are sent only over TLS or to `localhost`). Percent-encode special characters in the user and password. Without either, email channels fail with `email_unavailable` |

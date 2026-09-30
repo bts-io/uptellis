@@ -1,7 +1,7 @@
 /**
  * The Phase 1 write and read path as src/worker/index.ts mounts it (real ingest and read routes over
  * `appBackend`: D1Store + KvModelCache on the Cloudflare platform), with a settable clock, for integration tests in workerd. Requests
- * are signed with the shared `signRequest` and the test secrets bound in vitest.config.ts.
+ * are signed with the shared `signRequest` and the test keys the setup file seeds into D1 (TEST_KEYS).
  */
 import { Hono } from "hono";
 import { randomNonce, signRequest } from "@/shared/signing";
@@ -10,15 +10,12 @@ import { appBackend } from "@/worker/index";
 import { ingestRoutes } from "@/worker/ingest/routes";
 import { readRoutes } from "@/worker/routes/read";
 import { fetchWith, workerEnv } from "./platform";
+import { TEST_KEYS } from "./signing";
 
 export const ORIGIN = "https://worker.example.net";
 export { workerEnv };
 
-const SECRETS = {
-  "collector-1": () => workerEnv.INGEST_KEY_COLLECTOR_1,
-  "facts-1": () => workerEnv.INGEST_KEY_FACTS_1,
-};
-export type TestKeyId = keyof typeof SECRETS;
+export type TestKeyId = "collector-1" | "facts-1";
 
 export function pipeline(start: Date) {
   let now = start;
@@ -30,7 +27,7 @@ export function pipeline(start: Date) {
   const signed = async (route: "kuma" | "facts" | "events", keyId: TestKeyId, payload: unknown) => {
     const path = `/api/ingest/${route}`;
     const body = JSON.stringify(payload);
-    const headers = await signRequest(SECRETS[keyId](), keyId, "POST", path, body, now, randomNonce());
+    const headers = await signRequest(TEST_KEYS[keyId], keyId, "POST", path, body, now, randomNonce());
     return new Request(`${ORIGIN}${path}`, {
       method: "POST",
       body,

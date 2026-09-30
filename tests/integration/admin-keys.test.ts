@@ -1,7 +1,8 @@
 /**
- * Ingest keys through the admin API and signed ingest, end to end over D1: env keys keep working, rotation
- * accepts the old key until the new one is first used (then rejects it), an env key rotates into D1, a new
- * source is added to the config with its key, secrets are sealed at rest and never logged.
+ * Ingest keys through the admin API and signed ingest, end to end over D1: the seeded keys verify, rotation
+ * accepts the old key until the new one is first used (then rejects it), a row left from an env key of an
+ * earlier release answers 401 with a hint until it is rotated, a new source is added to the config with its
+ * key, secrets are sealed at rest and never logged.
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { IssuedKey, SourceKeyList } from "@/shared/schemas/admin";
@@ -9,9 +10,11 @@ import { randomNonce, signRequest } from "@/shared/signing";
 import { schema } from "@/worker/db";
 import { resetConfigCache } from "@/worker/engine/config-store";
 import { resetKeyTouches } from "@/worker/engine/key-store";
+import { UNKNOWN_KEY_HINT } from "@/worker/ingest/keys";
 import { freshFixture } from "../ssr/seed";
 import { factsPayloadFrom, kumaSnapshotFrom } from "../support/fixture-payloads";
 import { testPlatform } from "../support/platform";
+import { TEST_KEYS } from "../support/signing";
 import { admin, adminCookie, adminEnv, handle, json } from "./admin-app";
 
 let api: ReturnType<typeof admin>;
@@ -59,7 +62,7 @@ beforeEach(() => {
   for (const level of ["log", "warn", "error"] as const) vi.spyOn(console, level).mockImplementation(capture);
 });
 afterEach(() => {
-  for (const s of [...issued, adminEnv.INGEST_KEY_COLLECTOR_1, adminEnv.SOURCE_MASTER_KEY]) {
+  for (const s of [...issued, TEST_KEYS["collector-1"], TEST_KEYS["facts-1"], adminEnv.SOURCE_MASTER_KEY]) {
     expect(logs.join("\n")).not.toContain(s);
   }
   vi.restoreAllMocks();
@@ -70,38 +73,38 @@ afterAll(() => {
 });
 
 describe("ingest keys", () => {
-  it("lists the env keys without secrets, and they keep verifying (env fallback)", async () => {
+  it("lists the D1 keys without secrets, and they verify", async () => {
     const keys = await keysOf();
     expect(keys.map((k) => [k.keyId, k.source, k.kind, k.store])).toEqual([
-      ["collector-1", "kuma:watch-1", "kuma", "env"],
-      ["facts-1", "facts:app-1", "facts", "env"],
+      ["collector-1", "kuma:watch-1", "kuma", "d1"],
+      ["facts-1", "facts:app-1", "facts", "d1"],
     ]);
     expect(keys[0]).toMatchObject({ current: { lastUsedAt: null }, next: null });
-    expect(JSON.stringify(keys)).not.toContain(adminEnv.INGEST_KEY_COLLECTOR_1);
+    expect(JSON.stringify(keys)).not.toContain(TEST_KEYS["collector-1"]);
 
-    expect((await ingest("kuma", "collector-1", adminEnv.INGEST_KEY_COLLECTOR_1)).status).toBe(202);
-    expect((await ingest("facts", "facts-1", adminEnv.INGEST_KEY_FACTS_1)).status).toBe(202);
+    expect((await ingest("kuma", "collector-1", TEST_KEYS["collector-1"])).status).toBe(202);
+    expect((await ingest("facts", "facts-1", TEST_KEYS["facts-1"])).status).toBe(202);
     expect((await keyOf("collector-1")).current?.lastUsedAt).not.toBeNull();
     expect((await ingest("kuma", "collector-1", "not-the-secret")).status).toBe(401);
   });
 
   it("touches lastUsedAt at most once a minute", async () => {
     const before = (await keyOf("facts-1")).current!.lastUsedAt;
-    expect((await ingest("facts", "facts-1", adminEnv.INGEST_KEY_FACTS_1)).status).toBe(202);
+    expect((await ingest("facts", "facts-1", TEST_KEYS["facts-1"])).status).toBe(202);
     expect((await keyOf("facts-1")).current!.lastUsedAt).toBe(before);
   });
 
-  it("rotates an env key into D1: old accepted until the new one is used, then rejected", async () => {
+  it("rotates a key: old accepted until the new one is used, then rejected", async () => {
     const key = await issue(await api.post("/sites/demo/sources/collector-1/rotate"));
     expect(key).toMatchObject({ keyId: "collector-1", source: "kuma:watch-1", slot: "next" });
     expect(key.secret).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(await keyOf("collector-1")).toMatchObject({
-      store: "env",
+      store: "d1",
       current: {},
       next: { lastUsedAt: null },
     });
 
-    const old = adminEnv.INGEST_KEY_COLLECTOR_1;
+    const old = TEST_KEYS["collector-1"];
     expect((await ingest("kuma", "collector-1", old)).status).toBe(202);
     expect((await ingest("kuma", "collector-1", key.secret)).status).toBe(202);
     expect(logs.some((l) => l.includes('"key_promoted"'))).toBe(true);
@@ -111,6 +114,24 @@ describe("ingest keys", () => {
     expect(rejected.status).toBe(401);
     expect(await json(rejected)).toEqual({ error: "unauthorized", reason: "bad_signature" });
     expect((await ingest("kuma", "collector-1", key.secret)).status).toBe(202);
+  });
+
+  it("answers 401 with a hint for a key left from an env secret until it is rotated", async () => {
+    // What an install upgraded from an INGEST_KEY_* env secret has: a row with no sealed secret.
+    await db.insert(schema.ingestKeys).values({ keyId: "legacy-1", site: "demo", source: "facts:app-1" });
+    expect(await keyOf("legacy-1")).toMatchObject({ store: "d1", current: null, next: null });
+
+    const refused = await ingest("facts", "legacy-1", "the-old-env-secret");
+    expect(refused.status).toBe(401);
+    expect(await json(refused)).toEqual({ error: "unauthorized", reason: "unknown_key" });
+    const line = logs.find((l) => l.includes('"unknown_key"'));
+    expect(JSON.parse(line!)).toMatchObject({ evt: "ingest", status: 401, hint: UNKNOWN_KEY_HINT });
+
+    const key = await issue(await api.post("/sites/demo/sources/legacy-1/rotate"));
+    expect(key).toMatchObject({ keyId: "legacy-1", source: "facts:app-1", slot: "next" });
+    expect((await ingest("facts", "legacy-1", key.secret)).status).toBe(202);
+    expect(await keyOf("legacy-1")).toMatchObject({ current: {}, next: null });
+    expect((await keyOf("legacy-1")).current).not.toBeNull();
   });
 
   it("adds a source to the config as a new revision and issues its key as current", async () => {
@@ -188,8 +209,8 @@ describe("ingest keys", () => {
     const otherMaster = { ...adminEnv, SOURCE_MASTER_KEY: btoa("x".repeat(32)) } as Env;
     expect((await ingest("facts", "extra", extra, otherMaster)).status).toBe(401);
     expect((await ingest("facts", "extra", extra)).status).toBe(202);
-    // Env keys do not need it.
-    expect((await ingest("facts", "facts-1", adminEnv.INGEST_KEY_FACTS_1, noMaster)).status).toBe(202);
+    // Every key is sealed: none verifies without the master key.
+    expect((await ingest("facts", "facts-1", TEST_KEYS["facts-1"], noMaster)).status).toBe(401);
 
     const rotate = await handle(
       "/api/admin/sites/demo/sources/extra/rotate",

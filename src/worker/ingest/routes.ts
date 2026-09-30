@@ -2,7 +2,7 @@
  * `POST /api/ingest/{kuma,facts,events}` as a Hono sub-app (plan section 5). Order of checks:
  *
  * 1. body over 256 KB -> 413 (Content-Length first, then a capped read; nothing is hashed before this)
- * 2. `X-Uptellis-*` headers, timestamp window, key id (D1 keys, then env keys: ./keys.ts), HMAC -> 401
+ * 2. `X-Uptellis-*` headers, timestamp window, key id (sealed in D1: ./keys.ts), HMAC -> 401
  * 3. key id bound to a source this route does not accept -> 403
  * 4. nonce already seen -> 409
  * 5. a request signed with a key's `next` secret promotes it to current (best effort)
@@ -30,23 +30,12 @@ import { accountsOf, principalOf } from "../auth/context";
 import { type IngestBackend, ingestPayload } from "../engine/ingest-service";
 import { getSiteConfig, seedConfigs } from "../engine/sites";
 import { PayloadRejected } from "./issues";
-import {
-  type EnvIngestKeys,
-  INGEST_KEY_BINDINGS,
-  type IngestRoute,
-  type KeyBinding,
-  type KeyBindings,
-  type ResolvedKey,
-  resolveKey,
-  routeAllows,
-} from "./keys";
+import { type IngestRoute, type KeyBinding, type ResolvedKey, routeAllows, UNKNOWN_KEY_HINT } from "./keys";
 
 /** Nonces are kept this long (well past the 120 s window). */
 export const NONCE_TTL_S = 3600;
 
 export interface IngestRouteOptions {
-  /** Env key id -> site and source; defaults to `INGEST_KEY_BINDINGS`. */
-  bindings?: KeyBindings;
   /** Clock for tests. */
   now?: () => Date;
 }
@@ -63,8 +52,8 @@ const keyWarn = (step: string, keyId: string, err: unknown) =>
 const reject = (status: 400 | 401 | 403 | 409 | 413 | 422, error: string, extra: object = {}) =>
   Response.json({ error, ...extra }, { status, headers: { "cache-control": "no-store" } });
 
-/** Builds the store, cache and keys for a request's platform and env ingest keys. */
-export type IngestBackendResolver = (platform: Platform, envKeys: EnvIngestKeys) => IngestBackend;
+/** Builds the store, cache and keys for a request's platform. */
+export type IngestBackendResolver = (platform: Platform) => IngestBackend;
 
 /** Who is posting: the source it reports as, the key id for logs, and how to record the key's use. */
 type Caller =
@@ -81,7 +70,6 @@ async function bySignature(
   deps: IngestBackend,
   body: Uint8Array<ArrayBuffer>,
   now: Date,
-  bindings: KeyBindings,
 ): Promise<Caller> {
   const { store, keys } = deps;
   let resolved: ResolvedKey | null = null;
@@ -92,12 +80,17 @@ async function bySignature(
     body,
     now,
     keysFor: async (keyId) => {
-      resolved = await resolveKey(keyId, c.var.envIngestKeys, bindings, keys);
+      resolved = (await keys?.lookup(keyId)) ?? null;
       return resolved?.candidates.map((k) => k.secret) ?? null;
     },
   });
   if (!verified.ok) {
-    log({ route, status: 401, reason: verified.reason });
+    log({
+      route,
+      status: 401,
+      reason: verified.reason,
+      ...(verified.reason === "unknown_key" ? { hint: UNKNOWN_KEY_HINT } : {}),
+    });
     return { ok: false, res: reject(401, "unauthorized", { reason: verified.reason }) };
   }
   // Set by keysFor, which a verified request always went through.
@@ -173,7 +166,6 @@ async function byApiKey(c: Context<AppEnv>, route: IngestRoute, deps: IngestBack
  * the app, the in-memory one in tests).
  */
 export function ingestRoutes(backend: IngestBackendResolver, options: IngestRouteOptions = {}) {
-  const bindings = options.bindings ?? INGEST_KEY_BINDINGS;
   const clock = options.now ?? (() => new Date());
   const app = new Hono<AppEnv>();
 
@@ -189,11 +181,11 @@ export function ingestRoutes(backend: IngestBackendResolver, options: IngestRout
         return reject(413, "payload_too_large", { maxBytes: MAX_BODY_BYTES });
       }
 
-      const deps = backend(c.var.platform, c.var.envIngestKeys);
+      const deps = backend(c.var.platform);
       const caller =
         bearerToken(c.req.raw) !== null
           ? await byApiKey(c, route, deps)
-          : await bySignature(c, route, deps, body, now, bindings);
+          : await bySignature(c, route, deps, body, now);
       if (!caller.ok) return caller.res;
       const { binding, keyId } = caller;
 

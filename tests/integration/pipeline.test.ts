@@ -11,15 +11,13 @@ import { resetSiteSourceSync } from "@/worker/engine/sites";
 import { loadFixture } from "../fixtures";
 import { factsPayloadFrom, kumaSnapshotFrom } from "../support/fixture-payloads";
 import { testPlatform } from "../support/platform";
-import { json, pipeline, workerEnv } from "../support/worker-pipeline";
+import { json, pipeline } from "../support/worker-pipeline";
 
 const NOW = new Date("2026-09-27T23:58:00Z");
 const { signed, send, get } = pipeline(NOW);
 
 describe("ingest -> D1Store + KvModelCache -> read routes", () => {
   beforeAll(() => {
-    expect(workerEnv.INGEST_KEY_COLLECTOR_1).toBeTruthy();
-    expect(workerEnv.INGEST_KEY_FACTS_1).toBeTruthy();
     resetSiteSourceSync();
   });
 

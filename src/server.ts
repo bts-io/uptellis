@@ -7,13 +7,19 @@
 import { createServerEntry } from "@tanstack/react-start/server-entry";
 import { cloudflareBindings } from "./platform/cloudflare";
 import { scheduled } from "./platform/cloudflare/scheduled";
-import { warnLegacyKeys } from "./worker/auth/legacy";
+import { warnLegacyIngestKeys, warnLegacyKeys } from "./worker/auth/legacy";
 import { handleRequest } from "./worker/serve";
 
 const entry = createServerEntry({
   async fetch(request: Request, ...rest: unknown[]) {
     const [env, ctx] = rest as [Env, ExecutionContext];
-    warnLegacyKeys((name) => (env as unknown as Record<string, string | undefined>)[name]);
+    const vars = env as unknown as Record<string, unknown>;
+    warnLegacyKeys((name) => vars[name] as string | undefined);
+    warnLegacyIngestKeys(
+      Object.keys(vars).filter(
+        (name) => typeof vars[name] === "string" && (vars[name] as string).trim() !== "",
+      ),
+    );
     return handleRequest(request, { bindings: cloudflareBindings(env, ctx) });
   },
 });

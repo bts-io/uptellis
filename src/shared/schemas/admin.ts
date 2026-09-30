@@ -111,8 +111,11 @@ export const SourceKey = z.object({
   keyId: KeyId,
   source: SourceId,
   kind: SourceKind,
-  /** Where the key lives: `d1` (sealed with SOURCE_MASTER_KEY) or `env` (a legacy `INGEST_KEY_*` Worker secret). */
-  store: z.enum(["d1", "env"]),
+  /**
+   * Where the key lives: always `d1` (sealed with SOURCE_MASTER_KEY). Kept for API compatibility; `env`
+   * (the `INGEST_KEY_*` Worker secrets) is gone.
+   */
+  store: z.literal("d1"),
   current: KeyState.nullable(),
   next: KeyState.nullable(),
 });

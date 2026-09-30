@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { can, type Principal } from "@/shared/auth";
 import { type AuthPlatform, authProviders, baseUrl } from "@/worker/auth/instance";
-import { LEGACY_SECRETS, warnLegacyKeys } from "@/worker/auth/legacy";
+import { LEGACY_SECRETS, warnLegacyIngestKeys, warnLegacyKeys } from "@/worker/auth/legacy";
 import { hashToken, randomId, randomToken } from "@/worker/auth/tokens";
 import { isAdminPath, pageGate } from "@/worker/middleware/auth-gate";
 
@@ -89,6 +89,23 @@ describe("legacy key notice", () => {
     expect(line.set).toEqual(["VIEWER_KEY", "ADMIN_KEY"]);
     expect(line.message).toContain("/setup");
     expect(LEGACY_SECRETS).toContain("VIEWER_COOKIE_SECRET");
+  });
+
+  it("names leftover INGEST_KEY_* secrets once, never their values", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const names = ["SITE_DEFAULT", "INGEST_KEY_FACTS_1", "INGEST_KEY_COLLECTOR_1_NEXT", "INGEST_KEY_"];
+    warnLegacyIngestKeys(names);
+    warnLegacyIngestKeys(names);
+    expect(warn).toHaveBeenCalledTimes(1);
+    const line = JSON.parse(String(warn.mock.calls[0]![0])) as {
+      evt: string;
+      set: string[];
+      message: string;
+    };
+    expect(line.evt).toBe("legacy_keys");
+    expect(line.set).toEqual(["INGEST_KEY_COLLECTOR_1_NEXT", "INGEST_KEY_FACTS_1"]);
+    expect(line.message).toContain("no longer read");
+    expect(line.message).toContain("Admin > Sources");
   });
 });
 

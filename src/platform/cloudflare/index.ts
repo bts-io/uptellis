@@ -8,7 +8,6 @@ import { drizzle } from "drizzle-orm/d1";
 import { ChannelSecretName } from "@/shared/notify/schema";
 import type { AppBindings } from "@/worker/app-env";
 import { schema } from "@/worker/db";
-import { envIngestKeys } from "@/worker/ingest/keys";
 import type { KeyValue, Platform, RateLimiter, SecretName, SettingName } from "../types";
 import { RATE_LIMIT_BINDINGS } from "./bindings";
 import { createCloudflareCheckTransport } from "./check-transport";
@@ -69,7 +68,7 @@ export function createCloudflarePlatform(env: Env, ctx: Pick<ExecutionContext, "
   };
 }
 
-/** What the API receives per request on Cloudflare: the platform and the Worker's `INGEST_KEY_*` secrets. */
+/** What the API receives per request on Cloudflare: the platform. */
 export function cloudflareBindings(env: Env, ctx: Pick<ExecutionContext, "waitUntil">): AppBindings {
-  return { platform: createCloudflarePlatform(env, ctx), envIngestKeys: envIngestKeys(env) };
+  return { platform: createCloudflarePlatform(env, ctx) };
 }

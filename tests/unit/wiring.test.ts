@@ -13,12 +13,9 @@ describe("Phase 1 wiring", () => {
     expect(JSON.parse(m![1]!).sort()).toEqual(Object.values(JOBS).sort());
   });
 
-  it("declares the ingest secrets for typecheck, with optional rotation slots", () => {
+  it("declares the master key for typecheck and no env ingest secrets", () => {
     const d = read("src/secrets.d.ts");
-    for (const name of ["INGEST_KEY_COLLECTOR_1: string", "INGEST_KEY_FACTS_1: string"])
-      expect(d).toContain(name);
-    for (const name of ["INGEST_KEY_COLLECTOR_1_NEXT?: string", "INGEST_KEY_FACTS_1_NEXT?: string"]) {
-      expect(d).toContain(name);
-    }
+    expect(d).toContain("SOURCE_MASTER_KEY: string");
+    expect(d).not.toContain("INGEST_KEY_");
   });
 });

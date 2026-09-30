@@ -2,11 +2,8 @@
  * Ingest key ids and what each may post. A key id is bound to exactly one site and one source, so the
  * facts key can never post a Kuma snapshot and the collector key can never post facts.
  *
- * Lookup order (`resolveKey`): keys stored in D1 first (src/worker/engine/key-store.ts: sealed secrets,
- * rotation through the admin API), then the env keys below. Env secrets are Worker secrets named
- * `INGEST_KEY_<ID>` (the key id upper-cased, `-` as `_`), plus an optional `INGEST_KEY_<ID>_NEXT` accepted
- * alongside it during a manual rotation: set `_NEXT`, move the producer to it, then copy it into the
- * current slot and delete `_NEXT`.
+ * Signing keys live only in D1 (src/worker/engine/key-store.ts: sealed secrets, created and rotated in
+ * admin). The `INGEST_KEY_<ID>` env secrets of earlier releases are no longer read.
  */
 import { type SourceId, type SourceKind, sourceKindOf } from "@/shared/model";
 
@@ -14,13 +11,6 @@ export interface KeyBinding {
   site: string;
   source: SourceId;
 }
-
-export type KeyBindings = Readonly<Record<string, KeyBinding>>;
-
-export const INGEST_KEY_BINDINGS: KeyBindings = {
-  "collector-1": { site: "demo", source: "kuma:watch-1" },
-  "facts-1": { site: "demo", source: "facts:app-1" },
-};
 
 export type IngestRoute = "kuma" | "facts" | "events";
 
@@ -34,53 +24,11 @@ export const ROUTE_SOURCE_KINDS: Readonly<Record<IngestRoute, readonly SourceKin
 export const routeAllows = (route: IngestRoute, source: SourceId) =>
   ROUTE_SOURCE_KINDS[route].includes(sourceKindOf(source));
 
-/** `collector-1` -> `INGEST_KEY_COLLECTOR_1`. */
-export const ingestSecretName = (keyId: string) => `INGEST_KEY_${keyId.toUpperCase().replace(/-/g, "_")}`;
-
-/**
- * The `INGEST_KEY_*` secrets of the runtime (Worker secrets, or Docker env vars and files), as the entry
- * points read them. They are not `Platform` secrets: their names depend on the key ids.
- */
-export type EnvIngestKeys = Readonly<Record<string, string>>;
-
-const INGEST_SECRET_RE = /^INGEST_KEY_[A-Z0-9_]+$/;
-
-/** The `INGEST_KEY_*` string values of an env object (everything else is left out). */
-export function envIngestKeys(env: object): EnvIngestKeys {
-  return Object.fromEntries(
-    Object.entries(env).filter(
-      (e): e is [string, string] => INGEST_SECRET_RE.test(e[0]) && typeof e[1] === "string",
-    ),
-  );
-}
-
-const envValue = (v: unknown) => (typeof v === "string" && v.trim().length > 0 ? v.trim() : null);
-
-/**
- * The env secrets of a key id: `INGEST_KEY_<ID>` and `INGEST_KEY_<ID>_NEXT`, empty values as unset. Each is
- * trimmed, as every producer trims its copy (the collector's key file, push-facts.sh's env line), so a
- * secret stored with a trailing newline (`wrangler secret put < file`) still verifies. The HMAC key is the
- * UTF-8 bytes of the trimmed text on both sides.
- */
-export function envSecrets(
-  env: EnvIngestKeys,
-  keyId: string,
-): { current: string | null; next: string | null } {
-  const name = ingestSecretName(keyId);
-  return { current: envValue(env[name]), next: envValue(env[`${name}_NEXT`]) };
-}
-
-/** The env secrets for a key id, current first then next. */
-export function secretsFor(env: EnvIngestKeys, keyId: string): string[] {
-  const { current, next } = envSecrets(env, keyId);
-  return [current, next].filter((v): v is string => v !== null);
-}
-
-/** One secret ingest may verify against: `current` (sealed in D1 or env) or `next` (sealed in D1). */
+/** One secret ingest may verify against: `current` or `next`, both sealed in D1. */
 export interface KeyCandidate {
   slot: "current" | "next";
   secret: string;
-  /** The sealed value of a D1 `next` slot, which promotion matches on. */
+  /** The sealed value of a `next` slot, which promotion matches on. */
   sealedNext?: string;
 }
 
@@ -90,23 +38,19 @@ export interface ResolvedKey {
   candidates: KeyCandidate[];
 }
 
-/** Keys stored in D1 (`KeyStore`); absent for the in-memory test backends. */
+/** The ingest keys signed requests are verified with (`KeyStore` in D1, an in-memory one in tests). */
 export interface StoredKeys {
+  /** The key id's binding and secrets, or null when there is no such key. */
   lookup(keyId: string): Promise<ResolvedKey | null>;
+  /** Makes `next` the current key, if it is still the one that verified. */
+  promote(keyId: string, sealedNext: string): Promise<void>;
+  /** Records a successful ingest. */
+  touch(keyId: string, binding: KeyBinding, nowMs: number): Promise<void>;
 }
 
-/** Resolves a key id: its D1 row if there is one, else its env binding and secrets, else null. */
-export async function resolveKey(
-  keyId: string,
-  env: EnvIngestKeys,
-  bindings: KeyBindings,
-  stored?: StoredKeys,
-): Promise<ResolvedKey | null> {
-  const fromD1 = await stored?.lookup(keyId);
-  if (fromD1) return fromD1;
-  if (!Object.hasOwn(bindings, keyId)) return null;
-  return {
-    binding: bindings[keyId]!,
-    candidates: secretsFor(env, keyId).map((secret) => ({ slot: "current", secret })),
-  };
-}
+/**
+ * Logged with every `unknown_key` 401: the signing key id has no usable secret in D1. An install that still
+ * sets `INGEST_KEY_*` env secrets lands here, since those are no longer read.
+ */
+export const UNKNOWN_KEY_HINT =
+  "no ingest key with a usable secret for this key id: create or rotate it under Admin > Sources (INGEST_KEY_* env secrets are no longer read)";

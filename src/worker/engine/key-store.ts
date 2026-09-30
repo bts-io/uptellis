@@ -1,11 +1,11 @@
 /**
- * Ingest keys kept in D1 (`ingest_keys`), sealed under `SOURCE_MASTER_KEY` (./seal.ts), next to the legacy
- * `INGEST_KEY_*` Worker secrets (src/worker/ingest/keys.ts), which keep working untouched.
+ * Ingest keys kept in D1 (`ingest_keys`), sealed under `SOURCE_MASTER_KEY` (./seal.ts): the only signing
+ * keys there are (the `INGEST_KEY_*` env secrets of earlier releases are no longer read).
  *
- * A row's `current` is either sealed in D1 or, while `currentSealed` is null, the env secret of the same
- * key id. Rotation writes a fresh secret into `next` (returned once); the first ingest that verifies with
- * `next` promotes it (current := next, next := null), which also retires an env secret for good. Ingest
- * touches `lastUsedAt` at most once a minute per key (an env key gets a row on first use to hold it).
+ * Rotation writes a fresh secret into `next` (returned once); the first ingest that verifies with `next`
+ * promotes it (current := next, next := null). A row whose `currentSealed` is null (left from an env key
+ * of an earlier release) has no current secret: it verifies nothing until a rotation's `next` is used.
+ * Ingest touches `lastUsedAt` at most once a minute per key.
  */
 import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
@@ -14,17 +14,7 @@ import { type SourceId, sourceKindOf } from "@/shared/model";
 import type { IssuedKey, SourceKey } from "@/shared/schemas/admin";
 import { type Db, schema } from "@/worker/db";
 import { toIso } from "@/worker/db/util";
-import {
-  type EnvIngestKeys,
-  envSecrets,
-  INGEST_KEY_BINDINGS,
-  type KeyBinding,
-  type KeyBindings,
-  type KeyCandidate,
-  type ResolvedKey,
-  type StoredKeys,
-  secretsFor,
-} from "../ingest/keys";
+import type { KeyBinding, KeyCandidate, ResolvedKey, StoredKeys } from "../ingest/keys";
 import { randomSecret, seal, sealingKey, unseal } from "./seal";
 
 const { ingestKeys } = schema;
@@ -56,15 +46,8 @@ export class KeyStore implements StoredKeys {
   private readonly db: Db;
   private key: Promise<CryptoKey> | null = null;
 
-  /**
-   * `platform` supplies the database and `SOURCE_MASTER_KEY`, `env` the `INGEST_KEY_*` secrets (see
-   * `envIngestKeys`), `bindings` the env key ids (the same default as the ingest routes).
-   */
-  constructor(
-    private readonly platform: Pick<Platform, "db" | "batch" | "secret">,
-    private readonly env: EnvIngestKeys,
-    private readonly bindings: KeyBindings = INGEST_KEY_BINDINGS,
-  ) {
+  /** `platform` supplies the database and `SOURCE_MASTER_KEY`. */
+  constructor(private readonly platform: Pick<Platform, "db" | "batch" | "secret">) {
     this.db = platform.db;
   }
 
@@ -84,14 +67,14 @@ export class KeyStore implements StoredKeys {
     return row;
   }
 
-  /** True when the key id is taken, in D1 or as an env binding. */
+  /** True when the key id is taken. */
   async exists(keyId: string): Promise<boolean> {
-    return Object.hasOwn(this.bindings, keyId) || (await this.row(keyId)) !== undefined;
+    return (await this.row(keyId)) !== undefined;
   }
 
   /**
    * The D1 row for a key id resolved to candidates, or null when D1 has none. A sealed slot that cannot be
-   * opened (master key unset or changed) is skipped with a warning; an env-backed current comes from env.
+   * opened (master key unset or changed) is skipped with a warning, as is an empty `currentSealed`.
    */
   async lookup(keyId: string): Promise<ResolvedKey | null> {
     const row = await this.row(keyId);
@@ -108,8 +91,6 @@ export class KeyStore implements StoredKeys {
     if (row.currentSealed) {
       const secret = await open(row.currentSealed);
       if (secret) candidates.push({ slot: "current", secret });
-    } else {
-      for (const secret of secretsFor(this.env, keyId)) candidates.push({ slot: "current", secret });
     }
     if (row.nextSealed) {
       const secret = await open(row.nextSealed);
@@ -146,60 +127,35 @@ export class KeyStore implements StoredKeys {
       });
   }
 
-  /**
-   * The site's keys: every D1 row plus the env bindings, which get a row (holding `createdAt` and
-   * `lastUsedAt`, no secret) the first time they are listed. No secrets, sealed or not, leave this method.
-   */
-  async list(site: string, nowMs: number): Promise<SourceKey[]> {
-    const envIds = Object.keys(this.bindings).filter((id) => this.bindings[id]!.site === site);
-    if (envIds.length > 0) {
-      await this.db
-        .insert(ingestKeys)
-        .values(
-          envIds.map((keyId) => ({ keyId, site, source: this.bindings[keyId]!.source, createdAt: nowMs })),
-        )
-        .onConflictDoNothing();
-    }
+  /** The site's keys. No secrets, sealed or not, leave this method. */
+  async list(site: string): Promise<SourceKey[]> {
     const rows = await this.db
       .select()
       .from(ingestKeys)
       .where(eq(ingestKeys.site, site))
       .orderBy(ingestKeys.createdAt, ingestKeys.keyId);
-    return rows.map((r) => {
-      const env = envSecrets(this.env, r.keyId);
-      return {
-        keyId: r.keyId,
-        source: r.source as SourceId,
-        kind: sourceKindOf(r.source),
-        store: r.currentSealed ? "d1" : "env",
-        current: r.currentSealed
-          ? state(r.currentCreatedAt ?? r.createdAt, r.lastUsedAt)
-          : env.current
-            ? state(r.createdAt, r.lastUsedAt)
-            : null,
-        next: r.nextSealed
-          ? state(r.nextCreatedAt, null)
-          : !r.currentSealed && env.next
-            ? state(r.createdAt, null)
-            : null,
-      } satisfies SourceKey;
-    });
+    return rows.map(
+      (r) =>
+        ({
+          keyId: r.keyId,
+          source: r.source as SourceId,
+          kind: sourceKindOf(r.source),
+          store: "d1",
+          current: r.currentSealed ? state(r.currentCreatedAt ?? r.createdAt, r.lastUsedAt) : null,
+          next: r.nextSealed ? state(r.nextCreatedAt, null) : null,
+        }) satisfies SourceKey,
+    );
   }
 
-  /** The key id's binding for `site` (D1 row or env binding), or null when it is unknown there. */
+  /** The key id's binding for `site`, or null when it is unknown there. */
   private async bindingFor(site: string, keyId: string): Promise<KeyBinding | null> {
     const row = await this.row(keyId);
-    const binding = row
-      ? { site: row.site, source: row.source as SourceId }
-      : Object.hasOwn(this.bindings, keyId)
-        ? this.bindings[keyId]!
-        : null;
-    return binding?.site === site ? binding : null;
+    return row?.site === site ? { site: row.site, source: row.source as SourceId } : null;
   }
 
   /**
-   * Issues a fresh secret into `next` (replacing an unused one) and returns it once. An env key is moved
-   * into D1 by this: its env secret stays current until the new one is first used. Null for a key id the
+   * Issues a fresh secret into `next` (replacing an unused one) and returns it once. A row without a current
+   * secret (an env key of an earlier release) gets its first working secret this way. Null for a key id the
    * site does not have.
    */
   async rotate(site: string, keyId: string, nowMs: number): Promise<IssuedKey | null> {

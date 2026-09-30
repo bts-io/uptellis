@@ -11,7 +11,8 @@ import { appBackend } from "@/worker/index";
 import { ingestRoutes } from "@/worker/ingest/routes";
 import { StaleNotifier } from "@/worker/notify";
 import type { DiscordCard } from "@/worker/notify/card";
-import { fetchWith, testPlatform, workerEnv } from "../support/platform";
+import { fetchWith, testPlatform } from "../support/platform";
+import { TEST_KEYS } from "../support/signing";
 import { adminCookie, adminEnv, handle } from "./admin-app";
 import { beat, delta, service } from "./storage-helpers";
 
@@ -201,7 +202,7 @@ describe("recovery at ingest", () => {
     });
     const path = "/api/ingest/kuma";
     const headers = await signRequest(
-      workerEnv.INGEST_KEY_COLLECTOR_1,
+      TEST_KEYS["collector-1"],
       "collector-1",
       "POST",
       path,

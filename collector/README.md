@@ -112,7 +112,7 @@ docker build -f collector/Dockerfile -t uptellis-collector .
 ```
 /etc/uptellis/collector.env              from collector.env.example (HOST_ALIASES, INGEST_URL, KEY_ID, CF_ACCESS_CLIENT_ID)
 /etc/uptellis/kuma_password              Kuma admin password
-/etc/uptellis/ingest_key                 same value as the Worker secret INGEST_KEY_COLLECTOR_1
+/etc/uptellis/ingest_key                 the secret admin issued for KEY_ID (Sources tab)
 /etc/uptellis/cf_access_client_secret    Access service token status-collector-1 secret
 ```
 

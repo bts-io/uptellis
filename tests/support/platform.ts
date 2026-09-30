@@ -8,7 +8,6 @@ import type { Hono } from "hono";
 import { createCloudflarePlatform } from "@/platform/cloudflare";
 import type { Platform } from "@/platform/types";
 import type { AppBindings, AppEnv } from "@/worker/app-env";
-import { envIngestKeys } from "@/worker/ingest/keys";
 
 export const workerEnv = env as unknown as Env;
 
@@ -33,7 +32,7 @@ export function testPlatform(extra: Partial<Env> = {}): TestPlatform {
 
 /** The API bindings for one request, as src/platform/cloudflare builds them. */
 export function testBindings(extra: Partial<Env> = {}): AppBindings & { platform: TestPlatform } {
-  return { platform: testPlatform(extra), envIngestKeys: envIngestKeys({ ...workerEnv, ...extra }) };
+  return { platform: testPlatform(extra) };
 }
 
 /** `app.fetch` with fresh bindings; resolves after the request's background work settled. */

@@ -7,7 +7,6 @@ import {
   toBase64Url,
   unseal,
 } from "../../src/worker/engine/seal";
-import { envSecrets, INGEST_KEY_BINDINGS, resolveKey, type StoredKeys } from "../../src/worker/ingest/keys";
 
 const master = () => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))));
 
@@ -51,33 +50,5 @@ describe("sealing", () => {
     expect(s).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(s).not.toBe(randomSecret());
     expect(toBase64Url(new Uint8Array([251, 255]))).toBe("-_8");
-  });
-});
-
-describe("resolveKey", () => {
-  const env = { INGEST_KEY_COLLECTOR_1: "env-current\n", INGEST_KEY_COLLECTOR_1_NEXT: "env-next" };
-
-  it("uses the env binding and secrets when D1 has no row", async () => {
-    expect(envSecrets(env, "collector-1")).toEqual({ current: "env-current", next: "env-next" });
-    const none: StoredKeys = { lookup: async () => null };
-    for (const stored of [undefined, none]) {
-      expect(await resolveKey("collector-1", env, INGEST_KEY_BINDINGS, stored)).toEqual({
-        binding: INGEST_KEY_BINDINGS["collector-1"],
-        candidates: [
-          { slot: "current", secret: "env-current" },
-          { slot: "current", secret: "env-next" },
-        ],
-      });
-    }
-    expect(await resolveKey("nope", env, INGEST_KEY_BINDINGS, none)).toBeNull();
-  });
-
-  it("prefers the D1 row over the env binding", async () => {
-    const row = {
-      binding: { site: "demo", source: "kuma:watch-1" as const },
-      candidates: [{ slot: "next" as const, secret: "d1-next", sealedNext: "v1.x.y" }],
-    };
-    const stored: StoredKeys = { lookup: async (id) => (id === "collector-1" ? row : null) };
-    expect(await resolveKey("collector-1", env, INGEST_KEY_BINDINGS, stored)).toBe(row);
   });
 });

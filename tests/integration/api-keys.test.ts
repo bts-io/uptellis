@@ -13,7 +13,8 @@ import { resetConfigCache } from "@/worker/engine/config-store";
 import { freshFixture } from "../ssr/seed";
 import { factsPayloadFrom, kumaSnapshotFrom } from "../support/fixture-payloads";
 import { testPlatform } from "../support/platform";
-import { admin, adminCookie, adminEnv, handle, json, send, sessionCookie, testEmail } from "./admin-app";
+import { TEST_KEYS } from "../support/signing";
+import { admin, adminCookie, handle, json, send, sessionCookie, testEmail } from "./admin-app";
 
 const { db } = testPlatform();
 let api: ReturnType<typeof admin>;
@@ -148,7 +149,7 @@ describe("ingest with an API key", () => {
     const body = factsBody();
     const path = "/api/ingest/facts";
     const headers = await signRequest(
-      adminEnv.INGEST_KEY_FACTS_1,
+      TEST_KEYS["facts-1"],
       "facts-1",
       "POST",
       path,

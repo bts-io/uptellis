@@ -119,7 +119,7 @@ async function readText(c: Ctx): Promise<string | null> {
 export function adminRoutes() {
   const app = new Hono<AppEnv>();
   const configs = (c: Ctx) => new D1ConfigStore(c.var.platform);
-  const keys = (c: Ctx) => new KeyStore(c.var.platform, c.var.envIngestKeys);
+  const keys = (c: Ctx) => new KeyStore(c.var.platform);
 
   app.use("*", async (c, next) => {
     if (!SAFE_METHODS.has(c.req.method) && !isSameOrigin(c.req.raw)) {
@@ -258,7 +258,7 @@ export function adminRoutes() {
   app.get("/sites/:site/sources", async (c) => {
     const slug = c.req.param("site");
     if (!(await configs(c).load(slug))) return notFound(c);
-    return c.json({ keys: await keys(c).list(slug, Date.now()) } satisfies SourceKeyList);
+    return c.json({ keys: await keys(c).list(slug) } satisfies SourceKeyList);
   });
 
   app.post("/sites/:site/sources", async (c) => {
@@ -278,7 +278,7 @@ export function adminRoutes() {
     }
     const ks = keys(c);
     if (await ks.exists(keyId)) return fail(c, 409, "conflict", "Key id is taken");
-    if ((await ks.list(slug, Date.now())).some((k) => k.source === source)) {
+    if ((await ks.list(slug)).some((k) => k.source === source)) {
       return fail(c, 409, "conflict", "Source already has a key; rotate it instead");
     }
 

@@ -37,7 +37,7 @@ flowchart TB
   serve --> api["Hono API: c.var.platform"]
 ```
 
-- **Requests.** Each entry point builds `AppBindings` (the platform and the runtime's `INGEST_KEY_*` secrets) and hands the request to `handleRequest` in `src/worker/serve.ts`, which passes the bindings to `app.fetch`; `platformContext` puts them on the Hono context, so every handler reads `c.var.platform`.
+- **Requests.** Each entry point builds `AppBindings` (the platform) and hands the request to `handleRequest` in `src/worker/serve.ts`, which passes the bindings to `app.fetch`; `platformContext` puts them on the Hono context, so every handler reads `c.var.platform`.
 - **Batches.** There are no interactive transactions anywhere: several rows are written as a unit with `platform.batch`, a D1 batch on Cloudflare and one SQLite transaction in Docker. Queries are built once with Drizzle and run on either driver; code that needs a write's row count reads it with `changesOf` (`src/worker/db/util.ts`), which understands both drivers' results.
 - **Jobs.** `JOBS` names the three jobs and their cron expressions. On Cloudflare the `scheduled` handler (`src/platform/cloudflare/scheduled.ts`) maps each Cron Trigger to its job, so the triggers in `wrangler.jsonc` must be exactly the `JOBS` expressions. In Docker the scheduler (`src/platform/docker/scheduler.ts`) wakes at every UTC minute and starts the due jobs. Both run `runScheduledJob` (`src/worker/scheduled.ts`).
 - **Migrations.** One `migrations/` folder serves both: wrangler applies it to D1 on deploy, the Docker server applies it to SQLite at startup (Drizzle's migrator).
@@ -111,7 +111,7 @@ sequenceDiagram
   participant K as KV
   P->>W: POST /api/ingest/facts (signed headers, JSON body)
   W->>W: body at most 256 KB
-  W->>D: look up key id (sealed key, else env secret)
+  W->>D: look up key id (sealed key)
   W->>W: HMAC-SHA256 over v1, key id, ts, nonce, method, path, body hash
   W->>W: key id bound to this site and a source this route accepts
   W->>D: claim nonce (single use for 1 hour)
@@ -214,7 +214,7 @@ sequenceDiagram
   P--xW: a request with the old secret is now rejected
 ```
 
-Keys can also come from Worker secrets named `INGEST_KEY_<ID>` (bound to a site and source in `src/worker/ingest/keys.ts`); the first rotation of such a key moves it into D1.
+D1 is the only place keys come from: the `INGEST_KEY_<ID>` Worker secrets of earlier releases are no longer read. A row left from one (no sealed current secret) verifies nothing until a rotation's new secret is first used.
 
 ### Account pages
 

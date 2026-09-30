@@ -2,44 +2,50 @@ import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MAX_BODY_BYTES } from "@/shared/signing";
 import { type AppEnv, platformContext } from "@/worker/app-env";
-import { INGEST_KEY_BINDINGS } from "@/worker/ingest/keys";
+import { UNKNOWN_KEY_HINT } from "@/worker/ingest/keys";
 import { ingestRoutes } from "@/worker/ingest/routes";
 import { loadFixture } from "../fixtures";
 import { factsPayloadFrom, kumaSnapshotFrom } from "../support/fixture-payloads";
+import { type MemoryKey, memoryKeys, TEST_KEY_BINDINGS } from "../support/ingest-keys";
 import { memoryBackend } from "../support/memory-store";
 import { testPlatform } from "../support/platform";
-import { nextNonce, signedPost, TEST_ENV, TEST_KEYS } from "../support/signing";
+import { nextNonce, signedPost, TEST_KEYS } from "../support/signing";
 
 // Address samples are built at runtime (RFC 5737 documentation range) so this file passes the repo scan.
 const DOC_ADDR = [198, 51, 100, 7].join(".");
 const NOW = new Date("2026-09-27T23:58:00Z");
 const BASE = "https://worker.example.net/api/ingest";
 
-function setup(opts: { env?: Record<string, string> } = {}) {
+/** The demo keys plus `ci` (webhook:ci), each with its `TEST_KEYS` secret as current. */
+const defaultKeys = (): Record<string, MemoryKey> => ({
+  "collector-1": { ...TEST_KEY_BINDINGS["collector-1"], current: TEST_KEYS["collector-1"] },
+  "facts-1": { ...TEST_KEY_BINDINGS["facts-1"], current: TEST_KEYS["facts-1"] },
+  ci: { site: "demo", source: "webhook:ci", current: TEST_KEYS.ci },
+});
+
+function setup(opts: { keys?: Record<string, MemoryKey> } = {}) {
   const backend = memoryBackend([
     { id: "kuma:watch-1", site: "demo", expectedIntervalS: 60 },
     { id: "facts:app-1", site: "demo", expectedIntervalS: 900 },
     { id: "webhook:ci", site: "demo", expectedIntervalS: 300 },
   ]);
+  const keys = memoryKeys({ ...defaultKeys(), ...opts.keys });
   let now = NOW;
   const app = new Hono<AppEnv>().use(platformContext);
   // The same mount the Worker uses; the backend resolver ignores the platform here.
   app.route(
     "/api/ingest",
-    ingestRoutes(() => backend, {
-      now: () => now,
-      bindings: { ...INGEST_KEY_BINDINGS, ci: { site: "demo", source: "webhook:ci" } },
-    }),
+    ingestRoutes(() => ({ ...backend, keys }), { now: () => now }),
   );
-  const envIngestKeys = { ...TEST_ENV, ...opts.env };
   const send = (route: string, init: RequestInit) =>
-    app.request(`${BASE}/${route}`, init, { platform: testPlatform(), envIngestKeys });
+    app.request(`${BASE}/${route}`, init, { platform: testPlatform() });
   const post = async (route: string, payload: unknown, sign: Parameters<typeof signedPost>[2] = {}) => {
     const body = typeof payload === "string" ? payload : JSON.stringify(payload);
     return send(route, await signedPost(`/api/ingest/${route}`, body, { now, ...sign }));
   };
   return {
     ...backend,
+    keys,
     send,
     post,
     setNow: (d: Date) => {
@@ -138,19 +144,34 @@ describe("POST /api/ingest/kuma", () => {
       expect(res.status, reason).toBe(401);
       expect(await jsonOf(res)).toEqual({ error: "unauthorized", reason });
     }
-    const unset = setup({ env: { INGEST_KEY_COLLECTOR_1: "" } });
+    // A key id whose row has no current secret (left from an env key of an earlier release) verifies nothing.
+    const unset = setup({ keys: { "collector-1": { ...TEST_KEY_BINDINGS["collector-1"] } } });
     expect(await (await unset.post("kuma", p)).json()).toEqual({
       error: "unauthorized",
       reason: "unknown_key",
     });
+    const hinted = logs.filter((l) => l.includes('"unknown_key"'));
+    expect(hinted.length).toBeGreaterThan(0);
+    for (const l of hinted) expect(JSON.parse(l)).toMatchObject({ status: 401, hint: UNKNOWN_KEY_HINT });
     expect(t.store.deltas).toHaveLength(0);
     expect(t.store.nonces.size).toBe(0);
   });
 
-  it("accepts the _NEXT secret during rotation", async () => {
-    const t = setup({ env: { INGEST_KEY_COLLECTOR_1_NEXT: TEST_KEYS.collectorNext } });
+  it("accepts the next secret during rotation and promotes it", async () => {
+    const t = setup({
+      keys: {
+        "collector-1": {
+          ...TEST_KEY_BINDINGS["collector-1"],
+          current: TEST_KEYS["collector-1"],
+          next: TEST_KEYS.collectorNext,
+        },
+      },
+    });
     expect((await t.post("kuma", kumaPayload(), { secret: TEST_KEYS.collectorNext })).status).toBe(202);
     expect(logs.join("\n")).toContain('"rotatedKey":true');
+    expect(t.keys.promoted).toEqual(["collector-1"]);
+    const old = await t.post("kuma", kumaPayload(), { secret: TEST_KEYS["collector-1"] });
+    expect(await jsonOf(old)).toEqual({ error: "unauthorized", reason: "bad_signature" });
   });
 
   it("answers 403 when a key posts to another source's route", async () => {

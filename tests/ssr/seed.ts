@@ -3,10 +3,11 @@
  * to `/api/ingest/*` through `SELF`. The Worker's clock is real, so every timestamp in the fixture is moved
  * forward by the same amount to end at the current time (the data is fresh, relative times are kept).
  */
-import { env, SELF } from "cloudflare:test";
+import { SELF } from "cloudflare:test";
 import { randomNonce, signRequest } from "@/shared/signing";
 import { type FixtureModel, type FixtureName, loadFixture } from "../fixtures";
 import { factsPayloadFrom, kumaSnapshotFrom } from "../support/fixture-payloads";
+import { TEST_KEYS } from "../support/signing";
 
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
 const iso = (ms: number) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z");
@@ -25,8 +26,6 @@ export function freshFixture(name: FixtureName): FixtureModel {
   return shift(fx, Date.now() - Date.parse(fx.now));
 }
 
-const worker = env as unknown as Env;
-
 async function post(
   route: "kuma" | "facts",
   keyId: "collector-1" | "facts-1",
@@ -34,8 +33,7 @@ async function post(
 ): Promise<void> {
   const path = `/api/ingest/${route}`;
   const body = JSON.stringify(payload);
-  const secret = keyId === "collector-1" ? worker.INGEST_KEY_COLLECTOR_1 : worker.INGEST_KEY_FACTS_1;
-  const headers = await signRequest(secret, keyId, "POST", path, body, new Date(), randomNonce());
+  const headers = await signRequest(TEST_KEYS[keyId], keyId, "POST", path, body, new Date(), randomNonce());
   const res = await SELF.fetch(`https://example.com${path}`, {
     method: "POST",
     body,

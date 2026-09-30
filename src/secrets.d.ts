@@ -19,17 +19,9 @@ interface Env {
   GOOGLE_CLIENT_SECRET?: string;
   /**
    * 32 random bytes, base64: the master key that seals ingest secrets kept in D1 (AES-GCM, key derived with
-   * HKDF). Required to create or rotate source keys; env-backed `INGEST_KEY_*` keys work without it.
+   * HKDF). Required for signed ingest: every ingest key is sealed with it.
    */
   SOURCE_MASTER_KEY: string;
-  /** Ingest HMAC secret for key id `collector-1` (Kuma collector on watch-1, source kuma:watch-1). */
-  INGEST_KEY_COLLECTOR_1: string;
-  /** Ingest HMAC secret for key id `facts-1` (the facts pusher on app-1, source facts:app-1). */
-  INGEST_KEY_FACTS_1: string;
-  /** Rotation slot accepted alongside INGEST_KEY_COLLECTOR_1 while the producer moves to it. */
-  INGEST_KEY_COLLECTOR_1_NEXT?: string;
-  /** Rotation slot accepted alongside INGEST_KEY_FACTS_1 while the producer moves to it. */
-  INGEST_KEY_FACTS_1_NEXT?: string;
   /**
    * The historical Discord channel webhook URL (src/shared/notify `channelsOf`): stale and recovered cards
    * always, down and up with `notify.discord`. Other channels use `NOTIFY_*` secrets. Unset means no

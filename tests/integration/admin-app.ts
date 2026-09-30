@@ -1,8 +1,8 @@
 /**
  * The Worker as src/worker/serve.ts serves `/api/*` in production: the Hono app from src/worker/index.ts
  * (it resolves the principal and enforces permissions itself) over the Cloudflare platform (migrated D1 and
- * KV). The env adds a master key (random per run) to the test bindings of vitest.config.ts. `adminCookie`
- * signs in as the owner, creating it on first use.
+ * KV), with the test bindings of vitest.config.ts (its master key seals the seeded test ingest keys).
+ * `adminCookie` signs in as the owner, creating it on first use.
  */
 import { SESSION_COOKIE } from "@/worker/auth/cookies";
 import { toBase64Url } from "@/worker/engine/seal";
@@ -11,12 +11,7 @@ import { fetchWith, workerEnv } from "../support/platform";
 
 export const ORIGIN = "https://worker.example.net";
 
-const masterKey = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))));
-
-export const adminEnv = {
-  ...workerEnv,
-  SOURCE_MASTER_KEY: masterKey,
-} as Env;
+export const adminEnv = { ...workerEnv } as Env;
 
 /** A test address at the reserved example domain (joined here: the literal scan rejects written emails). */
 export const testEmail = (local: string) => [local, "example.com"].join("@");

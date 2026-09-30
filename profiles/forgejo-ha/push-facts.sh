@@ -328,7 +328,7 @@ canonical=$(printf 'v1\n%s\n%s\n%s\nPOST\n%s\n%s' "$KEY_ID" "$ts" "$nonce" "$ING
 # HMAC in python3, which reads INGEST_KEY from the mode-600 env file itself: the key is never on a command
 # line (an openssl HMAC key option would show it in the process list) and never in the environment. The file
 # is parsed exactly like env_get (last INGEST_KEY= line wins, one pair of surrounding quotes dropped), so the
-# key bytes are the same UTF-8 bytes (surrounding whitespace trimmed) the Worker's INGEST_KEY_<ID> holds.
+# key bytes are the same UTF-8 bytes (surrounding whitespace trimmed) as the secret admin issued for KEY_ID.
 signature=$(printf '%s' "$canonical" | python3 -c '
 import hashlib, hmac, sys
 key = None
@@ -341,7 +341,7 @@ if not key:
 for q in (b"\"", b"\x27"):
     if len(key) >= 2 and key[:1] == q and key[-1:] == q:
         key = key[1:-1]
-key = key.strip()  # the Worker trims INGEST_KEY_<ID> and the collector its key file the same way
+key = key.strip()  # issued secrets have no surrounding whitespace; the collector trims its key file the same way
 if not key:
     sys.exit(1)
 print(hmac.new(key, sys.stdin.buffer.read(), hashlib.sha256).hexdigest())

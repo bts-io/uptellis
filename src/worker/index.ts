@@ -11,7 +11,6 @@ import { D1ConfigStore } from "./engine/config-store";
 import { D1Store } from "./engine/d1-store";
 import { KeyStore } from "./engine/key-store";
 import { KvModelCache } from "./engine/kv-cache";
-import type { EnvIngestKeys } from "./ingest/keys";
 import { ingestRoutes } from "./ingest/routes";
 import { SqlRunnerStates } from "./monitors/runner-state";
 import { incidentNotifier } from "./notify";
@@ -44,13 +43,13 @@ app.get("/api/health", (c) =>
  * (`latest:<site>`, `config:<site>`) the cache; all are cheap wrappers built per request. The notifier
  * (ingest only) sends in the platform's `waitUntil`.
  */
-export const appBackend = (platform: Platform, envKeys: EnvIngestKeys = {}) => {
+export const appBackend = (platform: Platform) => {
   const configs = new D1ConfigStore(platform);
   return {
     store: new D1Store(platform),
     cache: new KvModelCache(platform.kv),
     configs,
-    keys: new KeyStore(platform, envKeys),
+    keys: new KeyStore(platform),
     notifier: incidentNotifier(platform, configs),
     runtime: platform.runtime,
   };
