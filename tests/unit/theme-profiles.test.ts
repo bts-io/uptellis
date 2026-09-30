@@ -51,7 +51,11 @@ describe("themes B and C with summary parts, slots and prefixes", () => {
   const v = viewWith(() => {});
   const text = (html: string) => html.replace(/<[^>]+>/g, "").replace(/&amp;/g, "&");
   const literal = (t: string) => t.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
-  const shown = v.factGroups.filter((g) => !v.highlights.some((h) => h.row.group === g.id));
+  // A group the view marks `inTopology` is drawn by the topology (B and C draw the pair), so it counts as
+  // shown when the page carries the topology's own values; every other group needs its summary line.
+  const listed = v.factGroups.filter((g) => !v.highlights.some((h) => h.row.group === g.id));
+  const shown = listed.filter((g) => !g.inTopology);
+  const carried = listed.filter((g) => g.inTopology);
 
   it.each(["b-control-room", "c-session"])(
     "%s renders every group's coloured parts and every highlight",
@@ -70,9 +74,43 @@ describe("themes B and C with summary parts, slots and prefixes", () => {
     },
   );
 
-  it("theme B still lists every row of every group", () => {
+  it.each(["b-control-room", "c-session"])("%s draws the groups the topology carries in its pair", (id) => {
+    expect(carried.map((g) => g.id)).toEqual(["replication", "fence"]);
+    const html = text(render(id, v));
+    const topo = v.topology!;
+    const edge = topo.edges.find((e) => e.kind === "replication")!;
+    expect(edge.detail).toBe("lag 0 s");
+    expect(html).toContain(edge.detail!);
+    for (const n of topo.nodes.filter((x) => x.id === edge.from || x.id === edge.to))
+      for (const d of n.details) expect(html, `${n.id} ${d.label}`).toContain(d.value);
+    expect(html.toLowerCase()).toContain(topo.fence!.decision);
+    expect(html).toContain(topo.fence!.reason!);
+    expect(html).toContain(topo.fence!.detail!);
+  });
+
+  it("theme B still lists every row of every group it tiles", () => {
     const html = text(render("b-control-room", v));
     for (const r of shown.flatMap((g) => g.rows)) expect(html, `${r.group}.${r.key}`).toContain(r.display);
+  });
+});
+
+describe("themes on a site without a topology", () => {
+  const v = viewWith((i) => {
+    i.config = { ...i.config, topology: undefined };
+  });
+  const text = (html: string) => html.replace(/<[^>]+>/g, "").replace(/&amp;/g, "&");
+
+  it.each(Object.keys(THEMES))("%s lists the groups a topology would carry", (id) => {
+    expect(v.factGroups.some((g) => g.inTopology)).toBe(false);
+    const html = text(render(id, v)).toLowerCase();
+    for (const g of v.factGroups.filter((x) => x.id === "replication" || x.id === "fence"))
+      expect(html, g.id).toContain(g.title.toLowerCase());
+  });
+
+  it.each(["b-control-room", "c-session"])("%s shows their summary lines", (id) => {
+    const html = text(render(id, v));
+    for (const g of v.factGroups.filter((x) => x.id === "replication" || x.id === "fence"))
+      expect(html, g.id).toContain(g.summaryParts.map((p) => p.text).join(" "));
   });
 });
 

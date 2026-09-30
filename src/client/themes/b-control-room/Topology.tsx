@@ -5,6 +5,7 @@ import {
   allServices,
   cx,
   DASH,
+  drawsPair,
   hhmm,
   isMeasure,
   LEVEL_TEXT,
@@ -40,7 +41,7 @@ export function Topology({ view }: { view: SiteView }) {
       </TileHead>
 
       <div className="m-3 flex flex-1 flex-col justify-center rounded-[10px] border border-(--b-hair2) bg-(--b-canvas) bg-[radial-gradient(var(--b-dotgrid)_1px,transparent_1.2px)] bg-size-[16px_16px] bg-position-[8px_8px] p-[18px] pb-4 max-md:p-3.5">
-        {topo && edge ? (
+        {topo && edge && drawsPair(topo) ? (
           <Pair view={view} topo={topo} edge={edge} stale={stale} />
         ) : (
           <EmptyState

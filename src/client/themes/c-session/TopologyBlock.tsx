@@ -32,9 +32,11 @@ export function TopologyBlock({ view }: { view: SiteView }) {
     topo?.fence?.level === "crit" ||
     (pairEdge !== undefined && !pairEdge.live);
   const shown = (state: DisplayState): DisplayState => (stale ? "stale" : state);
-  // The summary block shows the highlighted groups.
+  const pairDrawn = pairEdge !== undefined && pair.length === 2;
+  // The summary block shows the highlighted groups, and the drawn pair the groups it carries (replication
+  // on its edge and cards, the fence as its stamp).
   const inSummary = highlightedGroups(view);
-  const groups = view.factGroups.filter((g) => !inSummary.has(g.id));
+  const groups = view.factGroups.filter((g) => !inSummary.has(g.id) && !(pairDrawn && g.inTopology));
 
   return (
     <Block
@@ -51,7 +53,7 @@ export function TopologyBlock({ view }: { view: SiteView }) {
           detail="The facts probe has not reported for this site."
         />
       )}
-      {pairEdge && pair.length === 2 && (
+      {pairDrawn && (
         <div className="flex flex-col items-stretch min-[981px]:flex-row min-[981px]:items-center">
           <div className="flex flex-col items-stretch md:flex-row md:items-center">
             <NodeBox node={pair[0]!} stale={stale} />

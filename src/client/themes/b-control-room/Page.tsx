@@ -3,7 +3,7 @@ import { EmptyState, Footer, MaintenanceNotice, StaleBanner } from "@/client/kit
 import { highlightedGroups, sourceName } from "@/shared/view";
 import type { ThemePageProps } from "../types";
 import { ActivityTile } from "./Activity";
-import { cx, isStale, kumaStale } from "./format";
+import { cx, drawsPair, isStale, kumaStale } from "./format";
 import { Header } from "./Header";
 import { IncidentCalendar } from "./History";
 import { IncidentRow } from "./IncidentRow";
@@ -27,9 +27,11 @@ export function Page({ view, commit }: ThemePageProps) {
   const monitorsStale = kumaStale(view);
   const services = [...view.sections.flatMap((s) => s.services), ...view.unsectioned];
   const collector = sourceName(view, "kuma");
-  // The KPI strip shows the highlighted groups; the first two others sit beside the chart, the rest below.
+  // The KPI strip shows the highlighted groups and the topology tile the groups its pair carries; the first
+  // two others sit beside the chart, the rest below.
   const inSummary = highlightedGroups(view);
-  const groups = view.factGroups.filter((g) => !inSummary.has(g.id));
+  const pair = drawsPair(view.topology);
+  const groups = view.factGroups.filter((g) => !inSummary.has(g.id) && !(pair && g.inTopology));
   const beside = groups.slice(0, 2);
   const below = groups.slice(2);
 

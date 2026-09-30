@@ -167,3 +167,12 @@ export function pairCaption(topology: TopologyView | null): string {
     ?.details[0]?.label;
   return app ? `${app.charAt(0).toUpperCase()}${app.slice(1)} failover pair` : "Failover pair";
 }
+
+/**
+ * True when the topology tile draws the failover pair (a replication edge between two known nodes): then the
+ * groups the view marks `inTopology` (replication, fence) are already on the page and need no tile of their own.
+ */
+export function drawsPair(topology: TopologyView | null): boolean {
+  const pair = topology?.edges.find((e) => e.kind === "replication");
+  return !!pair && [pair.from, pair.to].every((id) => topology!.nodes.some((n) => n.id === id));
+}

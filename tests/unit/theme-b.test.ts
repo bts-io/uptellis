@@ -12,6 +12,11 @@ import { FIXTURE_NAMES, type FixtureName } from "../fixtures";
 import { fixtureInput } from "../fixtures/view";
 
 const view = (name: FixtureName) => buildSiteView(fixtureInput(name));
+/** The fixture on a site whose config has no topology. */
+const unpaired = (name: FixtureName) => {
+  const input = fixtureInput(name);
+  return buildSiteView({ ...input, config: { ...input.config, topology: undefined } });
+};
 const render = (v: SiteView) =>
   renderToStaticMarkup(createElement(bControlRoom.Page, { view: v, commit: "cbe27a13" }));
 const services = (v: SiteView) => v.sections.flatMap((s) => s.services);
@@ -132,7 +137,8 @@ describe("theme B page", () => {
   });
 
   it("wraps each group tile's summary with its dot and colours a warning row", () => {
-    const html = render(view("default"));
+    // Without a topology the pair's groups (replication, fence) have tiles of their own.
+    const html = render(unpaired("default"));
     // The group tiles follow the topology, whose facts row has cells of the same names.
     const tile = (title: string) => {
       const at = html.lastIndexOf(`uppercase">${title}</span>`);
@@ -148,13 +154,31 @@ describe("theme B page", () => {
     );
     expect(tile("Forgejo")).toMatch(/\[overflow-wrap:anywhere\]"><span class="mr-2 inline-flex/);
     expect(tile("Replication")).not.toMatch(/\[overflow-wrap:anywhere\]"><span class="mr-2 inline-flex/);
-    const inc = render(view("incident"));
+    const inc = render(unpaired("incident"));
     const at = inc.lastIndexOf('uppercase">Replication</span>');
     const repl = inc.slice(at, inc.indexOf("</section>", at));
     expect(repl).toMatch(/text-degraded">warning</);
     expect(repl).toMatch(
       />state<\/span><span[^>]*><span[^>]*data-state="degraded"[^>]*><\/span><span class="truncate text-degraded">none</,
     );
+  });
+
+  it("leaves the groups the drawn pair carries out of the group tiles, and tiles them without a topology", () => {
+    const v = view("default");
+    const carried = v.factGroups.filter((g) => g.inTopology);
+    expect(carried.map((g) => g.id)).toEqual(["replication", "fence"]);
+    const text = (html: string) => html.replace(/<[^>]+>/g, "");
+    const paired = render(v);
+    // The pair draws them: the WAL stream with its lag, the fence stamp.
+    expect(paired).toContain('data-edge="app-1-app-2"');
+    expect(paired).toMatch(/<span>Fence<\/span><b[^>]*>serve<\/b>/);
+    // Only a group tile shows the summary line.
+    const plain = render(unpaired("default"));
+    for (const g of carried) {
+      expect(text(paired), g.id).not.toContain(g.summary);
+      expect(text(plain), g.id).toContain(g.summary);
+    }
+    expect(text(paired)).toContain(v.factGroups.find((g) => g.id === "backup")!.summary);
   });
 
   it("survives a site without facts or topology", () => {

@@ -10,6 +10,11 @@ import { FIXTURE_NAMES, type FixtureName } from "../fixtures";
 import { fixtureInput } from "../fixtures/view";
 
 const view = (name: FixtureName) => buildSiteView(fixtureInput(name));
+/** The fixture on a site whose config has no topology. */
+const unpaired = (name: FixtureName) => {
+  const input = fixtureInput(name);
+  return buildSiteView({ ...input, config: { ...input.config, topology: undefined } });
+};
 const render = (v: SiteView) =>
   renderToStaticMarkup(createElement(cSession.Page, { view: v, commit: "cbe27a13" }));
 
@@ -109,13 +114,32 @@ describe("theme C page", () => {
     };
     expect(line("runners")).toMatch(/<dd[^>]*><span[^>]*><span[^>]*data-state="up"/);
     expect(line("forgejo")).toMatch(/<dd[^>]*><span[^>]*><span[^>]*data-state="up"/);
-    expect(line("replication")).not.toMatch(/data-state=/);
+    // Replication is drawn by the pair; without a topology its line starts coloured, so without a dot.
+    const plain = render(unpaired("default"));
+    const plainInfra = plain.match(/<section id="infra"[\s\S]*?<\/section>/)?.[0] ?? "";
+    const at = plainInfra.indexOf(">replication</dt>");
+    expect(at).toBeGreaterThan(-1);
+    expect(plainInfra.slice(at, plainInfra.indexOf("</dd>", at))).not.toMatch(/data-state=/);
     expect(line("disk")).toContain('role="meter"');
     expect(line("disk")).not.toMatch(/data-state=/);
     const stale = render(view("stale"));
     expect(stale).toMatch(
       /watchdog<\/dt><dd[^>]*><span data-status="ok"[^>]*><span[^>]*data-state="stale"[^>]*><\/span><span>reachable/,
     );
+  });
+
+  it("leaves the groups the drawn pair carries out of the infra lines, and lists them without a topology", () => {
+    const v = view("default");
+    const carried = v.factGroups.filter((g) => g.inTopology).map((g) => g.title.toLowerCase());
+    expect(carried).toEqual(["replication", "fence"]);
+    const infra = (html: string) => html.match(/<section id="infra"[\s\S]*?<\/section>/)?.[0] ?? "";
+    const paired = infra(render(v));
+    expect(paired).toContain('data-edge="app-1-app-2"');
+    expect(paired).toContain('data-fence="serve"');
+    for (const t of carried) expect(paired, t).not.toContain(`>${t}</dt>`);
+    expect(paired).toContain(">backup</dt>");
+    const plain = infra(render(unpaired("default")));
+    for (const t of carried) expect(plain, t).toContain(`>${t}</dt>`);
   });
 
   it("survives a site without facts, topology or services", () => {
