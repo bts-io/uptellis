@@ -1,0 +1,4 @@
+/* Friendly theme tokens (Phase 7b), scoped to [data-theme="h"]. */
+[data-theme="h"] {
+  --color-base: #fff8f1;
+}

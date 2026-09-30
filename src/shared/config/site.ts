@@ -14,7 +14,17 @@ import { ChannelConfig } from "../notify/schema";
 
 export { SourceKind };
 
-export const THEME_IDS = ["a-sys-status", "b-control-room", "c-session"] as const;
+export const THEME_IDS = [
+  "a-sys-status",
+  "b-control-room",
+  "c-session",
+  "d-classic",
+  "e-editorial",
+  "f-dashboard",
+  "g-wallboard",
+  "h-friendly",
+  "i-minimal",
+] as const;
 export const ThemeId = z.enum(THEME_IDS);
 export type ThemeId = z.infer<typeof ThemeId>;
 

@@ -1,0 +1,4 @@
+/* Minimal theme tokens (Phase 7b), scoped to [data-theme="i"]. */
+[data-theme="i"] {
+  --color-base: #ffffff;
+}

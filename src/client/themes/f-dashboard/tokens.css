@@ -1,0 +1,4 @@
+/* Dashboard theme tokens (Phase 7b), scoped to [data-theme="f"]. */
+[data-theme="f"] {
+  --color-base: #f3f5f9;
+}

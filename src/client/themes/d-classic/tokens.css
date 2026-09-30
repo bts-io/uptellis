@@ -1,0 +1,4 @@
+/* Classic theme tokens (Phase 7b), scoped to [data-theme="d"]. */
+[data-theme="d"] {
+  --color-base: #f6f7f9;
+}

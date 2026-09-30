@@ -3,6 +3,12 @@
 @import "./themes/a-sys-status/tokens.css";
 @import "./themes/b-control-room/tokens.css";
 @import "./themes/c-session/tokens.css";
+@import "./themes/d-classic/tokens.css";
+@import "./themes/e-editorial/tokens.css";
+@import "./themes/f-dashboard/tokens.css";
+@import "./themes/g-wallboard/tokens.css";
+@import "./themes/h-friendly/tokens.css";
+@import "./themes/i-minimal/tokens.css";
 
 /* Self-hosted variable fonts (public/fonts, SIL OFL 1.1, see public/fonts/LICENSES.md). No third-party request. */
 @font-face {

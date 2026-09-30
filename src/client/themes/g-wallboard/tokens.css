@@ -1,0 +1,4 @@
+/* Wallboard theme tokens (Phase 7b), scoped to [data-theme="g"]. */
+[data-theme="g"] {
+  --color-base: #07090d;
+}

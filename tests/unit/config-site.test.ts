@@ -102,8 +102,18 @@ describe("SiteConfig", () => {
     expect(Object.keys(JSON.parse(out).displayNames)).toEqual(["kuma:1", "kuma:9"]);
     expect(out.startsWith('{\n  "v": 1,\n  "slug": "acme",')).toBe(true);
   });
-  it("knows the three themes", () => {
-    expect(THEME_IDS).toEqual(["a-sys-status", "b-control-room", "c-session"]);
+  it("knows the nine themes", () => {
+    expect(THEME_IDS).toEqual([
+      "a-sys-status",
+      "b-control-room",
+      "c-session",
+      "d-classic",
+      "e-editorial",
+      "f-dashboard",
+      "g-wallboard",
+      "h-friendly",
+      "i-minimal",
+    ]);
     expect(SiteConfig.safeParse({ ...minimal, theme: "d-neon" }).success).toBe(false);
   });
   it("rejects invalid configs", () => {

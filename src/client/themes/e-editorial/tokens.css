@@ -1,0 +1,4 @@
+/* Editorial theme tokens (Phase 7b), scoped to [data-theme="e"]. */
+[data-theme="e"] {
+  --color-base: #fbf8f3;
+}
