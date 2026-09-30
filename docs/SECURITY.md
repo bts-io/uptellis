@@ -132,6 +132,7 @@ The platform's limiters (`RATE_LIMITERS` in `src/platform/types.ts`), applied by
 | `INGEST_RATE_LIMIT` (1001) | `POST /api/ingest/*`, before the HMAC check | claimed key id and client IP | 60 per minute |
 | `GATE_RATE_LIMIT` (1002) | sign-in attempts (`POST /api/auth/sign-in/*`, `POST /api/setup`, accepting an invite; counted before the password is checked), and every request answered 401, 403 or 404 outside ingest | client IP | 20 per minute |
 | `ADMIN_WRITE_RATE_LIMIT` (1003) | non-GET requests to admin paths | client IP | 30 per minute |
+| `PUSH_RATE_LIMIT` (1004) | `GET` and `POST /api/push/<token>`, applied by the push route (429 with `retry-after: 10`) | the token's SHA-256 | 1 per 10 seconds |
 
 The collector posts once a minute and backs off from 5 s after a failed send, the facts pusher every 15 minutes, so 60 per minute leaves room for a catch-up burst. Ingest is keyed by key id and IP together: a request that only names a producer's key id cannot use up that producer's budget from elsewhere. Allowed page views and API reads, and `/api/health`, are never counted.
 

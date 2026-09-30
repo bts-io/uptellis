@@ -1,6 +1,6 @@
 # Monitors
 
-Uptellis runs its own checks: HTTP(S), TCP, ping and TLS certificate expiry. They run from the instance itself and from small agents inside private networks. Failures are confirmed before anyone is paged, and maintenance windows keep planned work from counting as downtime. The Uptime Kuma collector, facts pushers and webhooks keep working as sources next to them.
+Uptellis runs its own checks: HTTP(S), TCP, ping and TLS certificate expiry. They run from the instance itself and from small agents inside private networks. Push monitors turn it around: a job or timer calls a URL to prove it is alive, and the monitor goes down when the calls stop. Failures are confirmed before anyone is paged, and maintenance windows keep planned work from counting as downtime. The Uptime Kuma collector, facts pushers and webhooks keep working as sources next to them.
 
 ```mermaid
 flowchart LR
@@ -22,8 +22,9 @@ flowchart LR
 | `tcp` | a TCP connection to `host:port` | the connection opens |
 | `ping` | one ICMP echo | a reply arrives |
 | `tls` | a TLS handshake to `host:port` (default 443), SNI `servername` or `host` | the chain is valid for the name; `degraded` under `minDays` days left (default 7), `down` when expired or invalid |
+| `push` | a push to its URL (see [Push monitors](#push-monitors)) | a push arrived within interval plus grace |
 
-Every monitor has an `id`, a `name`, an `intervalS` (whole minutes, 60 to 3600), a `timeoutS` (1 to 30), `retries` (default 1), `runners` (default `["builtin"]`), an optional `quorum` and `enabled`. A failing attempt is retried once after 2 seconds inside the same check, so a blip is never reported.
+Every monitor but `push` has an `id`, a `name`, an `intervalS` (whole minutes, 60 to 3600), a `timeoutS` (1 to 30), `retries` (default 1), `runners` (default `["builtin"]`), an optional `quorum` and `enabled`. A failing attempt is retried once after 2 seconds inside the same check, so a blip is never reported.
 
 ```json
 {
@@ -36,15 +37,81 @@ Every monitor has an `id`, a `name`, an `intervalS` (whole minutes, 60 to 3600),
 }
 ```
 
+A `push` monitor has only an `id`, a `name`, `intervalS` (60 to 86400 seconds, default 60), `graceS` (0 to 86400, default 60) and `enabled`: no runners, target, quorum, timeout or retries, because the push is the check.
+
 Monitors are edited in admin (Config, Monitors) or in the site JSON. The legacy `probes` keep working: each one runs as an `http` monitor on `builtin` with the same service id, so its history carries over.
+
+### Push monitors
+
+A push monitor (a heartbeat) is for things that run on their own: a backup script, a cron job, a systemd timer. Each run calls the monitor's push URL; the monitor is up while the calls keep coming and goes down when none arrived for `intervalS` plus `graceS`.
+
+```json
+{ "id": "backup", "name": "Nightly backup", "type": "push", "intervalS": 86400, "graceS": 3600 }
+```
+
+```mermaid
+sequenceDiagram
+  participant J as job or timer
+  participant U as Uptellis
+  J->>U: GET /api/push/<token>?status=up&msg=OK&ping=12
+  U-->>J: 200 {"ok": true}
+  Note over U: service up (an up card if it was down)
+  Note over J: the job stops running
+  Note over U: every-minute job: nothing for interval plus grace
+  Note over U: one down result "no push for 25 h", incident, down card
+  J->>U: GET /api/push/<token>
+  Note over U: up again, up card
+```
+
+**URL.** `GET` or `POST https://<your instance>/api/push/<token>`. Create it in admin (Config, Monitors, the monitor's "Create push URL") once the monitor is saved; the dialog shows the URL and a ready `curl` line once. "Rotate push URL" replaces it: the old URL stops at once.
+
+| Parameter | Meaning |
+|---|---|
+| `status` | `up` (default) or `down`; `down` is down at once, with no retries |
+| `msg` | the check message shown on the page and in cards, at most 200 characters; addresses, emails and anything that looks like a token are replaced with `[redacted]` |
+| `ping` | the latency in whole milliseconds (ignored when empty or not a number) |
+
+Parameters go in the query string; a `POST` may also send them as a form or as JSON (the body wins). Answers: `200 {"ok": true}` once applied; `404 {"ok": false}` for an unknown or rotated token, a monitor removed from the config and a paused monitor, all alike; `429` for more than one push per 10 seconds per token (`Retry-After: 10`); `400` for a `status` other than `up` or `down`. The route needs no session and no API key: the token is the credential.
+
+**Token handling.** The token is 32 random bytes (base64url). Uptellis stores only its SHA-256 and shows the URL once; it never appears in logs, the delivery log, errors, the page, the public summary or snapshots. Admin lists when each URL was created and the last push, never the URL. Creating and rotating need the `sources.manage` permission, like ingest and API keys. Deleting the monitor from the config kills its URL; adding the same id again needs a new one.
+
+**Silence.** The every-minute job checks each enabled push monitor. Silence counts from the last push, or from when the monitor was created or enabled again, whichever is later, so a new monitor that never received a push goes down `intervalS + graceS` after it was created, not at once (until then it shows `pending`, "waiting for a push"). The job writes one `down` result ("no push for 5 min"), which opens the incident and sends the down card; while it stays silent it adds only a heartbeat per interval, so the beat bars and uptime count the time as down without repeating the alert. The next push brings it up with an up card. Maintenance windows, paused monitors (`enabled: false`), per-channel alerts and removed monitors work as for every other monitor.
+
+Examples:
+
+```sh
+# At the end of a script
+curl -fsS "https://status.example.com/api/push/<token>?status=up&msg=OK"
+
+# Report a failure with a reason
+curl -fsS "https://status.example.com/api/push/<token>?status=down&msg=disk%20full"
+
+# POST with a form body
+curl -fsS -X POST --data "status=up&msg=backup%20done&ping=1200" https://status.example.com/api/push/<token>
+```
+
+A systemd service run by a timer can push after its work succeeds:
+
+```ini
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/backup.sh
+ExecStartPost=/usr/bin/curl -fsS "https://status.example.com/api/push/<token>?status=up&msg=OK"
+```
+
+or push as the only step of its own timer: `ExecStart=/usr/bin/curl -fsS "https://status.example.com/api/push/<token>?status=up&msg=OK"`.
+
+**Moving from Uptime Kuma.** Kuma's push URLs look like `https://kuma.example.com/api/push/<token>?status=up&msg=OK&ping=`. Create the push monitor in Uptellis, then swap the base URL and the token in each job: the `status`, `msg` and `ping` parameters are the same.
 
 ## Runners
 
 | Runner | Where it runs | Types |
 |---|---|---|
 | `builtin` on Cloudflare | the Worker's cron, from Cloudflare's edge | `http`, `tcp` |
-| `builtin` in Docker | the container's scheduler | all four |
-| an agent (`uptellis-agent`) | inside your network, see [agent/README.md](../agent/README.md) | all four |
+| `builtin` in Docker | the container's scheduler | `http`, `tcp`, `ping`, `tls` |
+| an agent (`uptellis-agent`) | inside your network, see [agent/README.md](../agent/README.md) | `http`, `tcp`, `ping`, `tls` |
+
+No runner runs a `push` monitor: its pushes are its results (reported as `probe:push`, which never goes stale), and agents are never handed one.
 
 A runner skips types it cannot run, and confirmation leaves it out. Each runner reports as its own source (`probe:cf`, `probe:server`, `probe:<agent id>`), so an agent that goes silent raises its own `stale` incident. You never have to list these sources in the config.
 
@@ -61,6 +128,8 @@ Results turn into one service status:
 3. With enough runners confirmed down (`quorum`, default a strict majority: 1 of 1, 2 of 2, 2 of 3), the service is `down` and an incident opens.
 4. Too few confirmed downs show `degraded` ("down from office-1"), which is visible but never paged. A failing runner that is not yet confirmed shows `pending`.
 5. Inside a maintenance window the service shows `maintenance` whatever the results say.
+
+A push monitor has one runner (its URL), no retries and no quorum: each push is final.
 
 Only `down` opens an incident, and only the transitions into and out of `down` send cards.
 

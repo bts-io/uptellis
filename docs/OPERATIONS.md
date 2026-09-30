@@ -38,7 +38,7 @@ Run `bun run verify`, then `bun run deploy`, ideally from CI on merges to your r
 | `DB` | D1 `uptellis-db` | everything durable: models, heartbeats, incidents, configs, keys, nonces, notifications |
 | `CACHE` | KV `uptellis-cache` | `latest:<site>` (assembled model) and `config:<site>` (current config) |
 | `ASSETS` | Static Assets | client bundle and fonts from `dist/client` |
-| `INGEST_RATE_LIMIT`, `GATE_RATE_LIMIT`, `ADMIN_WRITE_RATE_LIMIT` | Rate Limiting (namespace ids 1001 to 1003) | see [Rate limits](#rate-limits) |
+| `INGEST_RATE_LIMIT`, `GATE_RATE_LIMIT`, `ADMIN_WRITE_RATE_LIMIT`, `PUSH_RATE_LIMIT` | Rate Limiting (namespace ids 1001 to 1004) | see [Rate limits](#rate-limits) |
 | `SITE_DEFAULT` | var | the site a request renders when its host matches no site's `hostnames` |
 | `EMAIL` | Email Service `send_email` (optional, commented out in `wrangler.jsonc`) | the sender of email channels; onboard the sending domain first, then uncomment it and set `EMAIL_FROM`. Without it email channels fail with `email_unavailable` |
 
@@ -194,15 +194,16 @@ Producers log JSON lines with status codes and reason codes only, so their logs 
 
 ## Rate limits
 
-Three Workers Rate Limiting bindings (in-memory limiters in Docker), applied first (`src/worker/middleware/rate-limit.ts`). Counters are kept per Cloudflare location, so the limits are approximate: a brake on floods and password guessing, not a quota. Over the limit the Worker answers 429 with `retry-after: 60`.
+Four Workers Rate Limiting bindings (in-memory limiters in Docker). The first three are applied first (`src/worker/middleware/rate-limit.ts`), the push one by the push route (`src/worker/routes/push.ts`). Counters are kept per Cloudflare location, so the limits are approximate: a brake on floods and password guessing, not a quota. Over the limit the Worker answers 429 with `retry-after: 60` (`retry-after: 10` for a push).
 
 | Binding | Counts | Key | Limit |
 | --- | --- | --- | --- |
 | `INGEST_RATE_LIMIT` | `POST /api/ingest/*`, before the HMAC check | claimed key id and client IP | 60 per minute |
 | `GATE_RATE_LIMIT` | sign-in attempts (email sign-in, setup, accepting an invite), and requests answered 401, 403 or 404 outside ingest | client IP | 20 per minute |
 | `ADMIN_WRITE_RATE_LIMIT` | non-GET requests to admin paths | client IP | 30 per minute |
+| `PUSH_RATE_LIMIT` | `GET` and `POST /api/push/<token>` (push monitors) | the token's SHA-256, never the token | 1 per 10 seconds |
 
-The collector posts once a minute and a facts pusher typically every 15 minutes, so 60 per minute leaves room for a catch-up burst. A producer that hits 429 is almost always in a restart loop. The budgets are `RATE_LIMITERS` in `src/platform/types.ts`; `ratelimits` in `wrangler.jsonc` must match them (a unit test checks it). In Docker the same budgets are counted in memory in fixed one-minute windows, exact for the one process and reset on restart; the client address is the connection's, or the last `X-Forwarded-For` hop with `TRUST_PROXY=1`. Allowed page views and API reads, and `/api/health`, are never counted.
+The collector posts once a minute and a facts pusher typically every 15 minutes, so 60 per minute leaves room for a catch-up burst. A producer that hits 429 is almost always in a restart loop. The budgets are `RATE_LIMITERS` in `src/platform/types.ts`; `ratelimits` in `wrangler.jsonc` must match them (a unit test checks it). In Docker the same budgets are counted in memory in fixed windows (one minute, 10 seconds for push), exact for the one process and reset on restart; the client address is the connection's, or the last `X-Forwarded-For` hop with `TRUST_PROXY=1`. Allowed page views and API reads, and `/api/health`, are never counted.
 
 ## Logs
 
@@ -211,7 +212,8 @@ The Worker logs JSON lines with an `evt` field, reason codes, ids and counts, an
 | `evt` | When | Fields |
 | --- | --- | --- |
 | `ingest` | every ingest request | `route`, `status`, `reason` on a rejection, `keyId`, `source`, counts of services, heartbeats, facts, incidents opened and resolved; `step: "key_promoted"` when a rotated key takes over |
-| `cron` | every job run | `job` (`probes`, `fiveMinute`, `daily`), incidents opened and resolved; for probes also sites, checks, down results and failed sites |
+| `cron` | every job run | `job` (`probes`, `fiveMinute`, `daily`), incidents opened and resolved; for probes also sites, checks, down results, `silent` (push monitors the silent rule marked down) and failed sites |
+| `push` | every call to a push URL | `outcome` (`ok`, `unknown_token`, `unknown_monitor`, `paused`, `rate_limited`, `invalid`, `too_large`), `status`, the site and monitor id once the token is known, the result and incident counts; never the token, its hash, the path or the message |
 | `notify` | every delivery to a channel (and its retries by the five-minute job) | `kind` (`open`, `resolve`), `event`, `channel` (the id), `type`, `sent`, `attempts`, `retry` on a five-minute retry, the error code on failure (`http_404`, `rate_limited`, `timeout`, `secret_missing`, `email_unavailable`, ...); `skipped: "maintenance"` for a suppressed down |
 | `legacy_keys` | once per isolate or process while an old gate secret is still set | `set` (the names), a message pointing at `/setup` |
 | `error` | an unhandled error | `name` only |

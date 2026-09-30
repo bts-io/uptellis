@@ -52,11 +52,13 @@ flowchart LR
     push["facts pusher<br/>(a profile, systemd timer)"]
     hook["any producer<br/>signed webhooks"]
     agent["uptellis-agent<br/>checks, disk buffer"]
+    pjob["jobs and timers<br/>push monitors"]
   end
   subgraph worker ["Uptellis (Worker or Docker)"]
     ing["/api/ingest/kuma, facts, events<br/>size cap, HMAC, nonce, Zod"]
     probes["builtin runner<br/>every-minute job"]
     agentapi["/api/agent/v1/*<br/>API key, agent scope"]
+    pushapi["/api/push/token<br/>push monitors"]
     apply["applyResults<br/>runner state, confirmation"]
     adapt["adapters<br/>payload to ModelDelta"]
     store["store: apply delta,<br/>derive incidents"]
@@ -71,9 +73,12 @@ flowchart LR
   push -->|"signed POST"| ing
   hook -->|"signed POST"| ing
   agent -->|"monitors, results"| agentapi
+  pjob -->|"GET or POST, token"| pushapi
   ing --> adapt
   probes --> apply
   agentapi --> apply
+  pushapi --> apply
+  probes -->|"silent push monitors"| apply
   apply --> store
   adapt --> store
   store --> d1
@@ -92,7 +97,7 @@ Every producer reports as one **source**. There are four source kinds, each with
 | `kuma` | the Kuma collector (`collector/`), a Bun service next to Uptime Kuma | `POST /api/ingest/kuma` | a `KumaSnapshot`: monitors, their heartbeats since the last send, uptime, certificates, Kuma metadata as facts |
 | `facts` | a facts pusher, usually a shell script on a timer (see [profiles](../profiles/forgejo-ha/README.md)) | `POST /api/ingest/facts` | a `FactsPayload`: typed facts in named groups |
 | `webhook` | anything that can sign a request | `POST /api/ingest/events` | an `EventsPayload`: services it declares, their heartbeats, optional facts |
-| `probe` | the monitor runners: `builtin` (source `probe:cf` on Cloudflare, `probe:server` in Docker) and agents (`probe:<agent id>`) | none for `builtin` (the every-minute job); `POST /api/agent/v1/results` for agents | check results, confirmed into one status per monitor ([monitors.md](monitors.md)) |
+| `probe` | the monitor runners: `builtin` (source `probe:cf` on Cloudflare, `probe:server` in Docker) and agents (`probe:<agent id>`); push monitors' own jobs (`probe:push`, never stale) | none for `builtin` (the every-minute job); `POST /api/agent/v1/results` for agents; `GET` or `POST /api/push/<token>` for push monitors | check results, confirmed into one status per monitor ([monitors.md](monitors.md)); monitor types `http`, `tcp`, `ping`, `tls` and `push` |
 
 A signed request goes through the checks in [SECURITY.md](SECURITY.md#ingest) (body size, signature, key binding, nonce, schema). The adapter turns the payload into a `ModelDelta`; the store writes it to D1 in one batch, derives incidents, assembles the site model and puts it in KV. Monitor results go through `applyResults` (`src/worker/monitors/apply.ts`): runner state, retries and quorum (`confirmMonitor`), then the same kind of delta through the same path (`applyIngestDelta` in `src/worker/engine/ingest-service.ts`), so monitor results move heartbeats, incidents and freshness exactly as a Kuma snapshot does.
 
@@ -257,7 +262,7 @@ Every incident transition (a service `down` or back `up`, a source going `stale`
 
 | Job | Expression | What it does |
 | --- | --- | --- |
-| `probes` | `* * * * *` | Probes: every probe due this minute runs (at most 6 at a time), results go through the ingest path as source `probe:cf` |
+| `probes` | `* * * * *` | Probes: every probe due this minute runs (at most 6 at a time), results go through the ingest path as source `probe:cf`; then the silent rule of push monitors marks each one down once when no push arrived for its interval plus grace ([monitors.md](monitors.md#push-monitors)) |
 | `fiveMinute` | `*/5 * * * *` | Fold the last 2 hours of heartbeats into `heartbeat_5m`; sync configured sources; sweep source staleness, open and close `stale` incidents, post their cards, refresh `latest:<site>` when anything changed |
 | `daily` | `17 3 * * *` | Prune rows past retention (see [SECURITY.md](SECURITY.md#data-retention)) and expired `kv` entries |
 
@@ -272,7 +277,8 @@ Every request passes the same steps in `src/worker/serve.ts`, on both runtimes: 
 - **Admin.** Each admin route needs its permission (401 signed out, 403 without it); writes must be same-origin. `/admin` pages send a signed-out visitor to `/sign-in`.
 - **Accounts.** The first account is the owner (`/api/setup`, closed afterwards); everyone else joins through a one-time invite that carries the role. The last owner can never be demoted or removed.
 - **Always open.** `GET /api/health`, ingest (HMAC-signed or an API key with the `ingest` scope), Better Auth, `/api/me`, setup and invites.
-- **Rate limits** on ingest, sign-in attempts, refusals and admin writes; a 256 KB body cap before any hashing; CSP and the usual headers on everything.
+- **Anonymous by design.** The public endpoints (`/api/public/*`, badges, the widget) and the push URLs of push monitors (`/api/push/<token>`, where the token is the credential and only its SHA-256 is stored) are mounted before the principal middleware: no session or key is ever looked at.
+- **Rate limits** on ingest, sign-in attempts, refusals, admin writes and push URLs (one push per 10 s per token); a 256 KB body cap before any hashing; CSP and the usual headers on everything.
 
 ```mermaid
 flowchart LR
