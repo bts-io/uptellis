@@ -122,10 +122,20 @@ describe("/admin pages", () => {
     expect(text(html)).toContain("Nothing is saved until you confirm the changes.");
   });
 
-  it("previews every registered theme in a scaled frame of /?theme= on the Status page tab", async () => {
+  it("renders the Status page editor by name, with every theme to pick and the live preview of the page", async () => {
     const html = await page("/admin/status-page");
-    const frames = [...html.matchAll(/<iframe[^>]*src="([^"]+)"/g)].map((m) => m[1]);
-    expect(frames).toEqual(Object.keys(REGISTERED).map((id) => `/?theme=${id}`));
+    const body = html.replace(/<head>.*<\/head>/s, "").replace(/<script\b.*?<\/script>/gs, "");
+    const t = text(body);
+    for (const label of ["Sections and services", "Publish changes", "View page", "Who can see it", "Web"])
+      expect(t, label).toContain(label);
+    for (const id of Object.keys(REGISTERED)) expect(html, id).toContain(`value="${id}"`);
+    expect(html).toContain('aria-label="Preview of your status page"');
+    expect(html).toMatch(/data-theme="a"[^>]*data-page-preview/);
+    // Names, never service ids, in the editor and the preview (the hydration script carries the config, and
+    // "More settings" the public endpoints' URLs, which name services by id).
+    const shown = text(body.replace(/<details\b.*?<\/details>/gs, ""));
+    expect(shown).not.toMatch(/\b(?:kuma:\d+|probe:(?:api-health|web-app))\b/);
+    expect(findForbiddenLiterals(body)).toEqual([]);
   });
 
   it("lists the ingest keys without secrets, and a created key shows up there, still without its secret", async () => {

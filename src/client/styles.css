@@ -125,3 +125,13 @@
     background: color-mix(in oklab, var(--color-accent) 25%, transparent);
   }
 }
+
+/* The admin's status page preview (src/client/lib/admin/statuspage/Preview.tsx): the page ignores the
+   pointer, except a service, which a click picks. */
+[data-page-preview] * {
+  pointer-events: none;
+}
+[data-page-preview] [id^="svc-"] {
+  pointer-events: auto;
+  cursor: pointer;
+}
