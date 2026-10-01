@@ -64,7 +64,7 @@ const empty = (): ApplyResult => ({
 const SERVICE_ROWS = rowsPerInsert(17);
 const HEARTBEAT_ROWS = rowsPerInsert(7);
 const FACT_ROWS = rowsPerInsert(12);
-const SAMPLE_ROWS = rowsPerInsert(5);
+const SAMPLE_ROWS = rowsPerInsert(6);
 const INCIDENT_ROWS = rowsPerInsert(10);
 
 /**
@@ -194,11 +194,10 @@ export class D1Store implements Store {
           .insert(facts)
           .values(part.map(factToRow))
           .onConflictDoUpdate({
-            target: [facts.site, facts.grp, facts.key],
+            target: [facts.site, facts.source, facts.grp, facts.key],
             set: Object.fromEntries(
               (
                 [
-                  "source",
                   "valueType",
                   "valueText",
                   "valueNum",
@@ -219,7 +218,7 @@ export class D1Store implements Store {
 
     const samples = delta.facts.flatMap((f) =>
       f.value.type === "number"
-        ? [{ site, grp: f.group, key: f.key, ts: toMs(f.observedAt), value: f.value.value }]
+        ? [{ site, source: f.source, grp: f.group, key: f.key, ts: toMs(f.observedAt), value: f.value.value }]
         : [],
     );
     for (const part of chunk(samples, SAMPLE_ROWS)) {
@@ -283,7 +282,11 @@ export class D1Store implements Store {
         .where(and(eq(incidents.site, site), or(isNull(incidents.endedAt), gte(incidents.endedAt, cutoff))))
         .orderBy(desc(incidents.startedAt))
         .limit(RECENT_INCIDENT_LIMIT),
-      this.db.select().from(facts).where(eq(facts.site, site)).orderBy(asc(facts.grp), asc(facts.key)),
+      this.db
+        .select()
+        .from(facts)
+        .where(eq(facts.site, site))
+        .orderBy(asc(facts.grp), asc(facts.key), asc(facts.source)),
     ]);
 
     return {

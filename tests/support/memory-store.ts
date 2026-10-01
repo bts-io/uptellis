@@ -90,7 +90,8 @@ export class MemoryStore implements Store {
       this.heartbeats.set(k, h);
       heartbeatsInserted++;
     }
-    for (const f of delta.facts) this.facts.set(`${f.site}|${f.group}|${f.key}`, f);
+    // Keyed as D1 keys them: per source, so two nodes reporting the same key keep a row each.
+    for (const f of delta.facts) this.facts.set(`${f.site}|${f.source}|${f.group}|${f.key}`, f);
 
     // The same derivation D1Store runs, fed the same inputs (source before and after, rows before).
     const tr = deriveDeltaIncidents({

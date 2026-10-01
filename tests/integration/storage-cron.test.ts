@@ -110,8 +110,8 @@ describe("cron: daily prune", () => {
         { site, serviceId: "kuma:1", bucket: now - 89 * d, total: 1, up: 1, down: 0, maint: 0, pending: 0 },
       ]),
       db.insert(schema.factSamples).values([
-        { site, grp: "disk", key: "percent", ts: now - 91 * d, value: 1 },
-        { site, grp: "disk", key: "percent", ts: now - 89 * d, value: 2 },
+        { site, source: "facts:app-1", grp: "disk", key: "percent", ts: now - 91 * d, value: 1 },
+        { site, source: "facts:app-1", grp: "disk", key: "percent", ts: now - 89 * d, value: 2 },
       ]),
       db.insert(schema.snapshots).values([
         {

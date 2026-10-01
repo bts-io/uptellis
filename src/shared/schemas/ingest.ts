@@ -279,7 +279,7 @@ export const ModelDelta = z.object({
   services: z.array(Service),
   /** New heartbeats, idempotent on (serviceId, ts). */
   heartbeats: z.array(Heartbeat),
-  /** Current fact values to upsert on (site, group, key). */
+  /** Current fact values to upsert on (site, source, group, key). */
   facts: z.array(Fact),
 });
 export type ModelDelta = z.infer<typeof ModelDelta>;
