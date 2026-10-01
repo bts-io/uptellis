@@ -111,15 +111,15 @@ export const millis = (n: number | null) => (n === null ? "No reply" : `${Math.r
 export const secondsSince = (iso: string, now: string) =>
   Math.max(0, (Date.parse(now) - Date.parse(iso)) / 1000);
 
-/** What the runner list says in words. */
-/** The short form for sentences: "the built-in checker", "Head office agent". */
+/** The short form for sentences: "the Cloudflare edge or this server", "agent Head office". */
 export const runnerShort = (id: string, agents: SiteConfig["agents"]) =>
-  id === BUILTIN_RUNNER ? "the built-in checker" : runnerName(id, agents);
+  id === BUILTIN_RUNNER ? "the Cloudflare edge or this server" : runnerName(id, agents);
 
+/** Where a check runs, in words: never the runner's id. */
 export function runnerName(id: string, agents: SiteConfig["agents"]): string {
-  if (id === BUILTIN_RUNNER) return "Built in (Cloudflare edge or Docker server)";
+  if (id === BUILTIN_RUNNER) return "Cloudflare edge or this server";
   const a = agents.find((x) => x.id === id);
-  return a ? `${a.name} agent` : "An agent that is no longer set up";
+  return a ? `agent ${a.name}` : "an agent that is no longer set up";
 }
 
 function targetOf(m: MonitorConfig): string {

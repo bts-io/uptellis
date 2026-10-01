@@ -3,6 +3,7 @@ import { z } from "zod";
 import { VISIBILITIES, type Visibility } from "@/shared/auth";
 import { ThemeId } from "@/shared/config";
 import { Hostname, SiteSlug } from "@/shared/model";
+import { monitorsOf } from "@/shared/monitors";
 import type { ConfigState } from "@/shared/schemas/admin";
 import { SetupRequest } from "@/shared/schemas/auth";
 import { registeredThemes } from "../../themes";
@@ -10,6 +11,9 @@ import { createSite, getConfig, saveConfig } from "../admin/client";
 import { Button, Field, Notice, SelectField } from "../admin/ui";
 import { setupOwner } from "./client";
 import { useSubmit } from "./form";
+
+/** The first-run screen of admin ("What should we watch?"), where a site that watches nothing yet starts. */
+const WELCOME_PATH = "/admin/welcome";
 
 const OwnerForm = SetupRequest.extend({ confirm: z.string() }).refine((f) => f.password === f.confirm, {
   message: "The passwords do not match",
@@ -41,7 +45,8 @@ const newSiteConfig = (f: SiteForm) => ({
 /**
  * First-run setup, shown only while the instance has no account: 1. the owner account (signed in on
  * success), 2. the first site, either the one this host already serves (confirm or adjust it) or a new one,
- * 3. into admin. `site` is the slug this host resolves to, `host` the hostname the browser used.
+ * 3. into admin: the first-run screen when the site watches nothing yet, else the dashboard. `site` is the
+ * slug this host resolves to, `host` the hostname the browser used.
  */
 export function Setup({ site, host }: { site: string | null; host: string }) {
   const [step, setStep] = useState<"owner" | "site">("owner");
@@ -146,16 +151,20 @@ function SiteStep({ existing, host }: { existing: ConfigState | null; host: stri
   };
   const [form, setForm] = useState<SiteForm>(confirmed ?? fresh);
   const { busy, failure, submit, at, clear } = useSubmit(SiteForm, async (f) => {
-    if (creating || !existing) await createSite(newSiteConfig(f));
-    else {
-      const { config } = existing;
-      const hostnames = config.hostnames.includes(f.hostname)
-        ? config.hostnames
-        : [f.hostname, ...config.hostnames.slice(1)];
-      const next = { ...config, name: f.name, hostnames, visibility: f.visibility, theme: f.theme };
-      await saveConfig(config.slug, next, existing.version, "first-run setup");
+    if (creating || !existing) {
+      await createSite(newSiteConfig(f));
+      window.location.assign(WELCOME_PATH);
+      return;
     }
-    window.location.assign("/admin");
+    const { config } = existing;
+    const hostnames = config.hostnames.includes(f.hostname)
+      ? config.hostnames
+      : [f.hostname, ...config.hostnames.slice(1)];
+    const next = { ...config, name: f.name, hostnames, visibility: f.visibility, theme: f.theme };
+    await saveConfig(config.slug, next, existing.version, "first-run setup");
+    // A site that already watches something opens on its dashboard; an empty one asks what to watch.
+    const watches = monitorsOf(config).length > 0 || config.sources.length > 0;
+    window.location.assign(watches ? "/admin" : WELCOME_PATH);
   });
   const switchTo = (create: boolean) => {
     setCreating(create);

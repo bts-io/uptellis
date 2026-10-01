@@ -49,11 +49,12 @@ const retryWords = (n: number) =>
       : n === 2
         ? "Retry twice"
         : `Retry ${n} times`;
+const upperFirst = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const withCurrent = (list: number[], v: number) =>
   list.includes(v) ? list : [...list, v].sort((a, b) => a - b);
 
 /** A schema issue in plain words for the field it belongs to. */
-function plain(issue: ConfigIssue, field: string): string {
+export function plainMonitorIssue(issue: ConfigIssue, field: string): string {
   if (/public hostname/.test(issue.message))
     return "This address only works inside a private network. Choose an agent under More options to check it from there.";
   if (field === "url") return "Enter a web address, like https://example.com/.";
@@ -121,7 +122,7 @@ function MonitorFields({ config, save, editing, onCreated, onClose, onHeartbeat 
           const f = fields.find(
             (x) => i.path === `monitors.${index}.${x}` || i.path.startsWith(`monitors.${index}.${x}.`),
           );
-          return f ? [plain(i, f)] : [];
+          return f ? [plainMonitorIssue(i, f)] : [];
         })
       : [];
   const targetIssues = at("url", "host", "port");
@@ -416,7 +417,7 @@ function MonitorFields({ config, save, editing, onCreated, onClose, onHeartbeat 
                       }
                     />
                     <span>
-                      {runnerName(r, agents)}
+                      {upperFirst(runnerName(r, agents))}
                       <span className="block text-xs text-muted">
                         {r === BUILTIN_RUNNER
                           ? "From Uptellis itself. Best for anything public."

@@ -1,8 +1,9 @@
-import { createFileRoute, Outlet } from "@tanstack/react-router";
+import { createFileRoute, Outlet, useLocation } from "@tanstack/react-router";
 import type { SiteView } from "@/shared/view";
 import { getMe } from "../lib/account/client";
 import { getConfig, orNotFound } from "../lib/admin/client";
 import { AdminLayout } from "../lib/admin/Layout";
+import { WELCOME_PATH } from "../lib/admin/monitors/firstRun";
 import { buildRows } from "../lib/admin/monitors/model";
 import { adminSite } from "../lib/admin/site";
 import { api } from "../lib/api";
@@ -32,8 +33,9 @@ export const Route = createFileRoute("/admin")({
 function AdminRoute() {
   const { state, me, view } = Route.useLoaderData();
   const down = buildRows(state.config, view).filter((r) => r.state === "down").length;
+  const bare = useLocation({ select: (l) => l.pathname === WELCOME_PATH });
   return (
-    <AdminLayout siteName={state.config.name} me={me} downCount={down}>
+    <AdminLayout siteName={state.config.name} me={me} downCount={down} bare={bare}>
       <Outlet />
     </AdminLayout>
   );

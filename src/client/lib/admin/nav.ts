@@ -63,7 +63,7 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   },
   {
     to: "/admin/settings/revisions",
-    label: "Revisions",
+    label: "History",
     about: "Every saved change, and going back to an earlier one.",
     needs: "config.edit",
   },

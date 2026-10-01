@@ -18,11 +18,13 @@ export interface AdminLayoutProps {
   me: Me;
   /** How many things are down right now (the Monitors badge; hidden at 0). */
   downCount: number;
+  /** A focused page (the first-run screen): the top bar without the tabs. */
+  bare?: boolean;
   children?: ReactNode;
 }
 
-export function AdminLayout({ siteName, me, downCount, children }: AdminLayoutProps) {
-  const tabs = ADMIN_TABS.filter((t) => allowed(t.needs, me.permissions));
+export function AdminLayout({ siteName, me, downCount, bare = false, children }: AdminLayoutProps) {
+  const tabs = bare ? [] : ADMIN_TABS.filter((t) => allowed(t.needs, me.permissions));
   return (
     <ToastProvider>
       <div className="min-h-dvh bg-base font-sans text-ink">
@@ -52,6 +54,7 @@ export function AdminLayout({ siteName, me, downCount, children }: AdminLayoutPr
               {siteName}
             </span>
             <nav
+              hidden={bare}
               aria-label="Admin"
               className="max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:z-40 max-sm:border-t max-sm:border-line max-sm:bg-panel sm:ml-4"
             >

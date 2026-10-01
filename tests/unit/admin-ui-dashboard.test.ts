@@ -266,7 +266,7 @@ describe("new monitor", () => {
     expect(field("Name").value).toBe("My host");
     expect(drawer().textContent).toContain("All alert channels");
     expect(drawer().textContent).toMatch(
-      /More options.*gives up after 10 s, retry once, runs on the built-in checker/,
+      /More options.*gives up after 10 s, retry once, runs on the Cloudflare edge or this server/,
     );
   });
 
@@ -299,10 +299,10 @@ describe("new monitor", () => {
     choose(field("Give up after"), "5");
     choose(field("Before alerting"), "0");
     const office = [...drawer().querySelectorAll("label")].find((l) =>
-      l.textContent?.startsWith("Head office agent"),
+      l.textContent?.startsWith("Agent Head office"),
     )!;
     const builtin = [...drawer().querySelectorAll("label")].find((l) =>
-      l.textContent?.startsWith("Built in"),
+      l.textContent?.startsWith("Cloudflare edge"),
     )!;
     act(() => (office.querySelector("input") as HTMLInputElement).click());
     act(() => (builtin.querySelector("input") as HTMLInputElement).click());

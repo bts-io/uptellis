@@ -4,11 +4,13 @@
  * key facts and actions; everything else happens in drawers (new, edit, details, heartbeat). On a phone the
  * table becomes stacked cards. Every change goes through `useSiteConfig`.
  */
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import type { PushMonitor, RunnerMonitorConfig } from "@/shared/monitors";
+import { channelsOf } from "@/shared/notify";
 import type { ConfigState } from "@/shared/schemas/admin";
 import type { SiteView } from "@/shared/view";
 import { cx } from "../../../kit/cx";
+import { testChannel } from "../client";
 import { EmptyState } from "../EmptyState";
 import { AdminIcon } from "../icons";
 import { PageHeader } from "../PageHeader";
@@ -16,6 +18,8 @@ import { StatePill } from "../StatePill";
 import { useToast } from "../Toast";
 import { Button, inputClass } from "../ui";
 import { useSiteConfig } from "../useSiteConfig";
+import { Checklist } from "./Checklist";
+import { type ChecklistFacts, welcomeSkipped } from "./firstRun";
 import { HeartbeatForm } from "./HeartbeatForm";
 import { MonitorDetail } from "./MonitorDetail";
 import { MonitorForm } from "./MonitorForm";
@@ -51,17 +55,41 @@ export interface MonitorsDashboardProps {
   /** The site view (`GET /api/sites/:site/view`); null when it could not be read. */
   view: SiteView | null;
   onReload: () => void;
+  /** What the Getting started card needs beyond the config (the delivery log, how many users). */
+  facts?: Omit<ChecklistFacts, "testSent">;
+  /** Follows a link inside the admin (the Getting started items). */
+  onNavigate?: (to: string) => void;
+  /** A service whose detail drawer is open on arrival (the monitor the first-run screen just added). */
+  initialDetail?: string;
+  /** Called when nothing is watched and the first-run screen was not skipped in this browser. */
+  onWelcome?: () => void;
 }
 
-export function MonitorsDashboard({ site, state, view, onReload }: MonitorsDashboardProps) {
+export function MonitorsDashboard({
+  site,
+  state,
+  view,
+  onReload,
+  facts = { deliveries: null, users: null },
+  onNavigate,
+  initialDetail,
+  onWelcome,
+}: MonitorsDashboardProps) {
   const cfg = useSiteConfig({ site, state, onReload });
+  const toast = useToast();
   const [filter, setFilter] = useState<"all" | "heartbeats">("all");
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
-  const [open, setOpen] = useState<Open>(null);
+  const [open, setOpen] = useState<Open>(initialDetail ? { kind: "detail", serviceId: initialDetail } : null);
+  const [testSent, setTestSent] = useState(false);
+  const [testing, setTesting] = useState(false);
   const searchId = useId();
 
   const all = buildRows(cfg.config, view);
+  const empty = all.length === 0;
+  useEffect(() => {
+    if (empty && onWelcome && !welcomeSkipped(site)) onWelcome();
+  }, [empty, onWelcome, site]);
   const heartbeats = all.filter((r) => r.kind === "push");
   const listed = sortRows(filter === "heartbeats" ? heartbeats : all);
   const q = query.trim().toLowerCase();
@@ -79,6 +107,28 @@ export function MonitorsDashboard({ site, state, view, onReload }: MonitorsDashb
       else next.add(id);
       return next;
     });
+  const sendFirstTest = async () => {
+    const enabled = channelsOf(cfg.config.notify).filter((c) => c.enabled);
+    const channels = cfg.config.notify.channels.length
+      ? enabled.filter((c) => cfg.config.notify.channels.includes(c))
+      : enabled;
+    if (channels.length === 0) {
+      toast("Add an alert channel under Alerts first, then send a test.", "error");
+      return;
+    }
+    setTesting(true);
+    const service = all.find((r) => r.monitor)?.serviceId;
+    const results = await Promise.all(channels.map((c) => testChannel(site, c.id, "down", service)));
+    setTesting(false);
+    const failed = channels.filter((_, i) => !results[i]!.sent).map((c) => c.name);
+    if (failed.length === 0) {
+      setTestSent(true);
+      toast(
+        `Test alert sent to ${channels.length === 1 ? channels[0]!.name : `${channels.length} channels`}.`,
+      );
+    } else
+      toast(`The test alert did not go through on ${failed.join(", ")}. Check it under Alerts.`, "error");
+  };
   const edit = (row: MonitorRow) =>
     setOpen({ kind: row.kind === "push" ? "edit-heartbeat" : "edit-monitor", serviceId: row.serviceId });
 
@@ -139,7 +189,7 @@ export function MonitorsDashboard({ site, state, view, onReload }: MonitorsDashb
     </>
   );
 
-  if (all.length === 0) {
+  if (empty) {
     return (
       <>
         {header}
@@ -158,9 +208,45 @@ export function MonitorsDashboard({ site, state, view, onReload }: MonitorsDashb
     );
   }
 
+  const checklist =
+    filter === "all" ? (
+      <Checklist
+        site={site}
+        config={cfg.config}
+        facts={{ ...facts, testSent }}
+        onNavigate={onNavigate}
+        onSendTest={() => void sendFirstTest()}
+        onNewHeartbeat={() => setOpen({ kind: "new-heartbeat" })}
+        busy={testing}
+      />
+    ) : null;
+
+  if (filter === "heartbeats" && heartbeats.length === 0) {
+    return (
+      <>
+        {header}
+        <div className="mb-3 flex justify-end">
+          <FilterSwitch filter={filter} setFilter={setFilter} all={all.length} heartbeats={0} />
+        </div>
+        <EmptyState
+          title="No heartbeats yet"
+          text="Add one for a cron job or a backup: it pings us when it runs, and we alert you when it stops."
+          action={
+            <Button tone="primary" onClick={() => setOpen({ kind: "new-heartbeat" })} className="py-2">
+              <AdminIcon name="heartbeat" />
+              New heartbeat
+            </Button>
+          }
+        />
+        {drawers}
+      </>
+    );
+  }
+
   return (
     <>
       {header}
+      {checklist}
       <section aria-label="Overview" className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat
           label="Up"
@@ -206,27 +292,12 @@ export function MonitorsDashboard({ site, state, view, onReload }: MonitorsDashb
               className={cx(inputClass, "py-2 pl-9")}
             />
           </div>
-          <div role="group" aria-label="Show" className="inline-flex border border-line p-0.5">
-            {(
-              [
-                ["all", "All", all.length],
-                ["heartbeats", "Heartbeats", heartbeats.length],
-              ] as const
-            ).map(([key, label, n]) => (
-              <button
-                key={key}
-                type="button"
-                aria-pressed={filter === key}
-                onClick={() => setFilter(key)}
-                className={cx(
-                  "px-3 py-1.5 text-sm",
-                  filter === key ? "bg-raised font-semibold text-ink" : "text-muted hover:text-ink",
-                )}
-              >
-                {label} <span className="text-xs text-muted">{n}</span>
-              </button>
-            ))}
-          </div>
+          <FilterSwitch
+            filter={filter}
+            setFilter={setFilter}
+            all={all.length}
+            heartbeats={heartbeats.length}
+          />
         </div>
 
         <table className="w-full border-collapse border border-line bg-panel text-sm max-sm:block max-sm:border-0 max-sm:bg-transparent">
@@ -273,9 +344,7 @@ export function MonitorsDashboard({ site, state, view, onReload }: MonitorsDashb
             {shown.length === 0 && (
               <tr className="max-sm:block">
                 <td colSpan={6} className="px-3 py-6 text-center text-muted max-sm:block">
-                  {q
-                    ? "Nothing matches that search."
-                    : "No heartbeats yet. Add one for a cron job or a backup."}
+                  Nothing matches that search.
                 </td>
               </tr>
             )}
@@ -284,6 +353,42 @@ export function MonitorsDashboard({ site, state, view, onReload }: MonitorsDashb
       </section>
       {drawers}
     </>
+  );
+}
+
+function FilterSwitch({
+  filter,
+  setFilter,
+  all,
+  heartbeats,
+}: {
+  filter: "all" | "heartbeats";
+  setFilter: (f: "all" | "heartbeats") => void;
+  all: number;
+  heartbeats: number;
+}) {
+  return (
+    <div role="group" aria-label="Show" className="inline-flex border border-line p-0.5">
+      {(
+        [
+          ["all", "All", all],
+          ["heartbeats", "Heartbeats", heartbeats],
+        ] as const
+      ).map(([key, label, n]) => (
+        <button
+          key={key}
+          type="button"
+          aria-pressed={filter === key}
+          onClick={() => setFilter(key)}
+          className={cx(
+            "px-3 py-1.5 text-sm",
+            filter === key ? "bg-raised font-semibold text-ink" : "text-muted hover:text-ink",
+          )}
+        >
+          {label} <span className="text-xs text-muted">{n}</span>
+        </button>
+      ))}
+    </div>
   );
 }
 

@@ -281,7 +281,27 @@ describe("first-run setup", () => {
         },
       },
     });
-    expect(assign).toHaveBeenCalledWith("/admin");
+    // A new site watches nothing yet: it opens on the first-run screen.
+    expect(assign).toHaveBeenCalledWith("/admin/welcome");
+  });
+
+  it("opens the first-run screen after confirming a site that watches nothing yet", async () => {
+    mount(createElement(Setup, { site: "demo", host: "status.example.com" }));
+    type(field("Name"), "Site Owner");
+    type(field("Email"), email("owner"));
+    type(field("Password (at least 12 characters)"), PASSWORD);
+    type(field("Confirm password"), PASSWORD);
+    replies.push({ status: 201, body: me(user("o1", "owner")) });
+    const bare = parseSiteConfig({ ...demo, sources: [], probes: [], monitors: [], sections: [] });
+    replies.push({
+      status: 200,
+      body: { config: bare, version: 1, savedAt: "2026-09-28T00:00:00Z", savedBy: "seed" },
+    });
+    await submit("Create owner account");
+    replies.push({ status: 200, body: { version: 2, diff: [] } });
+    await submit("Save and open admin");
+    expect(calls[2]).toMatchObject({ method: "PUT", path: "/api/admin/sites/demo/config" });
+    expect(assign).toHaveBeenCalledWith("/admin/welcome");
   });
 });
 

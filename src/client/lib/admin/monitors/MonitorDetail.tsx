@@ -6,9 +6,11 @@
  */
 import { useId, useState } from "react";
 import type { SiteConfig } from "@/shared/config";
+import { BUILTIN_RUNNER } from "@/shared/monitors";
 import type { SiteView } from "@/shared/view";
 import { describeFailure, issuePushUrl } from "../client";
 import { Drawer } from "../Drawer";
+import { EmptyState } from "../EmptyState";
 import { AdminIcon } from "../icons";
 import { pushCurl } from "../MonitorsEditor";
 import { StatePill } from "../StatePill";
@@ -165,7 +167,7 @@ function DetailBody({
           <div id={`${id}-delete`} className="border-l-2 border-down bg-raised px-3 py-3 text-sm">
             <p>
               <strong>Delete {m.name}?</strong> It stops being checked and leaves this list. This cannot be
-              undone here (Settings, Revisions can bring it back).
+              undone here (Settings, History can bring it back).
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <Button tone="danger" onClick={() => void remove()} disabled={busy}>
@@ -289,7 +291,20 @@ function DetailBody({
             </table>
           </div>
         ) : (
-          <p className="text-sm text-muted">Nothing yet.</p>
+          <EmptyState
+            title={heartbeat ? "No pings yet" : "No checks yet"}
+            text={
+              heartbeat
+                ? "Each ping your job sends shows up here."
+                : "Each check shows up here as soon as it runs."
+            }
+            action={
+              <Button onClick={() => void test()} disabled={busy}>
+                <AdminIcon name="send" size={14} />
+                Send test alert
+              </Button>
+            }
+          />
         )}
       </section>
 
@@ -307,7 +322,7 @@ function DetailBody({
             <>
               <Fact icon="pending">Checked {every(m.intervalS)}</Fact>
               {m.runners.map((r) => (
-                <Fact key={r} icon={r === "builtin" ? "cloud" : "server"}>
+                <Fact key={r} icon={r === BUILTIN_RUNNER ? "cloud" : "server"}>
                   Runs on {runnerName(r, config.agents)}
                 </Fact>
               ))}

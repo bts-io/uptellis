@@ -46,6 +46,28 @@ describe("/admin pages", () => {
     expect(findForbiddenLiterals(body)).toEqual([]);
   });
 
+  it("renders the first-run screen on its own, without the tabs", async () => {
+    const html = await page("/admin/welcome");
+    const t = text(html);
+    for (const label of [
+      "What should we watch?",
+      "Address to check",
+      "Where should we alert you?",
+      "Email",
+      "Discord",
+      "Telegram",
+      "SMS",
+      "ntfy",
+      "Start monitoring",
+      "Skip for now",
+    ])
+      expect(t, label).toContain(label);
+    expect(html).not.toContain('href="/admin/alerts"');
+    const body = html.replace(/<head>.*<\/head>/s, "").replace(/<script\b.*?<\/script>/gs, "");
+    expect(text(body)).not.toMatch(/revision|probe:|runner|builtin/i);
+    expect(findForbiddenLiterals(body)).toEqual([]);
+  });
+
   it("sends the old admin URLs to their new place", async () => {
     for (const [from, to] of [
       ["/admin/sources", "/admin/settings/sources"],
