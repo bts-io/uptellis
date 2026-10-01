@@ -125,10 +125,13 @@ describe("SiteConfig", () => {
     ]);
     expect(SiteConfig.safeParse({ ...minimal, theme: "d-neon" }).success).toBe(false);
   });
+  it("accepts a config with no hostnames (served only as the default or only site)", () => {
+    expect(SiteConfig.parse({ ...minimal, hostnames: [] }).hostnames).toEqual([]);
+  });
   it("rejects invalid configs", () => {
     const bad: [string, unknown][] = [
       ["slug", { ...minimal, slug: "Acme Co" }],
-      ["no hostnames", { ...minimal, hostnames: [] }],
+      ["hostname without a domain", { ...minimal, hostnames: ["localhost"] }],
       ["address hostname", { ...minimal, hostnames: [DOC4] }],
       [
         "source kind mismatch",

@@ -19,7 +19,7 @@ import { useToast } from "../Toast";
 import { Button, inputClass } from "../ui";
 import { useSiteConfig } from "../useSiteConfig";
 import { Checklist } from "./Checklist";
-import { type ChecklistFacts, welcomeSkipped } from "./firstRun";
+import { type ChecklistFacts, rememberTestAlert, welcomeSkipped } from "./firstRun";
 import { HeartbeatForm } from "./HeartbeatForm";
 import { MonitorDetail } from "./MonitorDetail";
 import { MonitorForm } from "./MonitorForm";
@@ -120,6 +120,7 @@ export function MonitorsDashboard({
     const service = all.find((r) => r.monitor)?.serviceId;
     const results = await Promise.all(channels.map((c) => testChannel(site, c.id, "down", service)));
     setTesting(false);
+    if (results.some((r) => r.sent)) rememberTestAlert(site);
     const failed = channels.filter((_, i) => !results[i]!.sent).map((c) => c.name);
     if (failed.length === 0) {
       setTestSent(true);

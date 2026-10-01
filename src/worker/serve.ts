@@ -53,10 +53,8 @@ async function dispatch(request: Request, { bindings }: RequestDeps): Promise<Re
   const gated = await pageGate(request, principal, async () => (await userCount(platform)) === 0);
   if (gated) return limitGateRejection(request, platform, gated);
 
-  // Server functions read the default site from the request context (src/client/lib/page.ts).
-  const siteDefault = platform.setting("SITE_DEFAULT");
   const res = await scope.run({ bindings, request, principal }, () =>
-    startHandler.fetch(request, { responseLinkHeader: true, context: { siteDefault } }),
+    startHandler.fetch(request, { responseLinkHeader: true }),
   );
   // Pages can be private: never cached at the edge or in the browser.
   const out = new Response(res.body, res);
@@ -67,12 +65,4 @@ async function dispatch(request: Request, { bindings }: RequestDeps): Promise<Re
 /** One request through limits, gates, API or SSR, with the security headers on the way out. */
 export async function handleRequest(request: Request, deps: RequestDeps): Promise<Response> {
   return withSecurityHeaders(await dispatch(request, deps), new URL(request.url).pathname);
-}
-
-// Types the request context passed to Start above (read in src/client/lib/page.ts). Declared here, not in
-// src/client/router.tsx: there it would make the router type depend on itself.
-declare module "@tanstack/react-router" {
-  interface Register {
-    server: { requestContext: { siteDefault: string | undefined } };
-  }
 }

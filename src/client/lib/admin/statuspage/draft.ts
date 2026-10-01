@@ -17,6 +17,7 @@ import { monitorServiceId, monitorsOf } from "@/shared/monitors";
 import type { DisplayState, ServiceView, SiteView } from "@/shared/view";
 import { worstState } from "@/shared/view/state";
 import { viewServices } from "../monitors/model";
+import { serviceLabel } from "../names";
 
 export interface PageDraft {
   title: string;
@@ -88,7 +89,7 @@ export function catalogOf(config: SiteConfig, view: SiteView | null): CatalogEnt
     const s = services.get(id);
     out.push({
       id,
-      name: m.name,
+      name: serviceLabel(id, m.name),
       group: m.type === "push" ? "heartbeat" : "monitor",
       detail: m.type === "push" ? "Heartbeat" : (s?.targetDisplay ?? null),
       state: s?.state ?? null,
@@ -100,7 +101,7 @@ export function catalogOf(config: SiteConfig, view: SiteView | null): CatalogEnt
     seen.add(s.id);
     out.push({
       id: s.id,
-      name: s.name,
+      name: serviceLabel(s.id, s.name),
       group: "other",
       detail: s.targetDisplay,
       state: s.state,
@@ -110,12 +111,12 @@ export function catalogOf(config: SiteConfig, view: SiteView | null): CatalogEnt
   return out;
 }
 
-/** The catalog entry for an id, or a nameless stand-in for an id nothing knows (never the id itself). */
+/** The catalog entry for an id, or a stand-in named by where it came from for an id nothing knows. */
 export function entryFor(catalog: readonly CatalogEntry[], id: string): CatalogEntry {
   return (
     catalog.find((e) => e.id === id) ?? {
       id,
-      name: "Unknown service",
+      name: serviceLabel(id),
       group: "other",
       detail: "Nothing reports under it any more",
       state: null,

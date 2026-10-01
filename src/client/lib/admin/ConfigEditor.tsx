@@ -9,6 +9,7 @@ import { registeredThemes } from "../../themes";
 import { ChannelsField } from "./ChannelsEditor";
 import { type AdminFailure, describeFailure, getPushTokens, importConfig, saveConfig } from "./client";
 import { AgentsField, AlertsField, MaintenanceField, MonitorsField } from "./MonitorsEditor";
+import { serviceLabel } from "./names";
 import { PublicSettings } from "./PublicEditor";
 import { Button, Card, DiffTable, Field, IssueText, inputClass, issuesAt, Notice, SelectField } from "./ui";
 
@@ -547,14 +548,15 @@ const GENERIC_PROFILE = "generic";
  * only shown for a listed service nothing names.
  */
 export function knownServices(config: SiteConfig, services: readonly KnownService[]): Map<string, string> {
-  const known = new Map(services.map((s) => [s.id, s.name]));
+  const known = new Map(services.map((s) => [s.id, serviceLabel(s.id, s.name)]));
   for (const m of monitorsOf(config)) {
     const id = monitorServiceId(m.id);
-    if (!known.has(id)) known.set(id, m.name);
+    if (!known.has(id)) known.set(id, serviceLabel(id, m.name));
   }
   for (const [id, name] of Object.entries(config.displayNames ?? {}))
     if (known.has(id) && name) known.set(id, name);
-  for (const id of config.sections.flatMap((s) => s.services)) if (!known.has(id)) known.set(id, id);
+  for (const id of config.sections.flatMap((s) => s.services))
+    if (!known.has(id)) known.set(id, serviceLabel(id));
   return known;
 }
 

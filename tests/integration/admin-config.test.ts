@@ -209,6 +209,7 @@ describe("admin config API", () => {
       json(await handle(`/api/sites?host=${encodeURIComponent(host)}`, { headers: { cookie } }));
     expect(await lookup(demo.hostnames[0]!)).toEqual({ site: "demo" });
     expect(await lookup(demo.hostnames[0]!.toUpperCase())).toEqual({ site: "demo" });
-    expect(await lookup(new URL(ORIGIN).hostname)).toEqual({ site: null });
+    // A host no site lists gets SITE_DEFAULT (demo in the test bindings), as the page and admin do.
+    expect(await lookup(new URL(ORIGIN).hostname)).toEqual({ site: "demo" });
   });
 });

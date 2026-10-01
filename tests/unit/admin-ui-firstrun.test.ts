@@ -15,7 +15,9 @@ import {
   hideChecklist,
   monitorFromAddress,
   needsWelcome,
+  rememberTestAlert,
   skipWelcome,
+  testAlertSent,
   welcomeSkipped,
 } from "@/client/lib/admin/monitors/firstRun";
 import { ToastProvider } from "@/client/lib/admin/Toast";
@@ -422,9 +424,44 @@ describe("getting started", () => {
     expect(checklist()).toBeNull();
   });
 
+  it("ticks the test alert from an earlier send in this browser, per site", async () => {
+    const config = {
+      ...full,
+      notify: { discord: false, channels: [channelFromDraft(emptyChannelDraft("slack"), [])] },
+    };
+    dashboard(config, { facts: { deliveries: [], users: 1 } });
+    await settle();
+    expect(item("test").getAttribute("data-done")).not.toBe("true");
+    act(() => root!.unmount());
+    root = null;
+    // The server records no test send: a test that went through elsewhere is remembered in the browser.
+    rememberTestAlert("demo");
+    expect(testAlertSent("other")).toBe(false);
+    dashboard(config, { facts: { deliveries: [], users: 1 } });
+    await settle();
+    expect(item("test").getAttribute("data-done")).toBe("true");
+  });
+
+  it("remembers a test alert from the first-run screen only when it went through", async () => {
+    firstRun();
+    tile("Discord");
+    type(field("Address to check"), "https://shop.example.org/");
+    await start();
+    testReply = { status: 502, body: { sent: false, status: 404, error: "http_404" } };
+    await act(async () => button("Send a test alert").click());
+    await settle();
+    expect(testAlertSent("demo")).toBe(false);
+    testReply = { status: 200, body: { sent: true, status: 204, error: null } };
+    await act(async () => button("Send a test alert").click());
+    await settle();
+    expect(testAlertSent("demo")).toBe(true);
+  });
+
   it("survives a storage that throws", async () => {
     brokenStorage();
     expect(() => hideChecklist("demo")).not.toThrow();
+    expect(() => rememberTestAlert("demo")).not.toThrow();
+    expect(testAlertSent("demo")).toBe(false);
     dashboard(full);
     await settle();
     expect(checklist()).not.toBeNull();

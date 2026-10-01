@@ -3,12 +3,12 @@
  * `notifications` table, newest first. Only short error codes leave here; anything else in `error` (it
  * should never hold more) is reduced to `error`.
  */
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import type { Delivery, DeliveryStatus } from "@/shared/schemas/admin";
 import { type Db, schema } from "@/worker/db";
 import { toIso } from "@/worker/db/util";
 
-const { notifications } = schema;
+const { incidents, notifications } = schema;
 
 /** A provider error code: short, plain; never a URL, address or response body. */
 const CODE = /^[a-z0-9][a-z0-9_.:-]{0,63}$/i;
@@ -35,6 +35,20 @@ export async function listDeliveries(db: Db, site: string, limit: number): Promi
     .where(eq(notifications.site, site))
     .orderBy(desc(notifications.createdAt), desc(sql`rowid`))
     .limit(limit);
+  // Whether each incident was about a service (`down`) or a source (`stale`); pruned ones say nothing.
+  const ids = [...new Set(rows.map((r) => r.incidentId))];
+  const kinds = new Map<string, string>();
+  for (let i = 0; i < ids.length; i += 50) {
+    const found = await db
+      .select({ id: incidents.id, kind: incidents.kind })
+      .from(incidents)
+      .where(and(eq(incidents.site, site), inArray(incidents.id, ids.slice(i, i + 50))));
+    for (const f of found) kinds.set(f.id, f.kind);
+  }
+  const subjectOf = (id: string) => {
+    const kind = kinds.get(id);
+    return kind === "stale" ? { subject: "source" as const } : kind ? { subject: "service" as const } : {};
+  };
   return rows.map((r) => ({
     incidentId: r.incidentId,
     kind: r.kind,
@@ -46,5 +60,6 @@ export async function listDeliveries(db: Db, site: string, limit: number): Promi
     sentAt: r.sentAt === null ? null : toIso(r.sentAt),
     lastAttemptAt: r.lastAttemptAt === null ? null : toIso(r.lastAttemptAt),
     error: r.status === "failed" ? safeErrorCode(r.error) : null,
+    ...subjectOf(r.incidentId),
   }));
 }

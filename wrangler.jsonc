@@ -23,10 +23,10 @@
     "run_worker_first": ["/*", "!/assets/*", "!/fonts/*", "!/favicon.ico"]
   },
 
-  "vars": {
-    // The site a bare "/" renders (sites/<id>.json).
-    "SITE_DEFAULT": "demo"
-  },
+  // SITE_DEFAULT (unset here): the site a request gets when its host matches no site's hostnames; without
+  // it, the only site, or the first one created. It also turns on the committed sites/<slug>.json of that
+  // slug (the bundled demo is "demo"); `DEPLOY_SITE_DEFAULT=<slug> bun run deploy:config` sets it.
+  "vars": {},
 
   // No database_id: the Deploy to Cloudflare button provisions the database, and wrangler finds it by name.
   // By hand, run `bunx wrangler d1 create uptellis-db` once before the first `bun run deploy` (which applies

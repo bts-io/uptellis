@@ -447,7 +447,22 @@ describe("alerts model", () => {
   it("reads deliveries as sentences and groups them per incident change", () => {
     const subjects = { services: new Map([[monitorServiceId("shop"), "Shop"]]), sources: new Map() };
     expect(deliverySentence(ROWS[0]!, subjects)).toBe("Shop went down");
-    expect(deliverySentence({ incidentId: "x:1", kind: "resolve" }, subjects)).toBe("Something recovered");
+    // A service or source removed since: said so, never "Something".
+    expect(deliverySentence({ incidentId: "x:1", kind: "open" }, subjects)).toBe(
+      "A removed service went down",
+    );
+    expect(deliverySentence({ incidentId: "x:1", kind: "resolve" }, subjects)).toBe(
+      "A removed service came back",
+    );
+    expect(deliverySentence({ incidentId: "kuma:gone:1", kind: "open", subject: "source" }, subjects)).toBe(
+      "A removed source went silent",
+    );
+    expect(
+      deliverySentence({ incidentId: "kuma:gone:1", kind: "resolve", subject: "source" }, subjects),
+    ).toBe("A removed source is reporting again");
+    expect(deliverySentence({ incidentId: "x:1", kind: "resolve", subject: "service" }, subjects)).toBe(
+      "A removed service came back",
+    );
     const groups = groupDeliveries(ROWS, new Map([[OPS.id, "Ops Slack"]]), subjects);
     expect(groups).toHaveLength(2);
     expect(groupSummary(groups[0]!)).toBe(

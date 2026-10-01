@@ -3,11 +3,11 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { InviteAccept } from "@/client/lib/account/InviteAccept";
-import { Setup } from "@/client/lib/account/Setup";
+import { Setup, slugFromName } from "@/client/lib/account/Setup";
 import { SignIn } from "@/client/lib/account/SignIn";
 import { ApiKeys } from "@/client/lib/admin/ApiKeys";
 import { Users } from "@/client/lib/admin/Users";
-import { parseSiteConfig } from "@/shared/config";
+import { parseSiteConfig, type SiteConfig } from "@/shared/config";
 import type { ApiKeyList, InviteList, UserList, UserSummary } from "@/shared/schemas/auth";
 import demo from "../../sites/demo.json";
 
@@ -221,61 +221,56 @@ describe("invite acceptance", () => {
 
 describe("first-run setup", () => {
   const config = parseSiteConfig(demo);
-  const owner = async () => {
+  /** A configured site of a private deployment: a replaced seed with its own slug (not the demo). */
+  const acme = parseSiteConfig({ ...demo, slug: "acme", name: "Acme Status" });
+  const stateOf = (c: SiteConfig) => ({
+    config: c,
+    version: 1,
+    savedAt: "2026-09-28T00:00:00Z",
+    savedBy: "seed",
+  });
+  const owner = async (existing: SiteConfig | null) => {
     type(field("Name"), "Site Owner");
     type(field("Email"), email("owner"));
     type(field("Password (at least 12 characters)"), PASSWORD);
     type(field("Confirm password"), PASSWORD);
     replies.push({ status: 201, body: me(user("o1", "owner")) });
-    replies.push({
-      status: 200,
-      body: { config, version: 1, savedAt: "2026-09-28T00:00:00Z", savedBy: "seed" },
-    });
+    if (existing) replies.push({ status: 200, body: stateOf(existing) });
     await submit("Create owner account");
   };
+  const more = () => document.querySelector("details")!;
 
-  it("creates the owner, then confirms the site this host serves and opens admin", async () => {
-    mount(createElement(Setup, { site: "demo", host: "status.example.com" }));
-    await owner();
-    expect(calls.map((c) => `${c.method} ${c.path}`)).toEqual([
-      "POST /api/setup",
-      "GET /api/admin/sites/demo/config",
-    ]);
-    expect(text()).toContain("This address serves the site demo");
-    expect(field("Slug").readOnly).toBe(true);
-    expect(field("Name").value).toBe(config.name);
-    choose(field("Visibility") as unknown as HTMLSelectElement, "private");
-    replies.push({ status: 200, body: { version: 2, diff: [] } });
-    await submit("Save and open admin");
-    expect(calls[2]).toMatchObject({
-      method: "PUT",
-      path: "/api/admin/sites/demo/config",
-      body: { baseVersion: 1, note: "first-run setup", config: { slug: "demo", visibility: "private" } },
-    });
-    expect(assign).toHaveBeenCalledWith("/admin");
+  it("derives a slug from the name", () => {
+    expect(slugFromName("Acme Cloud")).toBe("acme-cloud");
+    expect(slugFromName("  Café Status!  ")).toBe("cafe-status");
+    expect(slugFromName("x".repeat(40))).toBe("x".repeat(32));
+    expect(slugFromName("!!")).toBe("site");
   });
 
-  it("creates a new site instead when asked", async () => {
-    mount(createElement(Setup, { site: "demo", host: "status.example.com" }));
-    await owner();
-    act(() => button("Create a new site instead").click());
-    expect(field("Slug").readOnly).toBe(false);
-    expect(field("Hostname").value).toBe("status.example.com");
-    type(field("Slug"), "Bad Slug");
+  it("creates the owner, then a new site from its name alone, with no hostname, and opens the welcome screen", async () => {
+    mount(createElement(Setup, { site: null, host: "localhost" }));
+    await owner(null);
+    expect(calls.map((c) => `${c.method} ${c.path}`)).toEqual(["POST /api/setup"]);
+    expect(text()).toContain("Name your status page");
+    // Slug, domain, visibility and theme wait under a folded "More".
+    expect(more().open).toBe(false);
+    expect(field("Own domain (optional)").value).toBe("");
+    expect(button("Use the demo instead")).toBeUndefined();
     await submit("Create site and open admin");
-    expect(calls).toHaveLength(2);
-    type(field("Slug"), "acme");
+    expect(calls).toHaveLength(1);
+    expect(text()).toContain("Enter a name");
     type(field("Name"), "Acme Cloud");
+    expect(field("Slug").value).toBe("acme-cloud");
     replies.push({ status: 201, body: { version: 1, diff: [] } });
     await submit("Create site and open admin");
-    expect(calls[2]).toMatchObject({
+    expect(calls[1]).toMatchObject({
       method: "POST",
       path: "/api/admin/sites",
       body: {
         config: {
-          slug: "acme",
+          slug: "acme-cloud",
           name: "Acme Cloud",
-          hostnames: ["status.example.com"],
+          hostnames: [],
           visibility: "private",
           theme: "a-sys-status",
         },
@@ -285,22 +280,114 @@ describe("first-run setup", () => {
     expect(assign).toHaveBeenCalledWith("/admin/welcome");
   });
 
-  it("opens the first-run screen after confirming a site that watches nothing yet", async () => {
-    mount(createElement(Setup, { site: "demo", host: "status.example.com" }));
-    type(field("Name"), "Site Owner");
-    type(field("Email"), email("owner"));
-    type(field("Password (at least 12 characters)"), PASSWORD);
-    type(field("Confirm password"), PASSWORD);
-    replies.push({ status: 201, body: me(user("o1", "owner")) });
-    const bare = parseSiteConfig({ ...demo, sources: [], probes: [], monitors: [], sections: [] });
-    replies.push({
-      status: 200,
-      body: { config: bare, version: 1, savedAt: "2026-09-28T00:00:00Z", savedBy: "seed" },
+  it("keeps an edited slug, opens More on its issues, and refuses localhost as a domain", async () => {
+    mount(createElement(Setup, { site: null, host: "localhost" }));
+    await owner(null);
+    type(field("Slug"), "Bad Slug");
+    type(field("Name"), "Acme Cloud");
+    expect(field("Slug").value).toBe("Bad Slug");
+    type(field("Own domain (optional)"), "localhost");
+    await submit("Create site and open admin");
+    expect(calls).toHaveLength(1);
+    expect(more().open).toBe(true);
+    expect(text()).toContain("Use 2 to 32 lower-case letters, digits or dashes");
+    expect(text()).toContain("Enter a domain like status.example.com, or leave it empty");
+    type(field("Slug"), "acme");
+    type(field("Own domain (optional)"), "status.acme.example");
+    replies.push({ status: 201, body: { version: 1, diff: [] } });
+    await submit("Create site and open admin");
+    expect(calls[1]).toMatchObject({
+      body: { config: { slug: "acme", hostnames: ["status.acme.example"] } },
     });
-    await submit("Create owner account");
+  });
+
+  it("never makes the demo the primary choice: a new site takes this address, the demo is the other way", async () => {
+    mount(createElement(Setup, { site: "demo", host: "staging.example.net" }));
+    await owner(config);
+    expect(calls.map((c) => `${c.method} ${c.path}`)).toEqual([
+      "POST /api/setup",
+      "GET /api/admin/sites/demo/config",
+    ]);
+    expect(text()).toContain("Name your status page");
+    expect(button("Create site and open admin")).toBeDefined();
+    expect(button("Save and open admin")).toBeUndefined();
+    // Another site serves this address only as the default: the new one lists it, so it opens there.
+    expect(field("Own domain (optional)").value).toBe("staging.example.net");
+    type(field("Name"), "Acme Cloud");
+    replies.push({ status: 201, body: { version: 1, diff: [] } });
+    await submit("Create site and open admin");
+    expect(calls[2]).toMatchObject({
+      method: "POST",
+      body: { config: { slug: "acme-cloud", hostnames: ["staging.example.net"] } },
+    });
+    expect(assign).toHaveBeenCalledWith("/admin/welcome");
+  });
+
+  it("uses the demo only when asked", async () => {
+    mount(createElement(Setup, { site: "demo", host: config.hostnames[0]! }));
+    await owner(config);
+    // The demo lists this address already: a new site does not claim it.
+    expect(field("Own domain (optional)").value).toBe("");
+    act(() => button("Use the demo instead").click());
+    expect(text()).toContain(`This address serves the site ${config.name}`);
+    expect(field("Slug").readOnly).toBe(true);
+    expect(field("Name").value).toBe(config.name);
     replies.push({ status: 200, body: { version: 2, diff: [] } });
     await submit("Save and open admin");
-    expect(calls[2]).toMatchObject({ method: "PUT", path: "/api/admin/sites/demo/config" });
+    expect(calls[2]).toMatchObject({
+      method: "PUT",
+      path: "/api/admin/sites/demo/config",
+      body: {
+        baseVersion: 1,
+        note: "first-run setup",
+        config: { slug: "demo", hostnames: config.hostnames },
+      },
+    });
+    expect(assign).toHaveBeenCalledWith("/admin");
+  });
+
+  it("confirms a configured site that is not the demo, or creates a new one instead", async () => {
+    mount(createElement(Setup, { site: "acme", host: "status.example.com" }));
+    await owner(acme);
+    expect(text()).toContain("This address serves the site Acme Status");
+    choose(field("Visibility") as unknown as HTMLSelectElement, "public");
+    replies.push({ status: 200, body: { version: 2, diff: [] } });
+    await submit("Save and open admin");
+    expect(calls[2]).toMatchObject({
+      method: "PUT",
+      path: "/api/admin/sites/acme/config",
+      body: { config: { slug: "acme", visibility: "public" } },
+    });
+    expect(assign).toHaveBeenCalledWith("/admin");
+    act(() => button("Create a new site instead").click());
+    expect(field("Slug").readOnly).toBe(false);
+    expect(button("Use acme instead")).toBeDefined();
+  });
+
+  it("opens the first-run screen after confirming a site that watches nothing yet", async () => {
+    mount(createElement(Setup, { site: "acme", host: "status.example.com" }));
+    const bare = parseSiteConfig({
+      ...demo,
+      slug: "acme",
+      sources: [],
+      probes: [],
+      monitors: [],
+      sections: [],
+    });
+    await owner(bare);
+    replies.push({ status: 200, body: { version: 2, diff: [] } });
+    await submit("Save and open admin");
+    expect(calls[2]).toMatchObject({ method: "PUT", path: "/api/admin/sites/acme/config" });
+    expect(assign).toHaveBeenCalledWith("/admin/welcome");
+  });
+
+  it("starts at the site step for a signed-in owner of an instance without a site", async () => {
+    mount(createElement(Setup, { site: null, host: "localhost", start: "site" }));
+    expect(text()).not.toContain("Owner account created");
+    type(field("Name"), "Acme Cloud");
+    replies.push({ status: 201, body: { version: 1, diff: [] } });
+    await submit("Create site and open admin");
+    expect(calls[0]).toMatchObject({ method: "POST", path: "/api/admin/sites" });
     expect(assign).toHaveBeenCalledWith("/admin/welcome");
   });
 });

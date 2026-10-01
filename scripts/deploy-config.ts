@@ -7,7 +7,7 @@
  *   DEPLOY_D1_ID        D1 database_id      DEPLOY_D1_NAME  D1 database_name (default: keep)
  *   DEPLOY_KV_ID        KV namespace id
  *   DEPLOY_PUBLIC_URL   vars.PUBLIC_URL (the base URL for sign-in and cookies)
- *   DEPLOY_SITE_DEFAULT vars.SITE_DEFAULT
+ *   DEPLOY_SITE_DEFAULT vars.SITE_DEFAULT (also turns on the committed sites/<slug>.json of that slug)
  *   DEPLOY_EMAIL_FROM   turns email channels on: the Email Service `send_email` binding `EMAIL` and
  *                       vars.EMAIL_FROM (an address on a domain onboarded to Cloudflare Email Service)
  */

@@ -62,7 +62,7 @@ import { D1ConfigStore, type SaveOutcome } from "../engine/config-store";
 import { listDeliveries } from "../engine/delivery-log";
 import { KeyStore } from "../engine/key-store";
 import { MasterKeyMissing } from "../engine/seal";
-import { siteSources } from "../engine/sites";
+import { resolveSite, siteSources } from "../engine/sites";
 import { isSameOrigin } from "../middleware/same-origin";
 import { PushTokenStore, pushPath } from "../monitors/push-store";
 import { sendTestCard, TEST_CARD_KINDS } from "../notify";
@@ -408,9 +408,12 @@ export function adminRoutes() {
       });
     }
     const { platform } = c.var;
-    const site = c.req.query("site") ?? platform.setting("SITE_DEFAULT") ?? "";
-    const channel = c.req.query("channel");
     const store = configs(c);
+    const site =
+      c.req.query("site") ??
+      (await resolveSite(store, new URL(c.req.url).hostname, platform.setting("SITE_DEFAULT"))) ??
+      "";
+    const channel = c.req.query("channel");
     if (!(await store.load(site))) return notFound(c);
     // Without a channel: the historical Discord webhook, as before channels.
     if (channel === undefined && !platform.secret("DISCORD_WEBHOOK_URL")) {

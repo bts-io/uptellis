@@ -1,7 +1,7 @@
 /**
  * Data for a site page: the site is picked from the request host, then the view and the build commit come
- * from the API. `loadSitePage` is a server function, so the host lookup always runs in the Worker (with
- * `SITE_DEFAULT` from the request context) and the loader behaves the same during SSR and on a client refresh.
+ * from the API. `loadSitePage` is a server function, so the host lookup (`siteForHost`) always runs in the
+ * Worker and the loader behaves the same during SSR and on a client refresh.
  */
 import { notFound, redirect } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
@@ -21,40 +21,34 @@ export interface PageData {
 }
 
 /**
- * The Start request context src/worker/serve.ts passes. Read untyped here: registering it on `Register` makes the
- * router type depend on this function's context type, a cycle TypeScript resolves to `undefined`.
- */
-type RequestContext = { siteDefault?: string } | undefined;
-
-/**
  * What a site page the read API would not show becomes: a fresh instance goes to setup, a signed-out
  * visitor to sign-in (the site may be private), a signed-in user without access sees the 404 page, which
- * says nothing about whether the site exists.
+ * says nothing about whether the site exists. With no site at all (`noSite`), a user who may create one goes
+ * to setup's site step instead.
  */
-async function hiddenSite() {
+async function hiddenSite(noSite = false) {
   const me = Me.parse(await api("/api/me"));
   if (me.setupNeeded) return redirect({ href: AUTH_PAGES.setup });
   if (!me.user) return redirect({ href: `${AUTH_PAGES.signIn}?next=%2F` });
+  if (noSite && me.permissions.includes("instance.manage")) return redirect({ href: AUTH_PAGES.setup });
   return notFound();
 }
 
-export const loadSitePage = createServerFn({ method: "GET" }).handler(
-  async ({ context }): Promise<PageData> => {
-    const site = await siteForHost(getRequestUrl().hostname, (context as RequestContext)?.siteDefault);
-    if (!site) throw notFound();
-    const [view, commit] = await Promise.all([
-      api<SiteView>(`/api/sites/${encodeURIComponent(site)}/view`).catch(async (err: unknown) => {
-        if (err instanceof ApiError && err.status === 404) throw await hiddenSite();
-        throw err;
-      }),
-      api<{ commit?: string }>("/api/health").then(
-        (h) => h.commit ?? null,
-        () => null,
-      ),
-    ]);
-    return { view, commit };
-  },
-);
+export const loadSitePage = createServerFn({ method: "GET" }).handler(async (): Promise<PageData> => {
+  const site = await siteForHost(getRequestUrl().hostname);
+  if (!site) throw await hiddenSite(true);
+  const [view, commit] = await Promise.all([
+    api<SiteView>(`/api/sites/${encodeURIComponent(site)}/view`).catch(async (err: unknown) => {
+      if (err instanceof ApiError && err.status === 404) throw await hiddenSite();
+      throw err;
+    }),
+    api<{ commit?: string }>("/api/health").then(
+      (h) => h.commit ?? null,
+      () => null,
+    ),
+  ]);
+  return { view, commit };
+});
 
 /** Last good page in this tab: a failed background refresh keeps showing it instead of the error page. */
 let lastGood: PageData | null = null;

@@ -171,6 +171,11 @@ export const Delivery = z.object({
   lastAttemptAt: z.string().nullable(),
   /** A short error code (`http_404`, `timeout`, `email_unavailable`), null unless failed. */
   error: z.string().max(64).nullable(),
+  /**
+   * What the incident was about: a `service` (down) or a `source` (stale); absent once the incident is
+   * past retention. Lets admin word an alert whose service or source was removed since.
+   */
+  subject: z.enum(["service", "source"]).optional(),
 });
 export type Delivery = z.infer<typeof Delivery>;
 

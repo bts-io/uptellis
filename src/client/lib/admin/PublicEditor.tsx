@@ -54,7 +54,7 @@ export function PublicSettings({
 }: {
   site: string;
   visibility: SiteConfig["visibility"];
-  /** The site's first hostname: where the public endpoints are served. */
+  /** The site's first hostname: where the public endpoints are served; empty for a site without one. */
   hostname: string;
   value: Public;
   /** The saved settings, which the endpoints (and the badge preview) serve. */
@@ -64,7 +64,8 @@ export function PublicSettings({
   onChange: (value: Public) => void;
 }) {
   const [service, setService] = useState(services[0]?.[0] ?? "");
-  const urls = publicUrls(`https://${hostname}`, site, service || "<service>");
+  // A site with no hostname is served on this instance's own address: the paths alone.
+  const urls = publicUrls(hostname ? `https://${hostname}` : "", site, service || "<service>");
   const badgeLive = saved.enabled && saved.fields.includes("verdict");
   const toggle = (field: PublicField, on: boolean) =>
     onChange({
@@ -126,7 +127,13 @@ export function PublicSettings({
 
       <div className="mt-4 flex flex-col gap-3" aria-label="Public URLs" role="group">
         <p className="text-xs text-muted">
-          Served on <span className="font-mono">{hostname}</span> from the saved settings.
+          {hostname ? (
+            <>
+              Served on <span className="font-mono">{hostname}</span> from the saved settings.
+            </>
+          ) : (
+            "Served on this instance's own address from the saved settings."
+          )}
         </p>
         <dl className="grid gap-x-3 gap-y-1 text-xs sm:grid-cols-[9rem_1fr]">
           <dt className="text-muted">Summary</dt>

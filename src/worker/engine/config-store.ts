@@ -1,14 +1,15 @@
 /**
  * Site configs in D1: every save is a new `site_configs` row (version + 1), the highest version is current,
  * and nothing is ever deleted (rollback is a restore, which saves again). A site with no rows is seeded on
- * first read with version 1 from its committed `sites/<slug>.json` (saved by `seed`).
+ * first read with version 1 from its committed `sites/<slug>.json` (saved by `seed`), when that seed is
+ * active (`activeSeed`: `SITE_DEFAULT` names it). An inactive committed slug is unknown here, rows and all.
  *
  * Reads for the dashboard go isolate memory (15 s) -> KV `config:<site>` -> D1. A save writes D1 first,
  * then refreshes KV and this isolate's memory; other isolates see it within their memory TTL (plus KV's
  * 30 s edge cache). Admin reads and every save read D1 directly, so optimistic concurrency (`baseVersion`)
  * always compares against the stored version.
  */
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, min } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import type { KeyValue, Platform } from "@/platform/types";
 import { type SiteConfig, SiteConfig as SiteConfigSchema } from "@/shared/config";
@@ -17,7 +18,7 @@ import { SiteSlug } from "@/shared/model";
 import type { ConfigDiffEntry, ConfigState, RevisionList } from "@/shared/schemas/admin";
 import { type Db, schema } from "@/worker/db";
 import { toIso } from "@/worker/db/util";
-import { type ConfigSource, seedConfig, seedSlugs } from "./sites";
+import { activeSeed, type ConfigSource, inactiveSeed, seedConfig } from "./sites";
 
 const { siteConfigs, sites } = schema;
 
@@ -34,7 +35,7 @@ type Row = typeof siteConfigs.$inferSelect;
 type Stmt = BatchItem<"sqlite">;
 
 const memory = new Map<string, { state: ConfigState | null; until: number }>();
-let knownSlugs: { slugs: string[]; until: number } | null = null;
+let knownSlugs: { siteDefault: string | undefined; slugs: string[]; until: number } | null = null;
 
 /** Forgets every config this isolate cached (tests that reset storage or save behind the store's back). */
 export function resetConfigCache(): void {
@@ -71,16 +72,27 @@ export class D1ConfigStore implements ConfigSource {
   private readonly db: Db;
   private readonly kv: KeyValue;
 
-  constructor(private readonly platform: Pick<Platform, "db" | "batch" | "kv">) {
+  /** The slug `SITE_DEFAULT` names: the only committed seed this store knows (`activeSeed`). */
+  private readonly siteDefault: string | undefined;
+
+  constructor(
+    private readonly platform: Pick<Platform, "db" | "batch" | "kv"> & Partial<Pick<Platform, "setting">>,
+  ) {
     this.db = platform.db;
     this.kv = platform.kv;
+    this.siteDefault = platform.setting?.("SITE_DEFAULT") || undefined;
+  }
+
+  /** A malformed slug or a committed one this instance does not run. */
+  private unknown(slug: string): boolean {
+    return !SiteSlug.safeParse(slug).success || inactiveSeed(slug, this.siteDefault);
   }
 
   /** The current config for the dashboard (cached as described above), or null for an unknown site. */
   async current(slug: string): Promise<ConfigState | null> {
+    if (this.unknown(slug)) return null;
     const hit = memory.get(slug);
     if (hit && hit.until > Date.now()) return hit.state;
-    if (!SiteSlug.safeParse(slug).success) return null;
 
     let state: ConfigState | null = null;
     try {
@@ -97,26 +109,34 @@ export class D1ConfigStore implements ConfigSource {
     return state;
   }
 
-  /** Committed sites first (registry order), then any other site with a saved config. */
+  /**
+   * The active seed first (even before its first read seeds it), then every other site with a saved config
+   * in the order it was created (its version 1), ties by slug. Inactive committed slugs are left out.
+   */
   async slugs(): Promise<string[]> {
-    if (knownSlugs && knownSlugs.until > Date.now()) return knownSlugs.slugs;
-    const seeds = seedSlugs();
+    const siteDefault = this.siteDefault;
+    if (knownSlugs && knownSlugs.siteDefault === siteDefault && knownSlugs.until > Date.now())
+      return knownSlugs.slugs;
+    const seed = activeSeed(siteDefault)?.slug;
+    const created = min(siteConfigs.createdAt);
     const rows = await this.db
-      .selectDistinct({ site: siteConfigs.site })
+      .select({ site: siteConfigs.site, created })
       .from(siteConfigs)
-      .orderBy(asc(siteConfigs.site));
-    const slugs = [...seeds, ...rows.map((r) => r.site).filter((s) => !seeds.includes(s))];
-    knownSlugs = { slugs, until: Date.now() + CONFIG_MEMORY_TTL_MS };
+      .groupBy(siteConfigs.site)
+      .orderBy(asc(created), asc(siteConfigs.site));
+    const saved = rows.map((r) => r.site).filter((s) => s !== seed && !this.unknown(s));
+    const slugs = seed ? [seed, ...saved] : saved;
+    knownSlugs = { siteDefault, slugs, until: Date.now() + CONFIG_MEMORY_TTL_MS };
     return slugs;
   }
 
-  /** The current config straight from D1 (seeding version 1 for a committed site), or null. */
+  /** The current config straight from D1 (seeding version 1 for the active seed), or null. */
   async load(slug: string): Promise<ConfigState | null> {
-    if (!SiteSlug.safeParse(slug).success) return null;
+    if (this.unknown(slug)) return null;
     const row = await this.latestRow(slug);
     if (row) return toState(row);
-    const seed = seedConfig(slug);
-    if (!seed) return null;
+    const seed = activeSeed(this.siteDefault);
+    if (seed?.slug !== slug) return null;
     await this.platform.batch([
       this.db
         .insert(siteConfigs)
@@ -170,7 +190,7 @@ export class D1ConfigStore implements ConfigSource {
 
   /**
    * Creates a site that neither D1 nor the committed files know, with `config` as its version 1. False when
-   * the slug is taken (a committed site, a saved one, or a concurrent create that won the key).
+   * the slug is taken (a committed site, active or not, a saved one, or a concurrent create that won the key).
    */
   async create(config: SiteConfig): Promise<boolean> {
     const slug = config.slug;

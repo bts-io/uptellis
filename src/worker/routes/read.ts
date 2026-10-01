@@ -4,7 +4,9 @@
  * - `GET /:site/model`   the assembled `SiteModel` (the cache, else the store and then the cache is warmed)
  * - `GET /:site/sources` each source with `lastSeenAt`, age in seconds and freshness at request time
  * - `GET /:site/view`    the `SiteView` themes render: the model plus 90 days of history, built at request time
- * - `GET /?host=<name>`  `{ site }`: the site whose config lists that hostname, or null (the page's host lookup)
+ * - `GET /?host=<name>`  `{ site }`: the site a request on that host gets (`resolveSite`: the site listing the
+ *                        hostname, else `SITE_DEFAULT`, else the only or first-created site), or null when
+ *                        the instance has no site yet. The page, admin and setup all look it up here.
  *
  * Unknown sites answer 404, and so do private sites the principal may not view (`page.view`,
  * src/shared/auth.ts: a signed-in user, or an API key of that site with the `read` scope), so a private
@@ -16,7 +18,7 @@ import { can } from "@/shared/auth";
 import type { AppEnv } from "@/worker/app-env";
 import { principalOf } from "../auth/context";
 import { buildSourcesReport, type ReadDeps, readSiteModel, readSiteView } from "../engine/read-service";
-import { getSiteConfig, seedConfigs, siteSources } from "../engine/sites";
+import { getSiteConfig, resolveSite, seedConfigs, siteSources } from "../engine/sites";
 
 export type ReadDepsResolver = (platform: Platform) => ReadDeps;
 
@@ -53,12 +55,10 @@ export function readRoutes(resolve: ReadDepsResolver, opts: ReadRoutesOptions = 
   };
 
   app.get("/", async (c) => {
-    const host = (c.req.query("host") ?? "").toLowerCase();
-    const configs = resolve(c.var.platform).configs ?? seedConfigs;
-    for (const slug of await configs.slugs()) {
-      if ((await getSiteConfig(configs, slug))?.hostnames.includes(host)) return c.json({ site: slug });
-    }
-    return c.json({ site: null });
+    const { platform } = c.var;
+    const configs = resolve(platform).configs ?? seedConfigs;
+    const site = await resolveSite(configs, c.req.query("host") ?? "", platform.setting("SITE_DEFAULT"));
+    return c.json({ site });
   });
 
   app.get("/:site/model", async (c) => {

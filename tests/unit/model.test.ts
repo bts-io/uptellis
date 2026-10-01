@@ -70,7 +70,11 @@ describe("Site", () => {
     const base = { slug: "demo", name: "Acme", hostnames: ["status.example.com"], configVersion: 1 };
     expect(Site.safeParse({ ...base, hostnames: [DOC4] }).success).toBe(false);
     expect(Site.safeParse({ ...base, slug: "B" }).success).toBe(false);
-    expect(Site.safeParse({ ...base, hostnames: [] }).success).toBe(false);
+    expect(Site.safeParse({ ...base, hostnames: ["localhost"] }).success).toBe(false);
+  });
+  it("accepts a site with no hostnames (served only as the default or only site)", () => {
+    const base = { slug: "acme", name: "Acme", hostnames: [], configVersion: 1 };
+    expect(Site.safeParse(base).success).toBe(true);
   });
 });
 

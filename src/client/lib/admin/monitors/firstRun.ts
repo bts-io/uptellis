@@ -171,7 +171,7 @@ export interface ChecklistFacts {
   deliveries: readonly Delivery[] | null;
   /** How many people can sign in, or null when this user cannot see the list (the item is left out). */
   users: number | null;
-  /** A test alert went through from this page. */
+  /** A test alert went through from this page, or earlier in this browser (`testAlertSent`). */
   testSent: boolean;
 }
 
@@ -233,6 +233,29 @@ export function hideChecklist(site: string): void {
     globalThis.localStorage?.setItem(hiddenKey(site), "1");
   } catch {
     // Nothing to do: the list is hidden for this visit anyway.
+  }
+}
+
+const testKey = (site: string) => `uptellis:test-alert-sent:${site}`;
+
+/**
+ * Whether a test alert of `site` went through from this browser (false when storage cannot be read). The
+ * server records no test send (`testIncident`), so this is what ticks "Send a test alert".
+ */
+export function testAlertSent(site: string): boolean {
+  try {
+    return globalThis.localStorage?.getItem(testKey(site)) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/** Remembers a test alert that went through (`testChannel`); a storage that refuses it only forgets it. */
+export function rememberTestAlert(site: string): void {
+  try {
+    globalThis.localStorage?.setItem(testKey(site), "1");
+  } catch {
+    // The item stays ticked for this visit through the page's own state.
   }
 }
 

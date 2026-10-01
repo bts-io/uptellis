@@ -8,6 +8,9 @@ const bindings = async () => ({
   BETTER_AUTH_SECRET: "test-better-auth-secret-0123456789abcdef",
   // TEST_MASTER_KEY in tests/support/ingest-keys.ts: seals the test ingest keys seeded by the setup file.
   SOURCE_MASTER_KEY: btoa("uptellis-test-master-key-32bytes"),
+  // The suites run against the bundled demo site, which is active only when SITE_DEFAULT names it (a real
+  // install leaves it unset: wrangler.jsonc no longer sets it).
+  SITE_DEFAULT: "demo",
 });
 
 // Three projects: pure unit tests in Node, the Hono API in workerd with a migrated D1, and the built Worker

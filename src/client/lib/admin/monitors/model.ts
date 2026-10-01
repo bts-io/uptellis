@@ -20,6 +20,7 @@ import {
 import type { DisplayState, IncidentView, ServiceView, SiteView } from "@/shared/view";
 import type { AdminIconName } from "../icons";
 import { newMonitor, withType } from "../MonitorsEditor";
+import { serviceLabel } from "../names";
 
 export type RunnerType = RunnerMonitorConfig["type"];
 export type RowKind = RunnerType | "push" | "kuma" | "facts" | "webhook" | "probe";
@@ -179,10 +180,10 @@ export function buildRows(config: SiteConfig, view: SiteView | null): MonitorRow
       monitor: m,
       legacy: !configured.has(m.id),
       kind: m.type,
-      name: m.name,
+      name: serviceLabel(id, m.name),
       target: targetOf(m),
       state: !m.enabled ? "paused" : (s?.state ?? "pending"),
-      onPage: onPage(id, s?.name ?? m.name),
+      onPage: onPage(id, serviceLabel(id, s?.name || m.name)),
       ...common(id, s),
     };
   });
@@ -195,10 +196,10 @@ export function buildRows(config: SiteConfig, view: SiteView | null): MonitorRow
       monitor: null,
       legacy: false,
       kind,
-      name: s.name,
+      name: serviceLabel(s.id, s.name),
       target: s.targetDisplay ?? `Reported by ${KIND_LABEL[kind]}`,
       state: s.state,
-      onPage: onPage(s.id, s.name),
+      onPage: onPage(s.id, serviceLabel(s.id, s.name)),
       ...common(s.id, s),
     });
   }

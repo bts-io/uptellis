@@ -11,6 +11,11 @@ interface Env {
   BETTER_AUTH_SECRET: string;
   /** The public URL of this instance (`https://status.example.com`); unset uses the request's origin. */
   PUBLIC_URL?: string;
+  /**
+   * The site a request gets when its host matches no site's `hostnames`; unset uses the only site, or the
+   * first one created. It also turns on the committed `sites/<slug>.json` of that slug (the demo is `demo`).
+   */
+  SITE_DEFAULT?: string;
   /** GitHub OAuth app: sign-in with GitHub is offered when both the id and the secret are set. */
   GITHUB_CLIENT_ID?: string;
   GITHUB_CLIENT_SECRET?: string;

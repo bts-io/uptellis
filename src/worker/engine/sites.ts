@@ -1,8 +1,10 @@
 /**
  * Where site configs come from. D1 (`site_configs`, see ./config-store.ts) is the source of truth; the
- * configs committed under `sites/*.json` seed each site's version 1 there. Callers read through a
- * `ConfigSource`: `D1ConfigStore` in the Worker, `seedConfigs` (the committed files, no storage) for the
- * in-memory test backends. A site that neither knows is unknown (the read API answers 404).
+ * configs committed under `sites/*.json` seed each site's version 1 there, but only the one whose slug
+ * `SITE_DEFAULT` names (`activeSeed`): a fresh install without it has no site until setup creates one, and
+ * the bundled demo never runs, lists or serves there. Callers read through a `ConfigSource`: `D1ConfigStore`
+ * in the Worker, `seedConfigs` (the committed files, no storage) for the in-memory test backends. A site
+ * that neither knows is unknown (the read API answers 404).
  */
 
 import demo from "../../../sites/demo.json";
@@ -26,11 +28,25 @@ export function seedSlugs(): string[] {
   return SEEDS.map((c) => c.slug);
 }
 
+/**
+ * The committed config this instance runs, or null: a bundled seed is active only when `SITE_DEFAULT`
+ * names its slug (the staging demo, or a private deployment that replaced `sites/demo.json` with its own
+ * site and set `SITE_DEFAULT` to that slug).
+ */
+export function activeSeed(siteDefault: string | undefined): SiteConfig | null {
+  return siteDefault ? seedConfig(siteDefault) : null;
+}
+
+/** True for a committed slug this instance does not run: never listed, run, shown or served. */
+export function inactiveSeed(slug: string, siteDefault: string | undefined): boolean {
+  return SEED_BY_SLUG.has(slug) && slug !== siteDefault;
+}
+
 /** Current site configs. Implementations cache; a miss for an unknown site is cheap. */
 export interface ConfigSource {
   /** The current config and its version, or null for an unknown site (including malformed slugs). */
   current(slug: string): Promise<ConfigState | null>;
-  /** Every known site slug. */
+  /** Every known site slug: the active seed first, then the others in the order they were created. */
   slugs(): Promise<string[]>;
 }
 
@@ -42,6 +58,26 @@ export const seedConfigs: ConfigSource = {
   },
   slugs: async () => seedSlugs(),
 };
+
+/**
+ * The site a request on `host` gets, the same for the page, admin and setup: the site whose `hostnames`
+ * list `host`, else the one `SITE_DEFAULT` names when it exists, else the only site or, with several, the
+ * first one listed (`ConfigSource.slugs`: the active seed, then by creation). Null on an instance with no
+ * site yet.
+ */
+export async function resolveSite(
+  configs: ConfigSource,
+  host: string,
+  siteDefault: string | undefined,
+): Promise<string | null> {
+  const name = host.toLowerCase();
+  const slugs = await configs.slugs();
+  for (const slug of slugs) {
+    if ((await getSiteConfig(configs, slug))?.hostnames.includes(name)) return slug;
+  }
+  if (siteDefault && slugs.includes(siteDefault)) return siteDefault;
+  return slugs[0] ?? null;
+}
 
 /** The current config of a known site, or null. */
 export async function getSiteConfig(configs: ConfigSource, slug: string): Promise<SiteConfig | null> {

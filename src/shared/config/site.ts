@@ -123,7 +123,11 @@ export const SiteConfig = z
     v: z.literal(1),
     slug: SiteSlug,
     name: safeDisplay(80),
-    hostnames: z.array(Hostname).min(1),
+    /**
+     * Where the site is served on its own domain. May be empty: such a site is served only as the instance's
+     * default or only site (`resolveSite`, src/worker/engine/sites.ts), which is the answer for local use.
+     */
+    hostnames: z.array(Hostname),
     theme: ThemeId,
     /** `public`: anyone sees the page; `private`: signed-in users with a role only (see src/shared/auth.ts). */
     visibility: z.enum(["public", "private"]).default("private"),

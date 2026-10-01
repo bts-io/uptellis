@@ -2,7 +2,8 @@
 # Smoke test of the Docker image: builds it (unless IMAGE is given), runs it on a fresh volume and checks
 # the first request, /api/health, a page and a static asset, first-run setup of the owner account, a
 # scheduler tick, the health check, the non-root user and labels, and that a config saved (signed in)
-# before a container replacement is still there after.
+# before a container replacement is still there after. It runs the bundled demo site (SITE_DEFAULT=demo; the
+# image itself sets no default, so a real install starts with no site).
 #
 #   bun run docker:smoke                     # build uptellis:smoke from this checkout, then test it
 #   IMAGE=ghcr.io/bts-io/uptellis:x bun run docker:smoke    # test an existing image
@@ -39,7 +40,7 @@ fi
 
 run() {
   docker run -d "${PLATFORM_ARGS[@]}" --name "$NAME" -p 3000 -v "$VOLUME:/data" \
-    -e BETTER_AUTH_SECRET="$AUTH_SECRET" "$IMAGE" >/dev/null
+    -e BETTER_AUTH_SECRET="$AUTH_SECRET" -e SITE_DEFAULT=demo "$IMAGE" >/dev/null
   PORT="$(docker port "$NAME" 3000/tcp | head -1 | sed 's/.*://')"
   BASE="http://localhost:$PORT"
   for _ in $(seq 1 60); do

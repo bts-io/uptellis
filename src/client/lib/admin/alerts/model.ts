@@ -180,10 +180,16 @@ function subjectOf(
 }
 
 /** "Replica Postgres went down", "Uptime Kuma (watch-1) went silent": a delivery's incident in words. */
-export function deliverySentence(d: Pick<Delivery, "incidentId" | "kind">, subjects: Subjects): string {
+export function deliverySentence(
+  d: Pick<Delivery, "incidentId" | "kind" | "subject">,
+  subjects: Subjects,
+): string {
   const opened = d.kind !== "resolve";
   const s = subjectOf(d.incidentId, subjects);
-  if (!s) return opened ? "Something went down" : "Something recovered";
+  // Nothing the site knows any more: a removed source when the log says so, else a removed service.
+  if (!s && d.subject === "source")
+    return opened ? "A removed source went silent" : "A removed source is reporting again";
+  if (!s) return opened ? "A removed service went down" : "A removed service came back";
   if (s.kind === "source") return opened ? `${s.name} went silent` : `${s.name} is reporting again`;
   return opened ? `${s.name} went down` : `${s.name} is back up`;
 }

@@ -2,6 +2,9 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { knownServices } from "@/client/lib/admin/ConfigEditor";
+import { buildRows } from "@/client/lib/admin/monitors/model";
+import { serviceLabel } from "@/client/lib/admin/names";
 import {
   addSection,
   addService,
@@ -122,6 +125,38 @@ const key = (el: HTMLElement, k: string) =>
 const saved = () => calls.find((c) => c.method === "PUT")!.body as { config: SiteConfig; note: string };
 const announced = () => $("[data-announce]").textContent;
 
+describe("service names", () => {
+  it("names a nameless service by where it comes from and its external id, never Unknown service", () => {
+    expect(serviceLabel("kuma:1")).toBe("Uptime Kuma monitor 1");
+    expect(serviceLabel("facts:app-1", "")).toBe("Facts from app-1");
+    expect(serviceLabel("webhook:ci", "  ")).toBe("Webhook ci");
+    expect(serviceLabel("probe:web")).toBe("Check web");
+    expect(serviceLabel("kuma:1", "Primary Postgres")).toBe("Primary Postgres");
+    expect(serviceLabel("odd")).toBe("odd");
+  });
+
+  it("uses the same names in the settings map, the status page catalog and the Monitors rows", () => {
+    const config = parseSiteConfig({
+      ...demo,
+      sections: [{ id: "core", title: "Core", services: ["kuma:1", "kuma:77"] }],
+    });
+    const base = buildSiteView(fixtureInput("default"));
+    const view: SiteView = {
+      ...base,
+      sections: base.sections.map((sec) => ({
+        ...sec,
+        services: sec.services.map((x) => (x.id === "kuma:1" ? { ...x, name: "" } : x)),
+      })),
+    };
+    const known = knownServices(config, [{ id: "kuma:1", name: "" }]);
+    expect(known.get("kuma:1")).toBe("Uptime Kuma monitor 1");
+    expect(known.get("kuma:77")).toBe("Uptime Kuma monitor 77");
+    expect(entryFor(catalogOf(config, view), "kuma:1").name).toBe("Uptime Kuma monitor 1");
+    const row = buildRows(config, view).find((r) => r.serviceId === "kuma:1");
+    expect(row?.name).toBe("Uptime Kuma monitor 1");
+  });
+});
+
 describe("status page draft", () => {
   const d = draftOf(config);
   const catalog = catalogOf(config, view);
@@ -163,7 +198,9 @@ describe("status page draft", () => {
     ]);
     expect(catalog.filter((e) => e.group === "heartbeat").map((e) => e.name)).toEqual(["Nightly backup"]);
     expect(catalog.find((e) => e.id === "kuma:3")!.name).toBe("Primary Postgres");
-    expect(entryFor(catalog, "kuma:404").name).toBe("Unknown service");
+    // An id nothing knows any more is named by where it came from, never "Unknown service".
+    expect(entryFor(catalog, "kuma:404").name).toBe("Uptime Kuma monitor 404");
+    expect(entryFor(catalog, "webhook:ci").name).toBe("Webhook ci");
   });
 
   it("rebuilds the view the way buildSiteView does: order, titles, names, leftovers unsectioned", () => {

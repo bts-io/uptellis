@@ -15,6 +15,7 @@ import { describeFailure, getDeliveries, testChannel } from "../client";
 import { EmptyState } from "../EmptyState";
 import { AdminIcon } from "../icons";
 import { AlertsField } from "../MonitorsEditor";
+import { rememberTestAlert } from "../monitors/firstRun";
 import { ago, secondsSince, viewServices } from "../monitors/model";
 import { PageHeader } from "../PageHeader";
 import { sourceLabel } from "../settings/labels";
@@ -115,6 +116,7 @@ export function AlertsPage({ site, state, view, onReload }: AlertsPageProps) {
   const sendTest = async (ch: ChannelConfig) => {
     setTesting((t) => new Set(t).add(ch.id));
     const outcome = await testChannel(site, ch.id, testKindOf(ch));
+    if (outcome.sent) rememberTestAlert(site);
     setTesting((t) => {
       const next = new Set(t);
       next.delete(ch.id);

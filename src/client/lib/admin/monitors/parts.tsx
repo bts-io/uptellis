@@ -11,6 +11,7 @@ import { cx } from "../../../kit/cx";
 import { testChannel } from "../client";
 import { AdminIcon, type AdminIconName } from "../icons";
 import { Button } from "../ui";
+import { rememberTestAlert } from "./firstRun";
 import { type MonitorRow, percent } from "./model";
 
 /** A value shown once (a heartbeat address, its curl line) with a Copy button and a polite result. */
@@ -137,6 +138,7 @@ export async function sendTestAlert(
       tone: "error",
     };
   const results = await Promise.all(channels.map((c) => testChannel(site, c.id, "down", row.serviceId)));
+  if (results.some((r) => r.sent)) rememberTestAlert(site);
   const failed = channels.filter((_, i) => !results[i]!.sent).map((c) => c.name);
   if (failed.length === 0)
     return {

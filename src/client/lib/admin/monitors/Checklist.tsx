@@ -14,6 +14,7 @@ import {
   checklistHidden,
   checklistItems,
   hideChecklist,
+  testAlertSent,
 } from "./firstRun";
 
 export interface ChecklistProps {
@@ -42,9 +43,14 @@ export function Checklist({
   const id = useId();
   // Unknown until mounted (storage is read in the browser only), so the server never renders it hidden.
   const [hidden, setHidden] = useState<boolean | null>(null);
-  useEffect(() => setHidden(checklistHidden(site)), [site]);
+  // A test alert sent earlier in this browser (the server records none), read like "Hide" after mount.
+  const [sentBefore, setSentBefore] = useState(false);
+  useEffect(() => {
+    setHidden(checklistHidden(site));
+    setSentBefore(testAlertSent(site));
+  }, [site]);
 
-  const items = checklistItems(config, facts);
+  const items = checklistItems(config, { ...facts, testSent: facts.testSent || sentBefore });
   const done = items.filter((i) => i.done).length;
   if (hidden !== false || done === items.length) return null;
 

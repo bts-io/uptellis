@@ -24,6 +24,7 @@ import {
   firstRunChange,
   monitorFromAddress,
   plainChannelIssue,
+  rememberTestAlert,
   SECRET_HOLDS,
   TILE_LABEL,
 } from "./firstRun";
@@ -111,6 +112,7 @@ export function FirstRun({ site, state, onReload, onDone, onSkip }: FirstRunProp
   const sendTest = async () => {
     setTest({ busy: true, message: null, ok: false });
     const r = await testChannel(site, channel.id, "down");
+    if (r.sent) rememberTestAlert(site);
     setTest({
       busy: false,
       ok: r.sent,

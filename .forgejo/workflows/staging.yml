@@ -31,6 +31,8 @@ jobs:
       DEPLOY_D1_ID: ${{ vars.STAGING_D1_ID }}
       DEPLOY_KV_ID: ${{ vars.STAGING_KV_ID }}
       DEPLOY_PUBLIC_URL: ${{ vars.STAGING_PUBLIC_URL }}
+      # Staging runs the bundled demo site (sites/demo.json), active only when SITE_DEFAULT names it.
+      DEPLOY_SITE_DEFAULT: demo
       # Optional: email channels through Cloudflare Email Service (the EMAIL binding and EMAIL_FROM).
       DEPLOY_EMAIL_FROM: ${{ vars.STAGING_EMAIL_FROM }}
     steps:

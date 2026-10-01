@@ -39,8 +39,7 @@ COPY --from=build --chown=bun:bun /out/data /data
 VOLUME /data
 ENV NODE_ENV=production \
     PORT=3000 \
-    DATABASE_PATH=/data/uptellis.db \
-    SITE_DEFAULT=demo
+    DATABASE_PATH=/data/uptellis.db
 USER bun
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \

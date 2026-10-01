@@ -17,7 +17,7 @@ Uptellis runs on Cloudflare Workers (D1, KV, Workers Static Assets, Rate Limitin
    bunx wrangler kv namespace create uptellis-cache
    ```
 
-4. Write your site config as `sites/<slug>.json` (start from `sites/demo.json`), and set `SITE_DEFAULT` in `wrangler.jsonc` to its slug. To serve it on your own hostname, add a custom domain route to `wrangler.jsonc` and list the hostname in the config's `hostnames`.
+4. Optional: create your site in setup (step 2 below), or write its config as `sites/<slug>.json` (start from `sites/demo.json`) and set `SITE_DEFAULT` in `wrangler.jsonc` to its slug; a committed config is used only when `SITE_DEFAULT` names it, so the bundled demo stays off unless you set `SITE_DEFAULT` to `demo`. To serve it on your own hostname, add a custom domain route to `wrangler.jsonc` and list the hostname in the config's `hostnames`.
 5. Set the secrets ([below](#secrets)): at least `BETTER_AUTH_SECRET` and `SOURCE_MASTER_KEY`, and set `PUBLIC_URL` to the instance's URL (a var in `wrangler.jsonc`).
 6. `bun run deploy`: applies the D1 migrations (`db:migrate:remote`), builds, and runs `wrangler deploy`.
 7. Check it: `curl -s https://status.example.com/api/health` answers `{ ok, service, version, build, commit }`.
@@ -39,7 +39,7 @@ Run `bun run verify`, then `bun run deploy`, ideally from CI on merges to your r
 | `CACHE` | KV `uptellis-cache` | `latest:<site>` (assembled model) and `config:<site>` (current config) |
 | `ASSETS` | Static Assets | client bundle and fonts from `dist/client` |
 | `INGEST_RATE_LIMIT`, `GATE_RATE_LIMIT`, `ADMIN_WRITE_RATE_LIMIT`, `PUSH_RATE_LIMIT` | Rate Limiting (namespace ids 1001 to 1004) | see [Rate limits](#rate-limits) |
-| `SITE_DEFAULT` | var | the site a request renders when its host matches no site's `hostnames` |
+| `SITE_DEFAULT` | var | optional: the site a request renders when its host matches no site's `hostnames` (unset: the only site, or the first one created); also turns on the committed `sites/<slug>.json` of that slug |
 | `EMAIL` | Email Service `send_email` (optional, commented out in `wrangler.jsonc`) | the sender of email channels; onboard the sending domain first, then uncomment it and set `EMAIL_FROM`. Without it email channels fail with `email_unavailable` |
 
 ## First run
@@ -48,7 +48,7 @@ The first account created becomes the owner, and only while no account exists, s
 
 1. Open `https://status.example.com/setup` (or `/admin`, which sends you there while no account exists).
 2. Enter your name, email and a password of 12 characters or more. You are signed in as the owner, and setup closes for good (`POST /api/setup` answers 409 from now on).
-   Setup then shows the first site: the one this address serves (`SITE_DEFAULT` or a config listing the hostname), to confirm or adjust its name, hostname, visibility and theme, or a new one with its own slug. Either way you land in `/admin`.
+   Setup then asks for the first site: only its name is needed (the slug follows from it; the hostname is only needed to serve the site on its own domain, under "More"). When this address already serves a site (a config listing the hostname, or `SITE_DEFAULT`), you confirm or adjust that one instead; the bundled demo is offered only as "Use the demo instead". A site that watches nothing yet opens on the first-run screen, otherwise on `/admin`.
 3. Invite everyone else from the admin UI's users page: pick a role (`viewer` sees private sites, `admin` also edits configs, sources, API keys and users, `owner` also the instance settings) and, optionally, the one address that may use the invite. Send the one-time link over a private channel; it expires after 7 days.
 4. Decide per site whether its page is `public` or `private` (the config's `visibility`; new sites are private).
 
@@ -259,7 +259,7 @@ Without Docker, the same server runs from a checkout: `bun run build:docker && b
 
 | Variable | What it does |
 | --- | --- |
-| `SITE_DEFAULT` | the site a request renders when its host matches no site's `hostnames` (default in the image: `demo`) |
+| `SITE_DEFAULT` | optional: the site a request renders when its host matches no site's `hostnames` (unset: the only site, or the first one created); `demo` runs the bundled demo site |
 | `BETTER_AUTH_SECRET`, `SOURCE_MASTER_KEY`, `DISCORD_WEBHOOK_URL`, `NOTIFY_<NAME>`, `GITHUB_CLIENT_SECRET`, `GOOGLE_CLIENT_SECRET` | as in [Secrets](#secrets); `NOTIFY_<NAME>` is read when a channel sends, so a new one needs no restart |
 | `EMAIL_FROM` | the default sender address of email channels |
 | `CLOUDFLARE_EMAIL_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | email channels send through the Cloudflare Email Service REST API (a token with Email Sending permission, the account id) when both are set |
