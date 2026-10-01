@@ -82,11 +82,11 @@ describe("with an owner", () => {
       expect(t, label).toContain(label);
   });
 
-  it("puts the account menu in the admin header and a Users tab in the nav", async () => {
+  it("puts the account menu in the admin header and a Settings tab in the nav", async () => {
     await seed("default");
     const html = await page("/admin", await ownerCookie());
     expect(html).toMatch(/<button[^>]*id="account-menu"[^>]*>.*Test Owner.*owner.*<\/button>/s);
-    expect(html).toContain('href="/admin/users"');
+    expect(html).toContain('href="/admin/settings"');
   });
 
   it("lists users with role and last sign-in, and pending invites", async () => {
@@ -97,7 +97,7 @@ describe("with an owner", () => {
       { cookie },
     );
     expect(res.status).toBe(201);
-    const html = await page("/admin/users", cookie);
+    const html = await page("/admin/settings/users", cookie);
     const t = text(html);
     for (const label of ["Users", "Test Owner", "(you)", "last sign-in 20", "Invites", "Create invite"])
       expect(t, label).toContain(label);
@@ -140,7 +140,7 @@ describe("with an owner", () => {
     );
     expect(res.status).toBe(201);
     const { key, prefix } = IssuedApiKey.parse(await res.json());
-    const html = await page("/admin/sources", cookie);
+    const html = await page("/admin/settings/sources", cookie);
     const t = text(html);
     for (const label of ["Sources and keys", "API keys", "ssr pusher", prefix, "Create API key"])
       expect(t, label).toContain(label);

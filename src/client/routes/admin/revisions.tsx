@@ -1,14 +1,9 @@
-import { createFileRoute, getRouteApi, useRouter } from "@tanstack/react-router";
-import { getRevisions, orNotFound } from "../../lib/admin/client";
-import { Revisions } from "../../lib/admin/Revisions";
+import { createFileRoute, redirect } from "@tanstack/react-router";
+import { LEGACY_ADMIN_REDIRECTS } from "../../lib/admin/nav";
 
-const admin = getRouteApi("/admin");
-
+/** An old admin URL: the page moved (see `LEGACY_ADMIN_REDIRECTS`). */
 export const Route = createFileRoute("/admin/revisions")({
-  loader: ({ context }) => getRevisions(context.site).catch(orNotFound),
-  component: () => {
-    const { site } = admin.useLoaderData();
-    const router = useRouter();
-    return <Revisions site={site} list={Route.useLoaderData()} onReload={() => void router.invalidate()} />;
+  beforeLoad: () => {
+    throw redirect({ to: LEGACY_ADMIN_REDIRECTS["/admin/revisions"], replace: true });
   },
 });

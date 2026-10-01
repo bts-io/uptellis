@@ -142,17 +142,7 @@ export function ConfigEditor({ site, state, services, onReload }: ConfigEditorPr
       onReload();
     });
 
-  // Every service a section can list, by name: reported services, then the config's monitors (so a new
-  // monitor has its name before its first check), with the config's display names over both. A raw id is
-  // only shown for a listed service nothing names.
-  const known = new Map(services.map((s) => [s.id, s.name]));
-  for (const m of monitorsOf(draft)) {
-    const id = monitorServiceId(m.id);
-    if (!known.has(id)) known.set(id, m.name);
-  }
-  for (const [id, name] of Object.entries(draft.displayNames ?? {}))
-    if (known.has(id) && name) known.set(id, name);
-  for (const id of draft.sections.flatMap((s) => s.services)) if (!known.has(id)) known.set(id, id);
+  const known = knownServices(draft, services);
   const themes = registeredThemes();
   // A maintenance window can cover any service: the known ones plus every monitor's, saved or not.
   const coverable = new Map(known);
@@ -285,115 +275,19 @@ export function ConfigEditor({ site, state, services, onReload }: ConfigEditorPr
             onChange={(profiles) => set("profiles", profiles)}
           />
 
-          <fieldset>
-            <legend className="mb-2 text-sm font-semibold">Sections</legend>
-            <div className="flex flex-col gap-3">
-              {draft.sections.map((sec, i) => {
-                const update = (next: Partial<SiteConfig["sections"][number]>) =>
-                  set(
-                    "sections",
-                    draft.sections.map((s, j) => (j === i ? { ...s, ...next } : s)),
-                  );
-                return (
-                  <div
-                    key={i}
-                    className="border border-line p-3"
-                    aria-label={`Section ${sec.title || i + 1}`}
-                    role="group"
-                  >
-                    <div className="grid gap-3 sm:grid-cols-[10rem_1fr]">
-                      <Field
-                        label="Id"
-                        value={sec.id}
-                        issues={at(`sections.${i}.id`)}
-                        onChange={(e) => update({ id: e.target.value })}
-                      />
-                      <Field
-                        label="Title"
-                        value={sec.title}
-                        issues={at(`sections.${i}.title`)}
-                        onChange={(e) => update({ title: e.target.value })}
-                      />
-                    </div>
-                    <p className="mt-3 text-xs text-muted">Services</p>
-                    <ul className="mt-1 grid gap-1 sm:grid-cols-2">
-                      {[...known].map(([id, name]) => (
-                        <li key={id}>
-                          <label className="flex items-center gap-2 text-sm" title={id}>
-                            <input
-                              type="checkbox"
-                              checked={sec.services.includes(id)}
-                              onChange={(e) =>
-                                update({
-                                  services: e.target.checked
-                                    ? [...sec.services, id]
-                                    : sec.services.filter((x) => x !== id),
-                                })
-                              }
-                            />
-                            <span className={cx("truncate", name === id && "font-mono text-xs")}>{name}</span>
-                          </label>
-                        </li>
-                      ))}
-                    </ul>
-                    <IssueText issues={at(`sections.${i}.services`)} />
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Button onClick={() => set("sections", move(draft.sections, i, -1))} disabled={i === 0}>
-                        Move up
-                      </Button>
-                      <Button
-                        onClick={() => set("sections", move(draft.sections, i, 1))}
-                        disabled={i === draft.sections.length - 1}
-                      >
-                        Move down
-                      </Button>
-                      <Button
-                        tone="danger"
-                        onClick={() =>
-                          set(
-                            "sections",
-                            draft.sections.filter((_, j) => j !== i),
-                          )
-                        }
-                      >
-                        Remove section
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <Button
-              className="mt-3"
-              onClick={() =>
-                set("sections", [
-                  ...draft.sections,
-                  { id: `section-${draft.sections.length + 1}`, title: "New section", services: [] },
-                ])
-              }
-            >
-              Add section
-            </Button>
-          </fieldset>
+          <SectionsField
+            sections={draft.sections}
+            known={known}
+            at={at}
+            onChange={(sections) => set("sections", sections)}
+          />
 
-          <fieldset>
-            <legend className="mb-2 text-sm font-semibold">Display names</legend>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {[...known].map(([id]) => (
-                <Field
-                  key={id}
-                  label={id}
-                  placeholder="Name from the source"
-                  value={draft.displayNames[id] ?? ""}
-                  issues={at(`displayNames.${id}`)}
-                  onChange={(e) => {
-                    const { [id]: _, ...rest } = draft.displayNames;
-                    set("displayNames", e.target.value ? { ...rest, [id]: e.target.value } : rest);
-                  }}
-                />
-              ))}
-            </div>
-          </fieldset>
+          <DisplayNamesField
+            displayNames={draft.displayNames}
+            known={known}
+            at={at}
+            onChange={(displayNames) => set("displayNames", displayNames)}
+          />
 
           <fieldset className="grid gap-3 sm:grid-cols-3">
             <legend className="mb-2 text-sm font-semibold">Thresholds</legend>
@@ -646,3 +540,149 @@ function ProfilesField({
 }
 
 const GENERIC_PROFILE = "generic";
+
+/**
+ * Every service a section can list, by name: reported services, then the config's monitors (so a new
+ * monitor has its name before its first check), with the config's display names over both. A raw id is
+ * only shown for a listed service nothing names.
+ */
+export function knownServices(config: SiteConfig, services: readonly KnownService[]): Map<string, string> {
+  const known = new Map(services.map((s) => [s.id, s.name]));
+  for (const m of monitorsOf(config)) {
+    const id = monitorServiceId(m.id);
+    if (!known.has(id)) known.set(id, m.name);
+  }
+  for (const [id, name] of Object.entries(config.displayNames ?? {}))
+    if (known.has(id) && name) known.set(id, name);
+  for (const id of config.sections.flatMap((s) => s.services)) if (!known.has(id)) known.set(id, id);
+  return known;
+}
+
+type Sections = SiteConfig["sections"];
+
+/** The status page's sections: id, title, the services each lists (by name), order, add and remove. */
+export function SectionsField({
+  sections,
+  known,
+  at,
+  onChange,
+}: {
+  sections: Sections;
+  /** Service id to name (`knownServices`). */
+  known: Map<string, string>;
+  at: (path: string) => ConfigIssue[];
+  onChange: (sections: Sections) => void;
+}) {
+  return (
+    <fieldset>
+      <legend className="mb-2 text-sm font-semibold">Sections</legend>
+      <div className="flex flex-col gap-3">
+        {sections.map((sec, i) => {
+          const update = (next: Partial<Sections[number]>) =>
+            onChange(sections.map((s, j) => (j === i ? { ...s, ...next } : s)));
+          return (
+            <div
+              key={i}
+              className="border border-line p-3"
+              aria-label={`Section ${sec.title || i + 1}`}
+              role="group"
+            >
+              <div className="grid gap-3 sm:grid-cols-[10rem_1fr]">
+                <Field
+                  label="Id"
+                  value={sec.id}
+                  issues={at(`sections.${i}.id`)}
+                  onChange={(e) => update({ id: e.target.value })}
+                />
+                <Field
+                  label="Title"
+                  value={sec.title}
+                  issues={at(`sections.${i}.title`)}
+                  onChange={(e) => update({ title: e.target.value })}
+                />
+              </div>
+              <p className="mt-3 text-xs text-muted">Services</p>
+              <ul className="mt-1 grid gap-1 sm:grid-cols-2">
+                {[...known].map(([id, name]) => (
+                  <li key={id}>
+                    <label className="flex items-center gap-2 text-sm" title={id}>
+                      <input
+                        type="checkbox"
+                        checked={sec.services.includes(id)}
+                        onChange={(e) =>
+                          update({
+                            services: e.target.checked
+                              ? [...sec.services, id]
+                              : sec.services.filter((x) => x !== id),
+                          })
+                        }
+                      />
+                      <span className={cx("truncate", name === id && "font-mono text-xs")}>{name}</span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+              <IssueText issues={at(`sections.${i}.services`)} />
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button onClick={() => onChange(move(sections, i, -1))} disabled={i === 0}>
+                  Move up
+                </Button>
+                <Button onClick={() => onChange(move(sections, i, 1))} disabled={i === sections.length - 1}>
+                  Move down
+                </Button>
+                <Button tone="danger" onClick={() => onChange(sections.filter((_, j) => j !== i))}>
+                  Remove section
+                </Button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <Button
+        className="mt-3"
+        onClick={() =>
+          onChange([
+            ...sections,
+            { id: `section-${sections.length + 1}`, title: "New section", services: [] },
+          ])
+        }
+      >
+        Add section
+      </Button>
+    </fieldset>
+  );
+}
+
+/** The name each service shows on the status page instead of its source's name. */
+export function DisplayNamesField({
+  displayNames,
+  known,
+  at,
+  onChange,
+}: {
+  displayNames: SiteConfig["displayNames"];
+  known: Map<string, string>;
+  at: (path: string) => ConfigIssue[];
+  onChange: (displayNames: SiteConfig["displayNames"]) => void;
+}) {
+  return (
+    <fieldset>
+      <legend className="mb-2 text-sm font-semibold">Display names</legend>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {[...known].map(([id]) => (
+          <Field
+            key={id}
+            label={id}
+            placeholder="Name from the source"
+            value={displayNames[id] ?? ""}
+            issues={at(`displayNames.${id}`)}
+            onChange={(e) => {
+              const { [id]: _, ...rest } = displayNames;
+              onChange(e.target.value ? { ...rest, [id]: e.target.value } : rest);
+            }}
+          />
+        ))}
+      </div>
+    </fieldset>
+  );
+}

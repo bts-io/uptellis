@@ -1,12 +1,9 @@
-import { createFileRoute, getRouteApi, useRouter } from "@tanstack/react-router";
-import { ImportExport } from "../../lib/admin/ImportExport";
+import { createFileRoute, redirect } from "@tanstack/react-router";
+import { LEGACY_ADMIN_REDIRECTS } from "../../lib/admin/nav";
 
-const admin = getRouteApi("/admin");
-
+/** An old admin URL: the page moved (see `LEGACY_ADMIN_REDIRECTS`). */
 export const Route = createFileRoute("/admin/files")({
-  component: () => {
-    const { site } = admin.useLoaderData();
-    const router = useRouter();
-    return <ImportExport site={site} onReload={() => void router.invalidate()} />;
+  beforeLoad: () => {
+    throw redirect({ to: LEGACY_ADMIN_REDIRECTS["/admin/files"], replace: true });
   },
 });

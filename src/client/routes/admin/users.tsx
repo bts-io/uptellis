@@ -1,20 +1,9 @@
-import { createFileRoute, getRouteApi, notFound, useRouter } from "@tanstack/react-router";
-import { getInvites, getUsers } from "../../lib/account/client";
-import { orNotFound } from "../../lib/admin/client";
-import { Users } from "../../lib/admin/Users";
+import { createFileRoute, redirect } from "@tanstack/react-router";
+import { LEGACY_ADMIN_REDIRECTS } from "../../lib/admin/nav";
 
-const admin = getRouteApi("/admin");
-
+/** An old admin URL: the page moved (see `LEGACY_ADMIN_REDIRECTS`). */
 export const Route = createFileRoute("/admin/users")({
-  loader: async () => {
-    const [users, invites] = await Promise.all([getUsers(), getInvites()]).catch(orNotFound);
-    return { users, invites };
-  },
-  component: () => {
-    const { me } = admin.useLoaderData();
-    const { users, invites } = Route.useLoaderData();
-    const router = useRouter();
-    if (!me.user) throw notFound();
-    return <Users me={me.user} users={users} invites={invites} onReload={() => void router.invalidate()} />;
+  beforeLoad: () => {
+    throw redirect({ to: LEGACY_ADMIN_REDIRECTS["/admin/users"], replace: true });
   },
 });

@@ -88,13 +88,17 @@ export type ChannelTestOutcome =
   | { sent: true; status: number }
   | { sent: false; status: number | null; error: string; message?: string };
 
-/** Sends one TEST message to one saved channel (`POST /api/admin/notify/test?site=&channel=&kind=`). */
+/**
+ * Sends one TEST message to one saved channel (`POST /api/admin/notify/test?site=&channel=&kind=`), about
+ * `service` when given (`&service=`, a down or up card for that service).
+ */
 export async function testChannel(
   site: string,
   channel: string,
   kind: TestKind,
+  service?: string,
 ): Promise<ChannelTestOutcome> {
-  const q = new URLSearchParams({ site, channel, kind });
+  const q = new URLSearchParams({ site, channel, kind, ...(service ? { service } : {}) });
   try {
     const r = NotifyTestResult.parse(await api(`/api/admin/notify/test?${q}`, { method: "POST" }));
     return r.sent
