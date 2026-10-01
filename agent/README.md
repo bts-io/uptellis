@@ -118,7 +118,7 @@ Ping monitors use the system `ping` (iputils). As a non-root user it needs one o
 | Variable | Default | Notes |
 |---|---|---|
 | `UPTELLIS_URL` | required | the instance, e.g. `https://status.example.org`; https unless localhost or `UPTELLIS_ALLOW_HTTP=1` |
-| `UPTELLIS_API_KEY_FILE` | | file holding the key (mode 600 or 400); preferred |
+| `UPTELLIS_API_KEY_FILE` | | file holding the key (mode 600 or 400; 440 inside systemd's `CREDENTIALS_DIRECTORY`, as systemd 253 and later create credentials); preferred |
 | `UPTELLIS_API_KEY` | | the key itself, for local runs; one of the two is required |
 | `UPTELLIS_RUNNER` | required | the agent id declared in the site's `agents`, e.g. `office-1` |
 | `UPTELLIS_DATA_DIR` | `/var/lib/uptellis-agent` | buffer and last monitor list; `/data` in the image |

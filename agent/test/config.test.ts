@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from "bun:test";
-import { chmodSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { loadConfig } from "../src/config";
 import { KEY } from "./fake-uptellis";
@@ -52,6 +52,23 @@ describe("loadConfig", () => {
     expect(() =>
       loadConfig({ ...base(), UPTELLIS_API_KEY: undefined, UPTELLIS_API_KEY_FILE: file("k2", KEY, 0o644) }),
     ).toThrow(/readable by group or others/);
+  });
+
+  it("accepts a 440 key inside systemd's credentials directory, and only there", () => {
+    // systemd 253 and later (Ubuntu 24.04) create LoadCredential files as 0440 in a directory private to
+    // the service; older systemd (Rocky 9) makes them 0400.
+    const creds = join(dir, "credentials");
+    mkdirSync(creds, { recursive: true });
+    const key = join(creds, "api_key");
+    writeFileSync(key, `${KEY}\n`);
+    chmodSync(key, 0o440);
+    const env = { ...base(), UPTELLIS_API_KEY: undefined, UPTELLIS_API_KEY_FILE: key };
+    expect(loadConfig({ ...env, CREDENTIALS_DIRECTORY: creds }).apiKey).toBe(KEY);
+    // Without the credentials directory (or outside it) 440 is still refused, and world-readable never passes.
+    expect(() => loadConfig(env)).toThrow(/readable by group or others/);
+    expect(() => loadConfig({ ...env, CREDENTIALS_DIRECTORY: join(dir, "elsewhere") })).toThrow(/readable/);
+    chmodSync(key, 0o444);
+    expect(() => loadConfig({ ...env, CREDENTIALS_DIRECTORY: creds })).toThrow(/readable by group or others/);
   });
 
   it("never puts the key in an error", () => {

@@ -1,6 +1,7 @@
 // Environment configuration, validated with zod. The API key comes from a file (systemd credential or
 // Docker secret) or the environment; errors name the variable, never its value.
 import { readFileSync, statSync } from "node:fs";
+import { relative, resolve } from "node:path";
 import { z } from "zod";
 import { AgentId } from "./shared";
 
@@ -16,15 +17,21 @@ export interface Config {
 
 type Env = Record<string, string | undefined>;
 
-/** Reads a secret file; refuses one that group or others can read (expects mode 600 or 400). */
-export function readSecretFile(path: string, name: string): string {
+/**
+ * Reads a secret file; refuses one that group or others can read (expects mode 600 or 400). Inside systemd's
+ * `CREDENTIALS_DIRECTORY` group read is allowed: systemd 253 and later create credentials as 0440 in a
+ * directory only the service can open, so 440 there is as private as 400.
+ */
+export function readSecretFile(path: string, name: string, credentialsDir?: string): string {
   let mode: number;
   try {
     mode = statSync(path).mode;
   } catch {
     throw new Error(`${name}: file not found`);
   }
-  if ((mode & 0o077) !== 0) {
+  const inCredentials =
+    credentialsDir !== undefined && credentialsDir !== "" && isInside(path, credentialsDir);
+  if ((mode & (inCredentials ? 0o037 : 0o077)) !== 0) {
     throw new Error(
       `${name}: file is readable by group or others (mode ${(mode & 0o777).toString(8)}), expected 600`,
     );
@@ -33,6 +40,12 @@ export function readSecretFile(path: string, name: string): string {
   if (!value) throw new Error(`${name}: file is empty`);
   return value;
 }
+
+/** True when `path` lies inside the directory `dir`. */
+const isInside = (path: string, dir: string) => {
+  const rel = relative(resolve(dir), resolve(path));
+  return rel !== "" && !rel.startsWith("..") && !rel.startsWith("/");
+};
 
 /** `localhost` or an IPv4 loopback address (a local instance may skip TLS). */
 const isLocal = (host: string) => host === "localhost" || /^127(?:\.\d{1,3}){3}$/.test(host);
@@ -82,7 +95,9 @@ export function loadConfig(env: Env): Config {
   }
 
   const keyFile = env.UPTELLIS_API_KEY_FILE;
-  const apiKey = keyFile ? readSecretFile(keyFile, "UPTELLIS_API_KEY_FILE") : env.UPTELLIS_API_KEY?.trim();
+  const apiKey = keyFile
+    ? readSecretFile(keyFile, "UPTELLIS_API_KEY_FILE", env.CREDENTIALS_DIRECTORY)
+    : env.UPTELLIS_API_KEY?.trim();
   if (!apiKey) throw new Error("UPTELLIS_API_KEY_FILE (or UPTELLIS_API_KEY) is required");
   if (!API_KEY.test(apiKey)) throw new Error("UPTELLIS_API_KEY is not an Uptellis API key (upt_...)");
 
