@@ -2,6 +2,12 @@
 
 All notable changes to Uptellis are recorded here. The format follows [Conventional Commits](https://www.conventionalcommits.org) and the project uses [Semantic Versioning](https://semver.org). Each release adds its section in the release PR, from the Conventional Commits since the previous tag.
 
+## 0.8.2 (2026-10-01)
+
+### Features
+
+* **profiles:** the forgejo-ha facts pusher takes `FORGEJO_HA_PREFIX` (default `forgejo-ha`) for its containers and backup timer (`<prefix>-forgejo`, `<prefix>-postgres`, `<prefix>-offsite-backup.timer`), so a stack deployed under another name reports its real replication, Forgejo version and next backup instead of "none". Found on our own pair, deployed as `vps-git`.
+
 ## 0.8.1 (2026-10-01)
 
 ### Bug Fixes
