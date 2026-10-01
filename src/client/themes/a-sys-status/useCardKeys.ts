@@ -1,10 +1,13 @@
 import { useEffect } from "react";
 import { useReducedMotion } from "@/client/effects";
+import { usePageShortcuts } from "@/client/kit";
 
 /** j/k move focus between service cards, i jumps to the infra panel (Enter on a card is handled by the card). */
 export function useCardKeys() {
   const reduced = useReducedMotion();
+  const enabled = usePageShortcuts();
   useEffect(() => {
+    if (!enabled) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const target = e.target as HTMLElement | null;
@@ -18,5 +21,5 @@ export function useCardKeys() {
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [reduced]);
+  }, [enabled, reduced]);
 }

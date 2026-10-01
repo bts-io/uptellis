@@ -10,6 +10,7 @@
  * with its id, which the editor uses to jump to that service's public name field.
  */
 import { type MouseEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { PageShortcutsContext } from "@/client/kit";
 import type { SiteView } from "@/shared/view";
 import { themeFor } from "../../../themes";
 
@@ -63,7 +64,9 @@ export function PagePreview({ view, onPick }: { view: SiteView; onPick?: (servic
           className="origin-top-left bg-base font-sans text-ink"
           style={{ width: DESIGN_WIDTH, transform: `scale(${scale})` }}
         >
-          <Page view={view} commit={null} />
+          <PageShortcutsContext.Provider value={false}>
+            <Page view={view} commit={null} />
+          </PageShortcutsContext.Provider>
         </div>
       </div>
     </section>

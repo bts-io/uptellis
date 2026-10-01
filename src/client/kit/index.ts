@@ -16,6 +16,7 @@ export { KeyValueGrid } from "./key-value-grid";
 export { MaintenanceNotice } from "./maintenance-notice";
 export { Panel } from "./panel";
 export type * from "./props";
+export { PageShortcutsContext, usePageShortcuts } from "./shortcuts";
 export { Sparkline } from "./sparkline";
 export { StaleBanner } from "./stale-banner";
 export { StateDot } from "./state-dot";
