@@ -2,6 +2,14 @@
 
 All notable changes to Uptellis are recorded here. The format follows [Conventional Commits](https://www.conventionalcommits.org) and the project uses [Semantic Versioning](https://semver.org). Each release adds its section in the release PR, from the Conventional Commits since the previous tag.
 
+## 0.8.3 (2026-10-01)
+
+### Bug Fixes
+
+* **facts:** facts and fact samples are kept per source (migration 0008, existing rows keep their source). A failover pair with a pusher on each node no longer flips between the primary's and the standby's view: the forgejo-ha profile reads the pair (serving, replication, fence, backup, runners, watchdog) from the node that reports being primary, falls back to the other when the primary's facts are stale, follows a failover, and shows disk per node. Single-pusher sites are unchanged. Profiles get each source's facts (`ProfileContext.sources`, `Profile.selectFacts`, per-node groups); themes get an optional `FactRowView.node` (contract addition).
+* **view:** a paused monitor shows as Paused even before its first check, and whatever its last stored result was (it no longer keeps showing up, down or stale); an enabled monitor that has never run shows as Pending. Neither counts as down.
+* **public:** a monitor that has never been checked shows as unknown in the public summary, badges and embed, not degraded.
+
 ## 0.8.2 (2026-10-01)
 
 ### Features
