@@ -389,6 +389,24 @@ describe("push-facts.sh gathered payload", () => {
     expect(calls).not.toContain("forgejo-token-not-real");
   });
 
+  it("names the containers and the backup timer with FORGEJO_HA_PREFIX (a stack deployed under another name)", () => {
+    const host = fakeHost();
+    const res = run({ ...host.env, FORGEJO_HA_PREFIX: "vps-git" });
+    expect(res.status).toBe(0);
+    const calls = readFileSync(host.log, "utf8")
+      .split("\n")
+      .filter((l) => /^(docker|systemctl) /.test(l));
+    expect(calls.length).toBeGreaterThan(3);
+    expect(calls.join("\n")).not.toContain("forgejo-ha-");
+    expect(calls.some((l) => l.includes("vps-git-postgres"))).toBe(true);
+    expect(calls.some((l) => l.includes("vps-git-forgejo"))).toBe(true);
+    expect(calls.some((l) => l.includes("vps-git-offsite-backup.timer"))).toBe(true);
+    // Without it, the profile's own names, as before.
+    const plain = fakeHost();
+    run(plain.env);
+    expect(readFileSync(plain.log, "utf8")).toContain("forgejo-ha-postgres");
+  });
+
   it("degrades to a valid payload on a machine without the stack", () => {
     const dir = tempDir();
     const res = run({

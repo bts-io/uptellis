@@ -38,7 +38,7 @@ Each fact carries a severity where one makes sense (a failed backup is `crit`, a
 | `systemd/uptellis-push-facts.service` | a oneshot service that runs it once, hardened (`ProtectSystem`, `PrivateTmp`, `NoNewPrivileges`) |
 | `systemd/uptellis-push-facts.timer` | runs the service 3 minutes after boot and every 15 minutes after that |
 
-The script needs `bash`, `curl`, `openssl`, `python3` and `docker` on the node. It reads the forgejo-ha stack (its `.env`, state directory and the notify env holding a Forgejo token with `read:admin` for the runners list) and never writes to it; the locations are set by `FORGEJO_HA_STACK`, `FORGEJO_HA_STATE` and `NOTIFY_ENV`, with defaults in the script's header.
+The script needs `bash`, `curl`, `openssl`, `python3` and `docker` on the node. It reads the forgejo-ha stack (its `.env`, state directory and the notify env holding a Forgejo token with `read:admin` for the runners list) and never writes to it; the locations are set by `FORGEJO_HA_STACK`, `FORGEJO_HA_STATE` and `NOTIFY_ENV`, and the names of its containers and backup timer by `FORGEJO_HA_PREFIX` (default `forgejo-ha`: `forgejo-ha-forgejo`, `forgejo-ha-postgres`, `forgejo-ha-offsite-backup.timer`), with defaults in the script's header. For a stack deployed under another name, set them in a drop-in, `/etc/systemd/system/uptellis-push-facts.service.d/paths.conf`, as `Environment=` lines.
 
 ## Install
 

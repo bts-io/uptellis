@@ -19,7 +19,9 @@
 #   INGEST_URL=https://<status host>    KEY_ID=facts-1    INGEST_KEY=<secret>
 #   CF_ACCESS_CLIENT_ID=... CF_ACCESS_CLIENT_SECRET=...   (optional, once Cloudflare Access fronts ingest)
 # Reads (never writes) the forgejo-ha stack: FORGEJO_HA_STACK (/opt/forgejo-ha/stack/.env), FORGEJO_HA_STATE
-# (/var/lib/forgejo-ha), NOTIFY_ENV (/etc/forgejo-ha-backup/notify.env, for FORGEJO_STATUS_TOKEN).
+# (/var/lib/forgejo-ha), NOTIFY_ENV (/etc/forgejo-ha-backup/notify.env, for FORGEJO_STATUS_TOKEN), and its
+# containers and backup timer by name: FORGEJO_HA_PREFIX (forgejo-ha) gives <prefix>-forgejo, <prefix>-postgres
+# and <prefix>-offsite-backup.timer, for a stack deployed under another name.
 #
 # Facts carry host names only: the peer's tailnet address is mapped to its tailnet machine name and any
 # address left in free text is replaced before the payload is built. Secrets never reach stdout or logs.
@@ -76,6 +78,7 @@ gather() {
   local stack_env=${FORGEJO_HA_STACK:-/opt/forgejo-ha/stack}/.env
   local state_dir=${FORGEJO_HA_STATE:-/var/lib/forgejo-ha}
   local notify_env=${NOTIFY_ENV:-/etc/forgejo-ha-backup/notify.env}
+  local prefix=${FORGEJO_HA_PREFIX:-forgejo-ha}
   local pg_user pg_db peer_host app_url watchdog_url token
   pg_user=$(env_get "$stack_env" POSTGRES_USER)
   pg_db=$(env_get "$stack_env" POSTGRES_DB)
@@ -88,23 +91,23 @@ gather() {
     F_WATCHDOG_SET F_WATCHDOG F_RUNNERS F_TAILSCALE
   F_HOST=$(hostname -s 2>/dev/null || hostname)
   F_ROLE=$(env_get "$stack_env" ROLE)
-  F_RUNNING=$(docker inspect -f '{{.State.Running}}' forgejo-ha-forgejo 2>/dev/null || true)
-  F_VERSION=$(docker exec -u git forgejo-ha-forgejo forgejo --version 2>/dev/null | awk '{print $3}' | cut -d+ -f1 || true)
+  F_RUNNING=$(docker inspect -f '{{.State.Running}}' "${prefix}-forgejo" 2>/dev/null || true)
+  F_VERSION=$(docker exec -u git "${prefix}-forgejo" forgejo --version 2>/dev/null | awk '{print $3}' | cut -d+ -f1 || true)
   F_HEALTHZ=
   [ -n "$app_url" ] && F_HEALTHZ=$(curl -s -o /dev/null --max-time 10 -w '%{http_code}' "$app_url/api/healthz" || true)
 
-  local sql=(docker exec forgejo-ha-postgres psql -U "${pg_user:-forgejo}" -d "${pg_db:-forgejo}" -Atc)
+  local sql=(docker exec "${prefix}-postgres" psql -U "${pg_user:-forgejo}" -d "${pg_db:-forgejo}" -Atc)
   local state_sql="select pg_is_in_recovery()::text || ' ' || timeline_id from pg_control_checkpoint()"
   F_REPL=$("${sql[@]}" "select state || '|' || coalesce(extract(epoch from replay_lag)::int::text, '0') from pg_stat_replication limit 1" 2>/dev/null || true)
   F_LOCAL_STATE=$("${sql[@]}" "$state_sql" 2>/dev/null || true)
   F_PEER_SET=${peer_host:+1}
   F_PEER_OK= F_PEER_STATE= F_PEER_RAW=$peer_host
   if [ -n "$peer_host" ]; then
-    docker exec forgejo-ha-postgres pg_isready -q -t 5 -h "$peer_host" >/dev/null 2>&1 && F_PEER_OK=yes || F_PEER_OK=no
+    docker exec "${prefix}-postgres" pg_isready -q -t 5 -h "$peer_host" >/dev/null 2>&1 && F_PEER_OK=yes || F_PEER_OK=no
     if [ "$F_PEER_OK" = yes ]; then
       # The password travels in the environment (docker exec -e NAME), not on a command line.
       F_PEER_STATE=$(PGPASSWORD=$(env_get "$stack_env" POSTGRES_PASSWORD) PGCONNECT_TIMEOUT=5 \
-        docker exec -e PGPASSWORD -e PGCONNECT_TIMEOUT forgejo-ha-postgres \
+        docker exec -e PGPASSWORD -e PGCONNECT_TIMEOUT "${prefix}-postgres" \
         psql -h "$peer_host" -U "${pg_user:-forgejo}" -d "${pg_db:-forgejo}" -Atc "$state_sql" 2>/dev/null || true)
     fi
   fi
@@ -113,7 +116,7 @@ gather() {
   F_FENCE=$(cat "$state_dir/fence.state" 2>/dev/null || true)
   F_FENCE_REASON=$(cat "$state_dir/fence.reason" 2>/dev/null || true)
   F_BACKUP=$(cat "$state_dir/last-backup.json" 2>/dev/null || true)
-  F_NEXT=$(systemctl show -p NextElapseUSecRealtime --value forgejo-ha-offsite-backup.timer 2>/dev/null || true)
+  F_NEXT=$(systemctl show -p NextElapseUSecRealtime --value "${prefix}-offsite-backup.timer" 2>/dev/null || true)
   if [ -n "$F_NEXT" ] && [ "$F_NEXT" != n/a ]; then F_NEXT=$(date -d "$F_NEXT" +%s 2>/dev/null || true); else F_NEXT=; fi
   F_DISK=$(df -B1 --output=used,size,pcent / 2>/dev/null | tail -1 || true)
   F_DISK_H=$(df -h --output=used,size,pcent / 2>/dev/null | tail -1 | awk '{print $1 " / " $2 " (" $3 ")"}' || true)
