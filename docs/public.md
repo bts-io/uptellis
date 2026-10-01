@@ -42,7 +42,7 @@ Each field unlocks one part and nothing else. A part that is not allowed is left
 
 The summary never carries targets, hostnames, facts, topology or activity, whatever is allowed.
 
-Service states are `up`, `degraded`, `down`, `maintenance`, `stale` and `unknown`. A check that failed but is not confirmed yet (`pending`) shows as `degraded`; a paused one as `unknown`.
+Service states are `up`, `degraded`, `down`, `maintenance`, `stale` and `unknown`. A check that failed but is not confirmed yet (`pending`) shows as `degraded`; a paused one, and a monitor that has not run its first check yet, as `unknown`.
 
 ## Endpoints
 

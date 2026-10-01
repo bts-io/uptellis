@@ -32,6 +32,15 @@ const STATE_OF: Record<DisplayState, PublicState> = {
 /** A service's display state as the public sees it. */
 export const publicState = (state: DisplayState): PublicState => STATE_OF[state] ?? "unknown";
 
+/**
+ * A service as the public sees it: `publicState`, except that a `pending` service that has never checked
+ * (a monitor before its first result: no recent beats, no day with data) is `unknown`, not a failing check.
+ */
+export const servicePublicState = (s: Pick<ServiceView, "state" | "recent" | "beats90d">): PublicState =>
+  s.state === "pending" && s.recent.length === 0 && s.beats90d.every((d) => d.worst === null)
+    ? "unknown"
+    : publicState(s.state);
+
 const VERDICT_STATE: Record<VerdictState, PublicState> = {
   operational: "up",
   degraded: "degraded",
@@ -65,7 +74,7 @@ export function buildPublicSummary(view: SiteView, fields: readonly PublicField[
       title: section.title,
       services: section.services.map((s) => ({
         id: s.id,
-        state: publicState(s.state),
+        state: servicePublicState(s),
         ...(allowed.has("serviceNames") ? { name: s.name } : {}),
         ...(allowed.has("uptime90d") ? { uptime90d: uptime90dOf(s) } : {}),
       })),
