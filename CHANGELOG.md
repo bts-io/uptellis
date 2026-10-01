@@ -2,6 +2,12 @@
 
 All notable changes to Uptellis are recorded here. The format follows [Conventional Commits](https://www.conventionalcommits.org) and the project uses [Semantic Versioning](https://semver.org). Each release adds its section in the release PR, from the Conventional Commits since the previous tag.
 
+## 0.8.1 (2026-10-01)
+
+### Bug Fixes
+
+* **agent:** the systemd install no longer stops on newer systemd (253 and later, for example Ubuntu 24.04), which creates `LoadCredential` files as 0440: group read is accepted inside systemd's `CREDENTIALS_DIRECTORY` only; everywhere else the key file must still be 600 or 400. Found installing the agent on our own Ubuntu server.
+
 ## 0.8.0 (2026-10-01)
 
 ### ⚠ BREAKING CHANGES
