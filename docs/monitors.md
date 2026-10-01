@@ -24,7 +24,7 @@ flowchart LR
 | `tls` | a TLS handshake to `host:port` (default 443), SNI `servername` or `host` | the chain is valid for the name; `degraded` under `minDays` days left (default 7), `down` when expired or invalid |
 | `push` | a push to its URL (see [Push monitors](#push-monitors)) | a push arrived within interval plus grace |
 
-Every monitor but `push` has an `id`, a `name`, an `intervalS` (whole minutes, 60 to 3600), a `timeoutS` (1 to 30), `retries` (default 1), `runners` (default `["builtin"]`), an optional `quorum` and `enabled`. A failing attempt is retried once after 2 seconds inside the same check, so a blip is never reported.
+Every monitor but `push` has an `id`, a `name`, an `intervalS` (whole minutes, 60 to 3600), a `timeoutS` (1 to 30), `retries` (default 1), `runners` (default `["builtin"]`), an optional `quorum` and `enabled`. A failing attempt is retried once after 2 seconds inside the same check, so a blip is never reported. A paused monitor (`enabled: false`) shows as Paused on the page and in the dashboard even before its first check, and a new enabled one shows as Pending until it reports; neither counts as down.
 
 ```json
 {

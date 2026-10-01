@@ -119,9 +119,10 @@ describe("buildSiteView leaves removed monitors out", () => {
   });
 
   it("counts the removed monitor nowhere in the summary", () => {
-    const base = buildSiteView(fixtureInput("default"));
-    // checkout and the Kuma service are added; the removed monitor is not.
-    expect(buildSiteView(input()).summary.total).toBe(base.summary.total + 2);
+    const base = buildSiteView({ ...fixtureInput("default"), config });
+    // checkout already shows from its config (pending), so only the Kuma service is added; the removed
+    // monitor is not.
+    expect(buildSiteView(input()).summary.total).toBe(base.summary.total + 1);
   });
 
   it("shows the monitor again once the config defines it", () => {

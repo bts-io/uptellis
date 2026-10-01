@@ -996,7 +996,7 @@ describe("sources the config no longer lists (retired)", () => {
       name: "API health (edge)",
     });
     const v = edited((i) => {
-      i.config = without(i.config, "probe:cf");
+      i.config = without({ ...i.config, probes: config.probes }, "probe:cf");
       i.model.sources.push({
         id: "probe:cf",
         site: "demo",

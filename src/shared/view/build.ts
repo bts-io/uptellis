@@ -21,6 +21,12 @@
  * group, highlight, headline or topology is built from them, and `generatedAt` (the newest `lastSeenAt` of
  * the listed sources, else the model's) never counts them. A monitor's service follows its monitor, not its
  * runner's source. The store keeps every row.
+ *
+ * Monitors the model has not caught up with: a paused monitor (`enabled: false`) shows `paused` whatever its
+ * stored row says (runners stop writing it, so the row keeps its last status), never `stale`, and keeps its
+ * beats and history. A monitor with no service row yet (it never ran) shows from its config alone, `paused`
+ * when paused and `pending` when enabled, with no beats, latency or uptime, in its section or unsectioned.
+ * Neither counts as down or degraded (both are `other` in the summary), so neither moves the verdict.
  */
 
 import type { SiteConfig } from "../config";
@@ -35,7 +41,16 @@ import {
   sourceFreshness,
 } from "../model";
 import { activeWindows } from "../monitors/maintenance";
-import { PUSH_SOURCE_ID, removedMonitorOf, retiredServiceOf } from "../monitors/schema";
+import {
+  type MonitorConfig,
+  monitorServiceId,
+  monitorServiceKind,
+  monitorsOf,
+  monitorTargetDisplay,
+  PUSH_SOURCE_ID,
+  removedMonitorOf,
+  retiredServiceOf,
+} from "../monitors/schema";
 import { activeProfiles } from "../profiles";
 import { buildFactViews, latestFacts, markTopologyGroups, profileContext } from "./facts";
 import { clock, formatDuration, formatPercent, iso, mean, round, toMs } from "./format";
@@ -80,8 +95,9 @@ export function buildSiteView(input: ViewInput): SiteView {
   const nowMs = toMs(input.now);
 
   // Listed sources in config order. Services and facts of a source the config does not list are already
-  // left out (`withoutLeftOut`); a monitor's service whose runner source is unlisted (a paused monitor)
-  // gets that source's freshness from the model, so it cannot keep a green dot on silent data either.
+  // left out (`withoutLeftOut`); a monitor's service whose runner source is unlisted (a runner that cannot
+  // run its type here) gets that source's freshness from the model, so it cannot keep a green dot on silent
+  // data either. A paused monitor shows `paused` instead (see the header).
   const modelSource = new Map(model.sources.map((s) => [s.id, s]));
   const perSource: SourceView[] = config.sources.map((spec) => {
     const lastSeenAt = modelSource.get(spec.id)?.lastSeenAt ?? null;
@@ -130,18 +146,39 @@ export function buildSiteView(input: ViewInput): SiteView {
     windows.some(({ window: w }) => w.services.length === 0 || w.services.includes(id));
   const siteWideWindow = windows.some(({ window: w }) => w.services.length === 0);
 
+  // Paused outranks maintenance: a monitor that is not checked shows that before any window.
+  const monitors = monitorsOf(config);
+  const pausedIds = new Set(monitors.filter((m) => !m.enabled).map((m) => monitorServiceId(m.id)));
   const services = new Map<string, ServiceView>();
   for (const s of model.services) {
-    const maint = inWindow(s.id);
+    const paused = pausedIds.has(s.id);
+    const maint = !paused && inWindow(s.id);
+    const status: ServiceStatus = paused ? "paused" : maint ? "maintenance" : s.status;
     services.set(
       s.id,
-      serviceView(maint ? { ...s, status: "maintenance" } : s, {
+      serviceView(status === s.status ? s : { ...s, status }, {
         config,
         nowMs,
-        stale: !maint && s.source !== PUSH_SOURCE_ID && sourceStale(s.source),
+        stale: !paused && !maint && s.source !== PUSH_SOURCE_ID && sourceStale(s.source),
         beats: beatsBy.get(s.id) ?? [],
         days: daysBy.get(s.id) ?? [],
         openIncidentId: openBy.get(s.id) ?? null,
+      }),
+    );
+  }
+  // A monitor that never ran has no row: it shows from its config (see the header), after the model's own.
+  for (const m of monitors) {
+    const id = monitorServiceId(m.id);
+    if (services.has(id)) continue;
+    services.set(
+      id,
+      serviceView(neverRun(m), {
+        config,
+        nowMs,
+        stale: false,
+        beats: [],
+        days: daysBy.get(id) ?? [],
+        openIncidentId: null,
       }),
     );
   }
@@ -339,6 +376,27 @@ function uniqueIncidents(list: readonly Incident[]): Incident[] {
 /* Services                                                            */
 /* ------------------------------------------------------------------ */
 
+/** What the view reads of a service: a stored row, or a monitor's config before its first check. */
+type ServiceFields = Omit<Service, "site" | "source" | "externalId">;
+
+/** A monitor with no service row yet: `paused` or `pending`, no latency, no uptime. */
+function neverRun(m: MonitorConfig): ServiceFields {
+  return {
+    id: monitorServiceId(m.id),
+    name: m.name,
+    kind: monitorServiceKind(m),
+    targetDisplay: monitorTargetDisplay(m),
+    intervalS: m.intervalS,
+    ...(m.type === "http" ? { method: m.method } : {}),
+    ...(m.type === "push" ? {} : { timeoutS: m.timeoutS }),
+    status: m.enabled ? "pending" : "paused",
+    latencyMs: null,
+    avgLatencyMs: null,
+    uptime24h: null,
+    uptime30d: null,
+  };
+}
+
 interface ServiceContext {
   config: SiteConfig;
   nowMs: number;
@@ -349,7 +407,7 @@ interface ServiceContext {
   openIncidentId: string | null;
 }
 
-function serviceView(s: Service, ctx: ServiceContext): ServiceView {
+function serviceView(s: ServiceFields, ctx: ServiceContext): ServiceView {
   const cert = certView(s, ctx.config.thresholds, ctx.nowMs);
   const recent: BeatView[] = [...ctx.beats]
     .sort(byTsDesc)
@@ -365,7 +423,7 @@ function serviceView(s: Service, ctx: ServiceContext): ServiceView {
   // Sources that report no averages or uptime (the edge probes) get them from what is stored: the recent
   // beats' mean latency, today's cell for 24 h and the last 30 cells with data for 30 d.
   const withData = beats90d.filter((d) => d.uptime !== null);
-  const derived: Service = {
+  const derived: ServiceFields = {
     ...s,
     avgLatencyMs: s.avgLatencyMs ?? meanOrNull(numbers(recent.map((b) => b.latencyMs))),
     uptime24h: s.uptime24h ?? beats90d.at(-1)?.uptime ?? null,
@@ -400,7 +458,7 @@ function serviceView(s: Service, ctx: ServiceContext): ServiceView {
  * shows a cert younger than it is. `crit` when invalid or at most `certCritDays` left, `warn` at most
  * `certWarnDays`.
  */
-function certView(s: Service, t: SiteConfig["thresholds"], nowMs: number): CertView | null {
+function certView(s: ServiceFields, t: SiteConfig["thresholds"], nowMs: number): CertView | null {
   if (!s.cert) return null;
   const daysRemaining = Math.floor((toMs(s.cert.validTo) - nowMs) / DAY_MS);
   const level: Level =
@@ -448,7 +506,7 @@ function beatDays(days: DayCell[], nowMs: number): BeatDay[] {
  * Each part is clamped to 0..100; the score has one decimal. Level: `crit` when down, the cert is `crit`
  * or the score is under 75, `warn` under 90 or with a cert warning, else `ok`.
  */
-function healthOf(s: Service, cert: CertView | null, config: SiteConfig): HealthView {
+function healthOf(s: ServiceFields, cert: CertView | null, config: SiteConfig): HealthView {
   const w = config.health;
   const clamp = (x: number) => Math.max(0, Math.min(100, x));
   const parts: { weight: number; score: number }[] = [];

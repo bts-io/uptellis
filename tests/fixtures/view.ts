@@ -9,6 +9,14 @@ import { FIXTURE_NAMES, loadFixture } from "./index";
 export const fixtureConfig = parseSiteConfig(siteJson);
 
 /**
+ * The config the view fixtures render with: the demo config without its two edge probes. The model fixtures
+ * predate them (no `probe:` rows, no `probe:cf` source), and a monitor with no row shows from its config as
+ * `pending` (buildSiteView), so with them every fixture page would carry two never-run monitors. Tests of
+ * never-run monitors add their own.
+ */
+export const fixtureViewConfig = parseSiteConfig({ ...siteJson, probes: [] });
+
+/**
  * The model fixtures plus view-only ones. `maintenance` is the default model under a site-wide maintenance
  * window that is active at its `now` (2026-09-27T23:58:00Z): every service shows as maintenance.
  */
@@ -39,7 +47,8 @@ export function fixtureInput(name: ViewFixtureName): ViewInput {
       facts: f.facts,
     },
     history: f.history,
-    config: name === "maintenance" ? { ...fixtureConfig, maintenance: [SITE_WIDE_WINDOW] } : fixtureConfig,
+    config:
+      name === "maintenance" ? { ...fixtureViewConfig, maintenance: [SITE_WIDE_WINDOW] } : fixtureViewConfig,
     now: f.now,
   };
 }

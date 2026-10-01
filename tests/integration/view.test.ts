@@ -87,7 +87,11 @@ describe("GET /api/sites/:site/view", () => {
   it("serves an empty view before anything was ingested", async () => {
     const v = await getView();
     expect(v.verdict.state).toBe("empty");
-    expect(v.sections.flatMap((s) => s.services)).toEqual([]);
+    // Only the demo's two edge probes, from the config: they have not run their first check yet.
+    expect(v.sections.flatMap((s) => s.services.map((x) => [x.id, x.state]))).toEqual([
+      ["probe:api-health", "pending"],
+      ["probe:web-app", "pending"],
+    ]);
     expect(v.freshness.perSource.map((s) => s.freshness)).toEqual(["empty", "empty", "empty"]);
   });
 
@@ -102,8 +106,9 @@ describe("GET /api/sites/:site/view", () => {
     expect(v.now).toBe("2026-09-27T23:58:00Z");
     expect(v.generatedAt).toBe("2026-09-27T23:57:26Z");
     expect(v.verdict).toMatchObject({ state: "operational", down: 0 });
+    // The web section also lists the two edge probes, pending until their first check.
     expect(v.sections.map((s) => [s.id, s.services.length, s.exitCode])).toEqual([
-      ["web", 2, 0],
+      ["web", 4, 1],
       ["database", 2, 0],
       ["access", 2, 0],
       ["workers", 2, 0],

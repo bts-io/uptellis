@@ -67,7 +67,10 @@ export interface CatalogEntry {
   detail: string | null;
   /** Its state on the page now; null when it has not reported yet. */
   state: DisplayState | null;
-  /** False while the service has no data: the page leaves it out until it reports. */
+  /**
+   * False while the loaded view does not have it: an id nothing knows, or a monitor saved since the view
+   * loaded (the view shows every configured monitor, `pending` or `paused` before its first check).
+   */
   reported: boolean;
 }
 

@@ -25,7 +25,12 @@ describe("readSiteView", () => {
     const { view, warmed } = await readSiteView({ store, cache }, fixtureConfig, NOW);
     await warmed;
     expect(view.verdict.state).toBe("operational");
-    expect(view.sections.flatMap((s) => s.services)).toHaveLength(8);
+    // The 8 Kuma services, and the demo's two edge probes that never ran show from the config as pending.
+    expect(view.sections.flatMap((s) => s.services)).toHaveLength(10);
+    expect(view.sections[0]!.services.filter((s) => s.state === "pending").map((s) => s.id)).toEqual([
+      "probe:api-health",
+      "probe:web-app",
+    ]);
     expect(view.sections[0]!.services[0]!.beatsText).toBe(".".repeat(90));
     expect(cache.models.has("demo")).toBe(true);
   });

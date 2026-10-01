@@ -13,6 +13,7 @@ import { memoryMonitors } from "../support/monitors";
 // (its legacy probes, as monitors on `probe:cf`).
 async function withProbes() {
   const input = fixtureInput("default");
+  input.config = fixtureConfig;
   const now = new Date(input.now as string);
   const ts = new Date(now.getTime() - 20_000).toISOString().replace(".000Z", "Z");
   const { backend, store } = memoryMonitors(fixtureConfig);
