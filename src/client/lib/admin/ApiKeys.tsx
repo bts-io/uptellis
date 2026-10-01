@@ -8,13 +8,22 @@ import {
 } from "@/shared/schemas/auth";
 import { accountFailure, createApiKey, revokeApiKey } from "../account/client";
 import { useSubmit } from "../account/form";
-import { Button, Card, ConfirmDialog, CopyField, Field, Modal, Notice, when } from "./ui";
+import { Panel } from "./settings/Section";
+import { Button, ConfirmDialog, CopyField, Field, Modal, Notice, when } from "./ui";
+
+const SCOPE_NAME: Record<ApiKeyScope, string> = {
+  ingest: "Send data",
+  read: "Read data",
+  agent: "Run checks",
+};
 
 const SCOPE_HELP: Record<ApiKeyScope, string> = {
   ingest: "push data as a source of this site",
   read: "read this site's page data and API",
   agent: "run this site's monitors as an agent (uptellis-agent)",
 };
+
+const scopeNames = (scopes: readonly ApiKeyScope[]) => scopes.map((s) => SCOPE_NAME[s]).join(", ");
 
 /**
  * API keys of this site (`sources.manage`) for pushers and agents: create with a label and scopes (the key
@@ -50,10 +59,10 @@ export function ApiKeys({ site, list, onReload }: { site: string; list: ApiKeyLi
   const revoked = list.keys.filter((k) => k.revokedAt);
 
   return (
-    <Card title="API keys">
+    <Panel title="API keys">
       <p className="mb-4 text-sm text-muted">
-        For pushers and agents: send the key as{" "}
-        <code className="font-mono text-ink">Authorization: Bearer</code>. Each key belongs to this site only.
+        For scripts, pushers and agents of this site only. They send the key as{" "}
+        <code className="font-mono text-ink">Authorization: Bearer</code>.
       </p>
       {error && (
         <Notice tone="error" className="mb-4">
@@ -70,9 +79,9 @@ export function ApiKeys({ site, list, onReload }: { site: string; list: ApiKeyLi
               className="flex flex-wrap items-center justify-between gap-2 border-t border-hair py-2 first:border-t-0"
             >
               <span className="min-w-0 text-sm">
-                {k.name} <span className="font-mono text-xs text-muted">{k.prefix}</span>
+                {k.name} <span className="font-mono text-xs text-muted">starts {k.prefix}</span>
                 <span className="block text-xs text-faint">
-                  {k.scopes.join(", ")}; created {when(k.createdAt)}; last used {when(k.lastUsedAt)}
+                  Can: {scopeNames(k.scopes)}. Made {when(k.createdAt)}, last used {when(k.lastUsedAt)}
                 </span>
               </span>
               <Button
@@ -101,7 +110,7 @@ export function ApiKeys({ site, list, onReload }: { site: string; list: ApiKeyLi
           void create.submit({ name: form.name, scopes: form.scopes });
         }}
       >
-        <h3 className="text-sm font-semibold">Create API key</h3>
+        <h4 className="text-sm font-semibold text-ink">Create an API key</h4>
         {create.failure && (
           <Notice tone="error" className="mt-3">
             {create.failure.message}
@@ -116,7 +125,7 @@ export function ApiKeys({ site, list, onReload }: { site: string; list: ApiKeyLi
             onChange={(e) => setForm({ ...form, name: e.target.value })}
           />
           <fieldset aria-describedby="scope-issues">
-            <legend className="text-xs text-muted">Scopes</legend>
+            <legend className="text-xs text-muted">What it can do</legend>
             <div className="mt-1 flex flex-wrap gap-4">
               {API_KEY_SCOPES.map((s) => (
                 <label key={s} className="flex items-center gap-2 py-1.5 text-sm" title={SCOPE_HELP[s]}>
@@ -132,7 +141,7 @@ export function ApiKeys({ site, list, onReload }: { site: string; list: ApiKeyLi
                       })
                     }
                   />
-                  {s}
+                  {SCOPE_NAME[s]}
                 </label>
               ))}
             </div>
@@ -142,7 +151,7 @@ export function ApiKeys({ site, list, onReload }: { site: string; list: ApiKeyLi
           </fieldset>
         </div>
         <p className="mt-2 text-xs text-muted">
-          {API_KEY_SCOPES.map((s) => `${s}: ${SCOPE_HELP[s]}`).join("; ")}.
+          {API_KEY_SCOPES.map((s) => `${SCOPE_NAME[s]}: ${SCOPE_HELP[s]}`).join("; ")}.
         </p>
         <Button type="submit" tone="primary" className="mt-3" disabled={create.busy}>
           Create API key
@@ -171,7 +180,7 @@ export function ApiKeys({ site, list, onReload }: { site: string; list: ApiKeyLi
               This key is shown once. Copy it now: it cannot be shown again. Closing this dialog discards it.
             </Notice>
             <p className="text-muted">
-              {issued.name}, scopes {issued.scopes.join(", ")}, site {issued.site}.
+              {issued.name}. Can: {scopeNames(issued.scopes)}.
             </p>
             <CopyField label="API key" value={issued.key} copyLabel="Copy key" />
             <div className="flex justify-end">
@@ -180,6 +189,6 @@ export function ApiKeys({ site, list, onReload }: { site: string; list: ApiKeyLi
           </div>
         )}
       </Modal>
-    </Card>
+    </Panel>
   );
 }

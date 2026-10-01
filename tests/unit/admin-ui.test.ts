@@ -268,25 +268,29 @@ describe("sources and the one-time secret", () => {
       createElement(Sources, { site: "demo", list: { keys: [...list.keys, retired] }, onReload: vi.fn() }),
     );
     const rows = [...document.querySelectorAll("tbody tr")].map((r) => r.textContent ?? "");
-    expect(rows[0]).not.toContain("not in the config");
-    expect(rows[1]).toContain("kuma:old");
-    expect(rows[1]).toContain("not in the config");
-    expect(button("Rotate old-1").disabled).toBe(false);
+    expect(rows[0]).not.toContain("No longer in your setup");
+    expect(rows[1]).toContain("Uptime Kuma (old)");
+    expect(rows[1]).toContain("No longer in your setup");
+    // Sources read by kind and name, never as the raw id.
+    expect(body()).not.toContain("kuma:");
+    expect(button("Rotate key for Uptime Kuma (old)").disabled).toBe(false);
   });
 
   it("shows a rotated key's secret once, with a warning and copy, and forgets it on close", async () => {
     const writeText = vi.fn(() => Promise.resolve());
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
     const onReload = vi.fn();
-    mount(createElement(Sources, { site: "demo", list, onReload }));
-    expect(body()).toContain("collector-1");
+    const lastSeen = new Map([["kuma:watch-1", new Date(Date.now() - 120_000).toISOString()]]);
+    mount(createElement(Sources, { site: "demo", list, lastSeen, onReload }));
+    expect(body()).toContain("Uptime Kuma (watch-1)");
+    expect(document.querySelector("tbody tr")?.textContent).toContain("2 minutes ago");
     expect(body()).not.toContain(SECRET);
 
     replies.push({
       status: 200,
       body: { keyId: "collector-1", source: "kuma:watch-1", secret: SECRET, slot: "next" },
     });
-    act(() => button("Rotate collector-1").click());
+    act(() => button("Rotate key for Uptime Kuma (watch-1)").click());
     await settle();
     expect(calls[0]).toMatchObject({
       method: "POST",
@@ -294,6 +298,8 @@ describe("sources and the one-time secret", () => {
     });
     const dialog = document.querySelector('[role="dialog"]')!;
     expect(dialog.textContent).toContain("This secret is shown once");
+    expect(dialog.textContent).toContain("Uptime Kuma (watch-1)");
+    expect(dialog.textContent).toContain("the old key keeps working until then");
     expect((field("Secret") as HTMLInputElement).value).toBe(SECRET);
 
     act(() => button("Copy secret").click());
@@ -310,17 +316,17 @@ describe("sources and the one-time secret", () => {
 
   it("validates a new source before asking, then shows its first key", async () => {
     mount(createElement(Sources, { site: "demo", list, onReload: vi.fn() }));
-    act(() => button("Create source").click());
+    act(() => button("Add source").click());
     expect(calls).toHaveLength(0);
     expect(document.querySelector('[aria-invalid="true"]')).not.toBeNull();
 
-    type(field("Key id"), "edge-2");
-    type(field("Source name (kuma:name)"), "edge-2");
+    type(field("Key name"), "edge-2");
+    type(field("Name"), "edge-2");
     replies.push({
       status: 200,
       body: { keyId: "edge-2", source: "kuma:edge-2", secret: SECRET, slot: "current" },
     });
-    act(() => button("Create source").click());
+    act(() => button("Add source").click());
     await settle();
     expect(calls[0]).toMatchObject({
       method: "POST",

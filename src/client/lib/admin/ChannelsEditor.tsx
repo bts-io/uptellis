@@ -42,7 +42,7 @@ export const EVENT_LABEL: Record<NotifyEvent, string> = {
 };
 
 /** The label of each type's main secret: what the named secret holds. */
-const SECRET_LABEL: Record<Exclude<ChannelType, "email">, string> = {
+export const SECRET_LABEL: Record<Exclude<ChannelType, "email">, string> = {
   discord: "Webhook URL secret",
   slack: "Webhook URL secret",
   webhook: "Endpoint URL secret",
@@ -279,7 +279,7 @@ function ImplicitDiscord({
   );
 }
 
-function SecretField({
+export function SecretField({
   label,
   value,
   issues,

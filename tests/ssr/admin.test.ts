@@ -108,7 +108,7 @@ describe("/admin pages", () => {
     expect(put.status).toBe(200);
 
     const t = text(await page("/admin/settings/revisions"));
-    expect(t).toContain("current: version 2");
+    expect(t).toContain("Live now: version 2");
     expect(t).toContain("ssr note");
     expect(t).toContain("Restore");
     expect(text(await page("/admin"))).toContain("Acme Edited");
@@ -119,7 +119,7 @@ describe("/admin pages", () => {
     expect(html).toContain('href="/api/admin/sites/demo/config/export"');
     expect(html).toContain('download="demo.json"');
     expect(html).toMatch(/<input[^>]*type="file"/);
-    expect(text(html)).toContain("Nothing is saved until you confirm the changes.");
+    expect(text(html)).toContain("nothing is saved until you confirm.");
   });
 
   it("renders the Status page editor by name, with every theme to pick and the live preview of the page", async () => {
@@ -140,8 +140,10 @@ describe("/admin pages", () => {
 
   it("lists the ingest keys without secrets, and a created key shows up there, still without its secret", async () => {
     const before = text(await page("/admin/settings/sources"));
-    for (const keyId of ["collector-1", "facts-1"]) expect(before, keyId).toContain(keyId);
-    expect(before).toContain("Create source");
+    // Sources read by kind and name.
+    for (const name of ["Uptime Kuma (watch-1)", "Facts collector (app-1)"])
+      expect(before, name).toContain(name);
+    expect(before).toContain("Add a source");
 
     const res = await send("/api/admin/sites/demo/sources", {
       method: "POST",
@@ -151,8 +153,7 @@ describe("/admin pages", () => {
     expect(res.status).toBe(201);
     const { secret } = (await res.json()) as { secret: string };
     const html = await page("/admin/settings/sources");
-    expect(text(html)).toContain("ssr-probe");
-    expect(text(html)).toContain("probe:ssr");
+    expect(text(html)).toContain("Edge check (ssr)");
     expect(html).not.toContain(secret);
   });
 });

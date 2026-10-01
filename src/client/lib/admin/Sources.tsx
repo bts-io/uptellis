@@ -2,18 +2,27 @@ import { useState } from "react";
 import { SOURCE_KINDS, type SourceKind } from "@/shared/model";
 import { CreateSourceRequest, type IssuedKey, type SourceKeyList } from "@/shared/schemas/admin";
 import { createSource, describeFailure, rotateKey } from "./client";
+import { ago, secondsSince } from "./monitors/model";
 import { SecretDialog } from "./SecretDialog";
-import { Button, Card, Field, Notice, SelectField, when } from "./ui";
+import { SOURCE_KIND_NAME, sourceLabel } from "./settings/labels";
+import { Panel } from "./settings/Section";
+import { Button, Field, Notice, SelectField, when } from "./ui";
 
-function Slot({ slot }: { slot: SourceKeyList["keys"][number]["current"] }) {
-  if (!slot) return <span className="text-faint">none</span>;
-  return (
-    <span className="whitespace-nowrap">
-      created {when(slot.createdAt)}
-      <br />
-      <span className="text-muted">last used {when(slot.lastUsedAt)}</span>
-    </span>
-  );
+type Key = SourceKeyList["keys"][number];
+
+/** When the source last reported: its data's time from the view, else the key's last use. */
+function lastHeard(k: Key, lastSeen: ReadonlyMap<string, string | null> | undefined, now: string): string {
+  const at = lastSeen?.get(k.source) ?? k.next?.lastUsedAt ?? k.current?.lastUsedAt ?? null;
+  return at ? ago(secondsSince(at, now)) : "Never";
+}
+
+/** The key's state in words: when it was made, and a rotation waiting for its first use. */
+function keyState(k: Key): string {
+  if (!k.current && !k.next) return "No key";
+  const parts: string[] = [];
+  if (k.current) parts.push(`Made ${when(k.current.createdAt)}, last used ${when(k.current.lastUsedAt)}`);
+  if (k.next) parts.push(`New key made ${when(k.next.createdAt)} takes over on its first use`);
+  return parts.join(". ");
 }
 
 /**
@@ -24,12 +33,21 @@ function Slot({ slot }: { slot: SourceKeyList["keys"][number]["current"] }) {
 export function Sources({
   site,
   list,
+  lastSeen,
   onReload,
 }: {
   site: string;
   list: SourceKeyList;
+  /** When each source's newest data was produced (the site view), by source id. */
+  lastSeen?: ReadonlyMap<string, string | null>;
   onReload: () => void;
 }) {
+  const now = new Date().toISOString();
+  const labels = list.keys.map((k) => sourceLabel(k.source));
+  const rotateLabel = (k: Key, i: number) =>
+    labels.filter((l) => l === labels[i]).length > 1
+      ? `Rotate key ${k.keyId} for ${labels[i]}`
+      : `Rotate key for ${labels[i]}`;
   const [issued, setIssued] = useState<IssuedKey | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -70,7 +88,11 @@ export function Sources({
   const at = (path: string) => formIssues.filter((i) => i.path === path);
 
   return (
-    <Card title="Sources and keys">
+    <Panel title="Sources">
+      <p className="mb-4 text-sm text-muted">
+        Collectors, pushers and agents that report in. Each has its own key; rotate a key if it may have
+        leaked.
+      </p>
       {error && (
         <Notice tone="error" className="mb-4">
           {error}
@@ -78,47 +100,44 @@ export function Sources({
       )}
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
+          <caption className="sr-only">Sources and their keys</caption>
           <thead className="text-xs text-muted">
             <tr>
-              <th className="py-1 pr-3 font-normal">Key id</th>
               <th className="py-1 pr-3 font-normal">Source</th>
-              <th className="py-1 pr-3 font-normal">Store</th>
-              <th className="py-1 pr-3 font-normal">Current</th>
-              <th className="py-1 pr-3 font-normal">Next</th>
+              <th className="py-1 pr-3 font-normal">Last heard from</th>
+              <th className="py-1 pr-3 font-normal">Key</th>
               <th className="py-1 font-normal">
                 <span className="sr-only">Actions</span>
               </th>
             </tr>
           </thead>
           <tbody>
-            {list.keys.map((k) => (
+            {list.keys.map((k, i) => (
               <tr key={k.keyId} className="border-t border-hair align-top">
-                <td className="py-2 pr-3 font-mono">{k.keyId}</td>
                 <td className="py-2 pr-3">
-                  <span className="font-mono">{k.source}</span>
-                  {!k.inConfig && <span className="ml-2 text-xs text-muted">not in the config</span>}
+                  <span className="font-medium text-ink">{labels[i]}</span>
+                  {!k.inConfig && (
+                    <span className="block text-xs text-muted">
+                      No longer in your setup; its key still works.
+                    </span>
+                  )}
                 </td>
-                <td className="py-2 pr-3">{k.store}</td>
-                <td className="py-2 pr-3 text-xs">
-                  <Slot slot={k.current} />
-                </td>
-                <td className="py-2 pr-3 text-xs">
-                  <Slot slot={k.next} />
-                </td>
+                <td className="py-2 pr-3 whitespace-nowrap">{lastHeard(k, lastSeen, now)}</td>
+                <td className="py-2 pr-3 text-xs text-muted">{keyState(k)}</td>
                 <td className="py-2 text-right">
                   <Button
                     onClick={() => void act(k.keyId, () => rotateKey(site, k.keyId))}
                     disabled={busy !== null}
-                    aria-label={`Rotate ${k.keyId}`}
+                    aria-label={rotateLabel(k, i)}
                   >
-                    Rotate
+                    Rotate key
                   </Button>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-        {list.keys.length === 0 && <p className="py-2 text-sm text-muted">No keys yet.</p>}
+        {list.keys.length === 0 && <p className="py-2 text-sm text-muted">No sources report in yet.</p>}
       </div>
 
       <form
@@ -128,18 +147,11 @@ export function Sources({
           create();
         }}
       >
-        <h3 className="text-sm font-semibold">Create source</h3>
+        <h4 className="text-sm font-semibold text-ink">Add a source</h4>
         <p className="mt-1 text-sm text-muted">
-          Adds the source to the config (a new revision) and issues its first key.
+          Adds it to your setup (saved as a new revision) and makes its first key, shown once.
         </p>
         <div className="mt-3 grid gap-3 sm:grid-cols-4">
-          <Field
-            label="Key id"
-            placeholder="facts-2"
-            value={form.keyId}
-            issues={at("keyId")}
-            onChange={(e) => setForm({ ...form, keyId: e.target.value })}
-          />
           <SelectField
             label="Kind"
             value={form.kind}
@@ -147,19 +159,26 @@ export function Sources({
           >
             {SOURCE_KINDS.map((k) => (
               <option key={k} value={k}>
-                {k}
+                {SOURCE_KIND_NAME[k]}
               </option>
             ))}
           </SelectField>
           <Field
-            label={`Source name (${form.kind}:name)`}
+            label="Name"
             placeholder="app-2"
             value={form.name}
             issues={at("source")}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
           />
           <Field
-            label="Expected interval (s)"
+            label="Key name"
+            placeholder="facts-2"
+            value={form.keyId}
+            issues={at("keyId")}
+            onChange={(e) => setForm({ ...form, keyId: e.target.value })}
+          />
+          <Field
+            label="Reports every (seconds)"
             type="number"
             min={1}
             value={form.interval}
@@ -168,7 +187,7 @@ export function Sources({
           />
         </div>
         <Button type="submit" tone="primary" className="mt-3" disabled={busy !== null}>
-          Create source
+          Add source
         </Button>
       </form>
 
@@ -179,6 +198,6 @@ export function Sources({
           onReload();
         }}
       />
-    </Card>
+    </Panel>
   );
 }

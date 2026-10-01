@@ -10,7 +10,10 @@ import {
 } from "@/shared/schemas/auth";
 import { accountFailure, changeRole, createInvite, removeUser, revokeInvite } from "../account/client";
 import { useSubmit } from "../account/form";
-import { Button, Card, ConfirmDialog, CopyField, Field, Modal, Notice, SelectField, when } from "./ui";
+import { Panel } from "./settings/Section";
+import { Button, ConfirmDialog, CopyField, Field, Modal, Notice, SelectField, when } from "./ui";
+
+export const ROLE_NAME: Record<Role, string> = { owner: "Owner", admin: "Admin", viewer: "Viewer" };
 
 const ROLE_HELP: Record<Role, string> = {
   owner: "everything, including instance settings",
@@ -63,7 +66,14 @@ export function Users({
 
   return (
     <div className="flex flex-col gap-6">
-      <Card title="Users" aside={<span className="text-xs text-muted">{users.users.length} total</span>}>
+      <Panel
+        title="People"
+        aside={
+          <span className="text-xs text-muted">
+            {users.users.length === 1 ? "1 person" : `${users.users.length} people`}
+          </span>
+        }
+      >
         {error && (
           <Notice tone="error" className="mb-4">
             {error}
@@ -85,7 +95,7 @@ export function Users({
                   </p>
                   <p className="truncate font-mono text-xs text-muted">{u.email}</p>
                   <p className="text-xs text-faint">
-                    joined {when(u.createdAt)}, last sign-in {when(u.lastSignInAt)}
+                    Joined {when(u.createdAt)}, last sign-in {when(u.lastSignInAt)}
                   </p>
                 </div>
                 <SelectField
@@ -96,7 +106,7 @@ export function Users({
                 >
                   {(locked ? ROLES : grantable).map((r) => (
                     <option key={r} value={r}>
-                      {r}
+                      {ROLE_NAME[r]}
                     </option>
                   ))}
                 </SelectField>
@@ -113,12 +123,15 @@ export function Users({
           })}
         </ul>
         <p className="mt-3 text-xs text-muted">
-          {grantable.map((r) => `${r}: ${ROLE_HELP[r]}`).join("; ")}. The last owner cannot be demoted or
-          removed.
+          {grantable.map((r) => `${ROLE_NAME[r]}: ${ROLE_HELP[r]}`).join("; ")}. The last owner cannot be
+          demoted or removed.
         </p>
-      </Card>
+      </Panel>
 
-      <Card title="Invites">
+      <Panel title="Invites">
+        <p className="mb-3 text-sm text-muted">
+          An invite is a link that works once. Send it to the person yourself.
+        </p>
         <form
           noValidate
           className="grid gap-3 sm:grid-cols-[1fr_10rem_auto] sm:items-end"
@@ -141,7 +154,7 @@ export function Users({
           >
             {grantable.map((r) => (
               <option key={r} value={r}>
-                {r}
+                {ROLE_NAME[r]}
               </option>
             ))}
           </SelectField>
@@ -154,9 +167,9 @@ export function Users({
             {invite.failure.message}
           </Notice>
         )}
-        <h3 className="mt-6 text-sm font-semibold">Pending</h3>
+        <h4 className="mt-6 text-sm font-semibold text-ink">Waiting to be accepted</h4>
         {pending.length === 0 ? (
-          <p className="mt-1 text-sm text-muted">No pending invites.</p>
+          <p className="mt-1 text-sm text-muted">No open invites.</p>
         ) : (
           <ul className="mt-1 flex flex-col">
             {pending.map((i) => (
@@ -165,7 +178,7 @@ export function Users({
                 className="flex flex-wrap items-center justify-between gap-2 border-t border-hair py-2 first:border-t-0"
               >
                 <span className="text-sm">
-                  {i.role}
+                  {ROLE_NAME[i.role]}
                   <span className="text-muted"> for {i.email ?? "anyone with the link"}</span>
                   <span className="block text-xs text-faint">expires {when(i.expiresAt)}</span>
                 </span>
@@ -180,7 +193,7 @@ export function Users({
             ))}
           </ul>
         )}
-      </Card>
+      </Panel>
 
       <ConfirmDialog
         open={removing !== null}
@@ -212,7 +225,7 @@ export function Users({
               This link is shown once and works once. Copy it now and send it to the person you invite.
             </Notice>
             <p className="text-muted">
-              Role {issued.role}
+              Role {ROLE_NAME[issued.role]}
               {issued.email ? `, for ${issued.email}` : ""}. Expires {when(issued.expiresAt)}.
             </p>
             <CopyField label="Invite link" value={issued.url} copyLabel="Copy link" />

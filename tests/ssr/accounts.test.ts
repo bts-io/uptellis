@@ -99,9 +99,9 @@ describe("with an owner", () => {
     expect(res.status).toBe(201);
     const html = await page("/admin/settings/users", cookie);
     const t = text(html);
-    for (const label of ["Users", "Test Owner", "(you)", "last sign-in 20", "Invites", "Create invite"])
+    for (const label of ["People", "Test Owner", "(you)", "last sign-in 20", "Invites", "Create invite"])
       expect(t, label).toContain(label);
-    expect(t).toContain("admin for");
+    expect(t).toContain("Admin for");
     expect(html).toContain('aria-label="Remove Test Owner"');
     // The invite's link is shown once when created, never in the list.
     expect(html).not.toContain(IssuedInvite.parse(await res.json()).url);
