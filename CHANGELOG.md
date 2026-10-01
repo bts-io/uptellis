@@ -2,6 +2,29 @@
 
 All notable changes to Uptellis are recorded here. The format follows [Conventional Commits](https://www.conventionalcommits.org) and the project uses [Semantic Versioning](https://semver.org). Each release adds its section in the release PR, from the Conventional Commits since the previous tag.
 
+## 0.8.0 (2026-10-01)
+
+### ⚠ BREAKING CHANGES
+
+* **sites:** the bundled demo site is active only when `SITE_DEFAULT` names it, and the Docker image, `docker.env.example` and `wrangler.jsonc` no longer default to `demo`. A fresh install starts with no site, and setup creates the user's own. An install that used the demo as its real site must set `SITE_DEFAULT=demo`, or that site and its history are hidden.
+
+### Features
+
+* **A new admin, built around monitors** (chosen from three mock-ups). Four tabs: Monitors, Status page, Alerts, Settings, with a down badge and a phone bottom bar. Old admin addresses redirect to their new place, and every change is still saved as a config revision underneath, with a plain note.
+* **Monitors:** big numbers (up, down, paused, uptime), one table of monitors and heartbeats, and drawers for a new monitor (the address first, the type worked out from it, the rest folded under More options), editing, details (uptime, response time, recent checks, incidents, pause, delete, send a test alert) and a new heartbeat (its address shown once, with a copy button and a ready `curl` line).
+* **Status page:** sections and services by name, drag and keyboard reordering, public names, a search picker, the nine themes as cards, and the real theme rendered live beside the editor as you change it.
+* **Alerts:** channel cards in plain words, an add and edit drawer for every channel type, which monitors each covers, send test, and recent alerts as sentences.
+* **Settings:** sources and keys, users and invites, history, import and export, and the full config as JSON under Advanced.
+* **First run:** after the owner account, the first site needs only a name; then "What should we watch?" takes an address and where to alert, and a getting started checklist follows on the dashboard. Timed on a fresh Docker install with `scripts/first-run-walkthrough.ts`: 2.5 s of clicks to the first test alert.
+* One rule picks the site for the page, the admin and setup: a matching hostname, then `SITE_DEFAULT`, then the first site. A site may have no hostnames (contract addition): it is served as the default or only site.
+
+### Bug Fixes
+
+* The status page section picker names every service, never a raw id; services without a name are named by where they come from ("Uptime Kuma monitor 1").
+* "Send test alert" works on a monitor that has not been checked yet.
+* Alerts of services or sources that were removed read "A removed service went down" instead of "Something went down".
+* Page-wide theme shortcuts (j, k) are off inside the admin preview.
+
 ## 0.7.0 (2026-10-01)
 
 ### Features
