@@ -427,6 +427,7 @@ export function adminRoutes() {
         secret: (name) => platform.notifySecret(name),
         email: platform.email,
         ...(emailFrom ? { emailFrom } : {}),
+        runtime: platform.runtime,
       },
       site,
       kind,

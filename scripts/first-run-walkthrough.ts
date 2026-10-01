@@ -90,6 +90,7 @@ async function walk(page: Page): Promise<void> {
 }
 
 let browser: Browser | undefined;
+let current: Page | undefined;
 let failure: string | null = null;
 try {
   browser = await chromium.launch({
@@ -98,10 +99,14 @@ try {
   });
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.setDefaultTimeout(STEP_TIMEOUT_MS);
+  current = page;
   await walk(page);
 } catch (err) {
   // The message only: never the page content (the form held the password).
   failure = err instanceof Error ? err.message.split("\n")[0]! : "unknown error";
+  // A screenshot of where it stopped, when asked for (by then the password field is long gone).
+  const shot = process.env.WALKTHROUGH_SHOT;
+  if (shot) await current?.screenshot({ path: shot }).catch(() => undefined);
 } finally {
   await browser?.close();
 }

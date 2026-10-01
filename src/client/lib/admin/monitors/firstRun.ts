@@ -119,6 +119,12 @@ export function channelFromDraft(d: ChannelDraft, taken: readonly ChannelConfig[
         from: d.smsFrom.trim(),
         accountSid: d.accountSid.trim(),
       };
+    case "webhook": {
+      // A plain webhook: the first run names one secret (the address), so it must not also expect a signing
+      // key the user was never told about. Signing can be added later under Alerts.
+      const { signingSecret: _signing, ...plain } = ch;
+      return plain;
+    }
     default:
       return ch;
   }

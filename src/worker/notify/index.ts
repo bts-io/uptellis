@@ -25,7 +25,15 @@ import { and, desc, eq, gt, gte, isNotNull, lte, sql } from "drizzle-orm";
 import type { Platform } from "@/platform/types";
 import type { SiteConfig } from "@/shared/config";
 import { FRESHNESS_FACTORS, type Incident, type Source } from "@/shared/model";
-import { inMaintenance } from "@/shared/monitors";
+import {
+  BUILTIN_RUNNER,
+  inMaintenance,
+  monitorServiceId,
+  monitorsOf,
+  monitorTargetDisplay,
+  PUSH_SOURCE_ID,
+  runnerSourceId,
+} from "@/shared/monitors";
 import {
   AlertMessage,
   type ChannelConfig,
@@ -500,7 +508,8 @@ export const staleNotifier = incidentNotifier;
 export type TestCardKind = "stale" | "recovered" | "down" | "up";
 export const TEST_CARD_KINDS: readonly TestCardKind[] = ["stale", "recovered", "down", "up"];
 
-export type TestDeps = Omit<NotifierDeps, "waitUntil">;
+/** `runtime` names where a built-in check runs, for a monitor that has not been checked yet. */
+export type TestDeps = Omit<NotifierDeps, "waitUntil"> & { runtime?: "cloudflare" | "docker" };
 
 export type TestCardResult =
   | { ok: true; source: string; service?: string; channel: string | null; outcome: DeliveryOutcome }
@@ -517,6 +526,28 @@ type TestMessage =
   | { ok: false; error: "no_source" | "no_service" };
 
 /**
+ * A monitor of the config that has no service row yet (created moments ago, before its first check), as the
+ * row a test card needs: so "Send test alert" works on a brand-new monitor. `serviceId` picks it, else the
+ * config's first monitor.
+ */
+function unchecked(
+  config: SiteConfig | null,
+  serviceId: string | undefined,
+  runtime: "cloudflare" | "docker",
+): { id: string; source: string; targetDisplay: string | null; name: string } | undefined {
+  const list = config ? monitorsOf(config) : [];
+  const m = serviceId ? list.find((x) => monitorServiceId(x.id) === serviceId) : list[0];
+  if (!m) return undefined;
+  const runner = "runners" in m && m.runners?.[0] ? m.runners[0] : BUILTIN_RUNNER;
+  return {
+    id: monitorServiceId(m.id),
+    source: m.type === "push" ? PUSH_SOURCE_ID : runnerSourceId(runner, runtime),
+    targetDisplay: monitorTargetDisplay(m),
+    name: m.name,
+  };
+}
+
+/**
  * A test `down` or `up` message for one of the site's services (`serviceId`, else its first monitor, else
  * its first service), from its current row and display name.
  */
@@ -531,9 +562,11 @@ async function serviceTestMessage(
   const rows = (
     await deps.db.select().from(services).where(eq(services.site, site)).orderBy(services.id)
   ).map(rowToService);
-  const s = serviceId
-    ? rows.find((r) => r.id === serviceId)
-    : (rows.find((r) => r.id.startsWith("probe:")) ?? rows[0]);
+  const s =
+    (serviceId
+      ? rows.find((r) => r.id === serviceId)
+      : (rows.find((r) => r.id.startsWith("probe:")) ?? rows[0])) ??
+    unchecked(config, serviceId, deps.runtime ?? "cloudflare");
   if (!s) return { ok: false, error: "no_service" };
   const service: CardService = {
     id: s.id,

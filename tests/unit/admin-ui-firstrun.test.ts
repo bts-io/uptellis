@@ -264,6 +264,10 @@ describe("first run: the screen", () => {
     const slack = channelFromDraft(emptyChannelDraft("slack"), taken);
     expect(slack).toMatchObject({ id: "alerts-slack", type: "slack", secret: "NOTIFY_ALERTS_SLACK" });
     expect(channelFromDraft(emptyChannelDraft("slack"), [slack]).id).toBe("alerts-slack-2");
+    // The first run names one secret, so its webhook is plain: no signing key the user was never told about.
+    const hook = channelFromDraft(emptyChannelDraft("webhook"), taken);
+    expect(hook).toMatchObject({ type: "webhook", secret: "NOTIFY_ALERTS_WEBHOOK" });
+    expect(hook).not.toHaveProperty("signingSecret");
     expect(channelFromDraft({ ...emptyChannelDraft("sms"), smsTo: "+1 555 123 4567" }, taken)).toMatchObject({
       type: "sms",
       to: "+15551234567",

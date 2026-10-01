@@ -14,7 +14,7 @@ import { runJob } from "@/worker/cron";
 import { schema } from "@/worker/db";
 import { D1Store } from "@/worker/engine/d1-store";
 import type { ConfigSource } from "@/worker/engine/sites";
-import { IncidentNotifier, type NotifierDeps } from "@/worker/notify";
+import { IncidentNotifier, type NotifierDeps, sendTestCard } from "@/worker/notify";
 import { testPlatform } from "../support/platform";
 import { adminCookie, adminEnv, handle } from "./admin-app";
 import { beat, delta, service } from "./storage-helpers";
@@ -460,6 +460,47 @@ describe("the five-minute job", () => {
       .from(schema.notifications)
       .where(eq(schema.notifications.incidentId, `${incidentId}:old`));
     expect(old[0]).toMatchObject({ status: "failed", attempts: 3 });
+  });
+});
+
+describe("a test alert for a monitor that has not been checked yet", () => {
+  it("is built from the monitor in the config instead of failing with no service", async () => {
+    // A brand-new site: the monitor exists in the config, nothing has run, so there is no service row.
+    const config = siteConfig("fresh-test", {
+      monitors: [
+        { id: "shop", name: "Shop", type: "http", url: "https://shop.example.com/", runners: ["builtin"] },
+      ],
+    });
+    const configs: ConfigSource = {
+      current: async (slug) =>
+        slug === "fresh-test" ? { config, version: 1, savedAt: T("00:00:00"), savedBy: "test" } : null,
+      slugs: async () => ["fresh-test"],
+    };
+    const bodies: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      bodies.push(String(init?.body));
+      return Response.json({ id: "1" });
+    });
+    const out = await sendTestCard(
+      { db, configs, secret: (name) => SECRETS[name], runtime: "docker" },
+      "fresh-test",
+      "down",
+      undefined,
+      "probe:shop",
+      "discord",
+    );
+    expect(out).toMatchObject({ ok: true, service: "probe:shop", source: "probe:server" });
+    expect(bodies[0]).toContain("Shop");
+    // A service id the config does not have is still unknown.
+    const none = await sendTestCard(
+      { db, configs, secret: (name) => SECRETS[name] },
+      "fresh-test",
+      "down",
+      undefined,
+      "probe:nope",
+      "discord",
+    );
+    expect(none).toEqual({ ok: false, error: "no_service" });
   });
 });
 

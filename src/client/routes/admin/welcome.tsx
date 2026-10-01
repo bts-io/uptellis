@@ -21,7 +21,9 @@ function WelcomePage() {
       site={site}
       state={state}
       onReload={() => void router.invalidate()}
-      onDone={(serviceId) => void navigate({ to: "/admin", search: { show: serviceId } })}
+      // A full load of the dashboard: the admin's loader data was read before this save, and the dashboard
+      // must already know the monitor it opens (a one-time step, so the page load costs nothing).
+      onDone={(serviceId) => window.location.assign(`/admin?show=${encodeURIComponent(serviceId)}`)}
       onSkip={() => {
         skipWelcome(site);
         void navigate({ to: "/admin" });
