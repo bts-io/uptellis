@@ -3,12 +3,16 @@
  * `profiles/forgejo-ha/push-facts.sh` reports it (groups forgejo, replication, fence, backup, runners, disk,
  * watchdog). Labels, formats, levels and thresholds (`config.thresholds`) are those of the facts; the
  * topology hook finds the serving node, the standby and primary, the reporter and the watchdog.
+ *
+ * Each node of the pair runs its own pusher, and both report the same keys from their side. The view reads
+ * the pair from one node (`selectFacts`): the primary's while its facts are current, else the other node's.
+ * Disk is per node: the Disk group and the pair's cards show each node's own.
  */
 import type { Fact } from "../model";
 import { formatBytes, formatDuration, formatRelative, toMs } from "../view/format";
 import type { DisplayState, Level, TopologyView } from "../view/types";
 import { bool, current, keyLevel, lastKnown, num, own, part, quiet, runs, staleAge, str } from "./read";
-import type { FactKeyDef, Profile, ProfileContext } from "./types";
+import type { FactKeyDef, Profile, ProfileContext, SourceFacts } from "./types";
 
 /** Seconds from a timestamp fact's value to now (negative when it lies ahead). */
 const sinceS = (f: Fact, ctx: ProfileContext) =>
@@ -113,6 +117,71 @@ const pgRole = (role: string) => (role === "standby" ? "replica" : role);
 
 /** A key's level as its row shows it (`forgejo.healthzCode` -> ok). */
 const lvl = (ctx: ProfileContext, key: string) => keyLevel(ctx, forgejoHa.groups, key);
+
+/** The context as one source sees it: its own facts in place of the view's. */
+const seenBy = (ctx: ProfileContext, s: SourceFacts): ProfileContext => ({ ...ctx, facts: s.facts });
+
+/** A node's disk: `12G / 79G (16%)` or its parts, coloured by the percentage's level; null without disk facts. */
+const diskParts = (ctx: ProfileContext) => {
+  const used = num(ctx, "disk.usedBytes");
+  const size = num(ctx, "disk.sizeBytes");
+  const percent = num(ctx, "disk.percent");
+  const level = lvl(ctx, "disk.percent");
+  const display = str(ctx, "disk.display");
+  if (display !== null) return [part(display, level)];
+  return runs(
+    [used !== null && size !== null && part(`${formatBytes(used)} / ${formatBytes(size)}`, level)],
+    [percent !== null && part(`${percent}%`, level)],
+  );
+};
+
+/** The sources of the pair's nodes: those that report a forgejo-ha node or Postgres role. */
+const pairSources = (ctx: ProfileContext) =>
+  ctx.sources.filter((s) => s.facts.has("forgejo.node") || s.facts.has("replication.role"));
+
+/** The fact that says a node reported at all: its name, else its role. */
+const nodeFact = (s: SourceFacts) => s.facts.get("forgejo.node") ?? s.facts.get("replication.role");
+
+/** A node claims the primary when its Postgres says so, or, without a role, when it runs Forgejo. */
+const claimsPrimary = (s: SourceFacts) => {
+  const role = s.facts.get("replication.role")?.value;
+  if (role?.type === "string") return role.value === "primary";
+  const serving = s.facts.get("forgejo.serving")?.value;
+  return serving?.type === "boolean" && serving.value;
+};
+
+/** Group ids this profile declares; their keys come from one node when the pair has two pushers. */
+const PAIR_GROUPS = new Set(["forgejo", "replication", "fence", "backup", "runners", "disk", "watchdog"]);
+
+/**
+ * The node the pair is read from: a node whose facts are current before one whose facts are stale, then the
+ * one that claims the primary, then the newest report (a failover where both still claim it), then by name.
+ */
+function readFrom(ctx: ProfileContext, pair: readonly SourceFacts[]): SourceFacts | undefined {
+  const rank = (s: SourceFacts) => {
+    const f = nodeFact(s);
+    return [current(ctx, f) ? 1 : 0, claimsPrimary(s) ? 1 : 0, f ? toMs(f.observedAt) : 0] as const;
+  };
+  return [...pair].sort((a, b) => {
+    const [x, y] = [rank(a), rank(b)];
+    return y[0] - x[0] || y[1] - x[1] || y[2] - x[2] || a.node.localeCompare(b.node);
+  })[0];
+}
+
+/**
+ * With a pusher on each node, every forgejo-ha key comes from the node `readFrom` picks, so the primary's
+ * and the standby's reports never mix; other groups keep the newest per key. Null (the default) with one node.
+ */
+function selectFacts(ctx: ProfileContext): ReadonlyMap<string, Fact> | null {
+  const pair = pairSources(ctx);
+  const from = readFrom(ctx, pair);
+  if (pair.length < 2 || !from) return null;
+  const nodes = new Set(pair.map((s) => s.source));
+  const out = new Map<string, Fact>();
+  for (const [k, f] of ctx.facts) if (!(nodes.has(f.source) && PAIR_GROUPS.has(f.group))) out.set(k, f);
+  for (const [k, f] of from.facts) if (PAIR_GROUPS.has(f.group)) out.set(k, f);
+  return out;
+}
 
 export const forgejoHa: Profile = {
   id: "forgejo-ha",
@@ -404,6 +473,8 @@ export const forgejoHa: Profile = {
       title: "Disk",
       icon: "host",
       order: 60,
+      // Each node's own disk, rows labelled by node, when both nodes push.
+      perNode: true,
       keys: [
         {
           key: "percent",
@@ -418,17 +489,16 @@ export const forgejoHa: Profile = {
         { key: "usedBytes", label: "Used", format: "bytes", foldedInto: "display" },
         { key: "sizeBytes", label: "Size", format: "bytes", foldedInto: "display" },
       ],
-      // 12G / 79G (16%), coloured by the percentage's level
+      // 12G / 79G (16%), coloured by the percentage's level; per node with two pushers:
+      // app-1 12G / 79G (16%) · app-2 9G / 79G (12%)
       summaryParts: (ctx) => {
-        const used = num(ctx, "disk.usedBytes");
-        const size = num(ctx, "disk.sizeBytes");
-        const percent = num(ctx, "disk.percent");
-        const level = lvl(ctx, "disk.percent");
-        const display = str(ctx, "disk.display");
-        if (display !== null) return [part(display, level)];
+        const nodes = pairSources(ctx).filter((s) => [...s.facts.values()].some((f) => f.group === "disk"));
+        if (nodes.length < 2) return diskParts(ctx);
         return runs(
-          [used !== null && size !== null && part(`${formatBytes(used)} / ${formatBytes(size)}`, level)],
-          [percent !== null && part(`${percent}%`, level)],
+          ...nodes.map((s) => {
+            const parts = diskParts(seenBy(ctx, s));
+            return parts ? [part(s.node, "info"), ...parts] : [];
+          }),
         );
       },
     },
@@ -471,6 +541,11 @@ export const forgejoHa: Profile = {
     return [`Forgejo serving from ${serving}`, replication].filter(Boolean).join(", ");
   },
   topology: refineTopology,
+  nodeOf: (facts) => {
+    const v = facts.get("forgejo.node")?.value;
+    return v?.type === "string" ? v.value : null;
+  },
+  selectFacts,
   producerGuide: "profiles/forgejo-ha/README.md",
 };
 
@@ -480,7 +555,9 @@ type Detail = Node["details"][number];
 /**
  * The reporting node (`forgejo.node`) tells its own Postgres role (`replication.role`) and names its peer
  * (`replication.peer`, role from `fence.peerRole`). A node whose deciding fact is past its `freshForS`, or
- * whose source is stale, shows `stale`; one whose fact never arrived shows `unknown`.
+ * whose source is stale, shows `stale`; one whose fact never arrived shows `unknown`. When the peer pushes
+ * too, its card adds its own disk, and it shows `stale` (unless the reporter sees it down) once its own
+ * facts are past their window.
  */
 function refineTopology(ctx: ProfileContext, topology: TopologyView): TopologyView {
   const fact = (key: string) => ctx.facts.get(key);
@@ -515,7 +592,17 @@ function refineTopology(ctx: ProfileContext, topology: TopologyView): TopologyVi
 
   const lag = lagDisplay(ctx);
   const lagCurrent = current(ctx, fact("replication.lagSeconds"));
-  const disk = num(ctx, "disk.percent");
+  /** A node's own facts when it pushes too (the reporter's are the view's). */
+  const ownFacts = (id: string) =>
+    id === reporter ? undefined : pairSources(ctx).find((s) => s.node === id);
+  /** The disk row from a node's facts; a peer's is stale (with its age) once past its window. */
+  const diskDetail = (c: ProfileContext, peer: boolean): Detail | null => {
+    const disk = num(c, "disk.percent");
+    if (disk === null) return null;
+    return peer && !current(c, c.facts.get("disk.percent"))
+      ? { label: "disk", value: lastKnown(c, "disk.percent", `${disk}%`), state: "stale" }
+      : { label: "disk", value: `${disk}%`, state: disk >= 90 ? "down" : disk >= 80 ? "degraded" : "up" };
+  };
 
   /** The rows of a pair node's card: forgejo, postgres, then the disk (reporter) or the WAL stream (peer). */
   const pairDetails = (n: Node): Detail[] => {
@@ -538,11 +625,11 @@ function refineTopology(ctx: ProfileContext, topology: TopologyView): TopologyVi
                     : pgRole(n.note === "serving" ? "primary" : (n.note ?? "standby")),
             state: n.state,
           };
+    const own = ownFacts(n.id);
+    const disk = own ? diskDetail(seenBy(ctx, own), true) : null;
     const last: Detail | null =
       n.id === reporter
-        ? disk === null
-          ? null
-          : { label: "disk", value: `${disk}%`, state: disk >= 90 ? "down" : disk >= 80 ? "degraded" : "up" }
+        ? diskDetail(ctx, false)
         : !live
           ? // Without a replication fact nothing says the stream stopped.
             replicationKnown(ctx)
@@ -556,12 +643,21 @@ function refineTopology(ctx: ProfileContext, topology: TopologyView): TopologyVi
                 value: lastKnown(ctx, "replication.lagSeconds", `lag ${lag}`),
                 state: lagCurrent ? "up" : "stale",
               };
-    return [forgejo, postgres, ...(last ? [last] : [])];
+    return [forgejo, postgres, ...(last ? [last] : []), ...(disk ? [disk] : [])];
+  };
+
+  /** A peer whose own facts went past their window shows `stale`, unless the reporter sees it down. */
+  const peerStale = (x: Node): Node => {
+    const own = ownFacts(x.id);
+    return own && x.state !== "down" && !current(ctx, nodeFact(own)) ? { ...x, state: "stale" } : x;
   };
 
   const nodes = topology.nodes.map((n): Node => {
     const at = (state: DisplayState, note: string | null): Node => ({ ...n, state, note });
-    const pair = (x: Node): Node => ({ ...x, details: pairDetails(x) });
+    const pair = (x: Node): Node => {
+      const y = peerStale(x);
+      return { ...y, details: pairDetails(y) };
+    };
     if (n.id === serving) return pair(at(servingState(), "serving"));
     if (n.id === standby) return pair(at(standbyState(), "standby"));
     if (n.id === primary) return pair(at(from("replication.role", "up"), "primary"));

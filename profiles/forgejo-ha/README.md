@@ -85,6 +85,18 @@ The script needs `bash`, `curl`, `openssl`, `python3` and `docker` on the node. 
 
 Install it on both nodes, each with its own source and key id, so the page still hears from the standby when the primary is down.
 
+### Two pushers, one page
+
+Both nodes report the same keys from their own side: the primary says `replication.role primary`, `standbyConnected yes` and its backup, the standby says `standby`, its view of the peer and "no backup yet". Uptellis stores each source's facts separately (keyed by source as well as group and key), and the profile decides which node the page reads the pair from:
+
+1. A node whose facts are current (inside their 30 minute window, source not stale) comes before one whose facts are stale.
+2. Among those, the node that claims the primary (`replication.role primary`, or, without a role, the node where Forgejo runs) comes first.
+3. If both still claim it (a failover in progress), the newer report wins; then the node name.
+
+Every `forgejo`, `replication`, `fence`, `backup`, `runners`, `disk` and `watchdog` key, the headline and the topology then come from that one node, so the primary's and the standby's reports never mix, whichever pushed last. After a failover the new primary's facts are current and claim the primary, so the page follows it. When the primary's pusher stops, its facts go stale and the page falls back to the standby's view; the primary's node card shows `stale` (unless the standby sees it down) and its disk row its last value with its age.
+
+Disk is per node: the Disk group lists each node's rows, labelled with the node ("Root filesystem (app-2)"), its summary reads `app-1 12G / 79G (16%) · app-2 9G / 79G (12%)`, and each node's card in the topology shows its own `disk` row. A node is named by its `forgejo.node` fact (the host name the pusher also sends as `producer`). With one pusher nothing changes.
+
 To rotate the key, use **Rotate** in the Sources tab and replace the `INGEST_KEY=` line; the next run signs with the new secret and promotes it ([OPERATIONS.md](../../docs/OPERATIONS.md#ingest-keys)).
 
 ## Signing
