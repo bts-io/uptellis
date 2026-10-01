@@ -7,7 +7,14 @@
 import { parseSiteConfig, type SiteConfig } from "../config";
 import type { Fact } from "../model";
 import { listProfiles } from "../profiles";
-import type { FactFormat, FactGroupDef, FactKeyDef, Profile, ProfileContext } from "../profiles/types";
+import type {
+  FactFormat,
+  FactGroupDef,
+  FactKeyDef,
+  Profile,
+  ProfileContext,
+  SourceFacts,
+} from "../profiles/types";
 import {
   factFresh,
   formatBytes,
@@ -101,20 +108,33 @@ function formatValue(f: Fact, format: FactFormat, def: FactKeyDef | undefined, n
   }
 }
 
-function factRow(f: Fact, def: FactKeyDef | undefined, ctx: ProfileContext): FactRowView {
+/** A row of a per-node group: its node, and the key it is listed under (`<key>@<node>` unless shown as is). */
+interface RowNode {
+  node: string;
+  key: string;
+}
+
+function factRow(
+  f: Fact,
+  def: FactKeyDef | undefined,
+  ctx: ProfileContext,
+  on: RowNode | null = null,
+): FactRowView {
   const format = def?.format ?? inferFormat(f, ctx.nowMs);
   const percent =
     f.value.type === "number" && (format === "percent" || f.unit === "%")
       ? Math.max(0, Math.min(100, f.value.value))
       : null;
+  const label = def?.label ?? humanize(f.key);
   return {
     group: f.group,
-    key: f.key,
-    label: def?.label ?? humanize(f.key),
+    key: on?.key ?? f.key,
+    label: on ? `${label} (${on.node})` : label,
     display: def?.display?.(f, ctx) ?? formatValue(f, format, def, ctx.nowMs),
     level: worse(f.severity, def?.level?.(f, ctx) ?? null),
     percent,
     observedAt: f.observedAt,
+    ...(on ? { node: on.node } : {}),
   };
 }
 
@@ -127,6 +147,8 @@ export interface FactViewContext {
   profiles?: readonly Profile[];
   /** True when the source's data is stale or has never arrived; never when left out. */
   sourceStale?: (sourceId: string) => boolean;
+  /** Each source's current facts (see `currentFacts`); without them, the sources of the facts given. */
+  sources?: readonly SourceFacts[];
 }
 
 export interface FactViews {
@@ -148,12 +170,62 @@ export function latestFacts(facts: readonly Fact[]): Map<string, Fact> {
   return out;
 }
 
+/** The name after the kind in a source id: `facts:app-2` -> `app-2`. */
+const sourceName = (id: string) => id.slice(id.indexOf(":") + 1) || id;
+
+/**
+ * Each source's current facts (the newest per `group.key` within the source), named by the first profile
+ * whose `nodeOf` knows the node, else by the source id's name; ordered by node, then source id.
+ */
+export function factsBySource(
+  facts: Iterable<Fact>,
+  profiles: readonly Profile[] = listProfiles(),
+): SourceFacts[] {
+  const bySource = new Map<string, Fact[]>();
+  for (const f of facts) {
+    const list = bySource.get(f.source);
+    if (list) list.push(f);
+    else bySource.set(f.source, [f]);
+  }
+  return [...bySource]
+    .map(([source, list]): SourceFacts => {
+      const own = latestFacts(list);
+      const node = profiles.reduce<string | null>((n, p) => n ?? p.nodeOf?.(own) ?? null, null);
+      return { source, node: node ?? sourceName(source), facts: own };
+    })
+    .sort((a, b) => a.node.localeCompare(b.node) || a.source.localeCompare(b.source));
+}
+
+/** The facts a view shows: one per `group.key` (see `currentFacts`), and each source's own. */
+export interface CurrentFacts {
+  facts: Map<string, Fact>;
+  sources: SourceFacts[];
+}
+
+/**
+ * One fact per `group.key` and each source's own facts. With one facts source that is its facts; with
+ * several, the first active profile whose `selectFacts` picks decides, else the newest per key wins.
+ */
+export function currentFacts(facts: readonly Fact[], ctx: FactViewContext): CurrentFacts {
+  const profiles = ctx.profiles ?? listProfiles();
+  const merged = latestFacts(facts);
+  const sources = factsBySource(facts, profiles);
+  if (sources.length < 2) return { facts: merged, sources };
+  const base = profileContext(merged, { ...ctx, profiles, sources });
+  for (const p of profiles) {
+    const picked = p.selectFacts?.(base);
+    if (picked) return { facts: new Map(picked), sources };
+  }
+  return { facts: merged, sources };
+}
+
 /** The context profile hooks see; `facts` is one current fact per `group.key`. */
 export function profileContext(facts: ReadonlyMap<string, Fact>, ctx: FactViewContext): ProfileContext {
   return {
     config: ctx.config ?? standaloneConfig(ctx.thresholds),
     nowMs: ctx.nowMs,
     facts,
+    sources: ctx.sources ?? factsBySource(facts.values(), ctx.profiles),
     sourceStale: ctx.sourceStale ?? (() => false),
   };
 }
@@ -221,7 +293,31 @@ export function markTopologyGroups(
   }));
 }
 
-/** Groups, rows, highlights and the headline for facts that are already one per `group.key` (see `latestFacts`). */
+/**
+ * The sources that report a per-node group (`FactGroupDef.perNode`), when more than one does; null for any
+ * other group, which lists the facts given.
+ */
+function nodesOf(def: FactGroupDef | undefined, id: string, sources: readonly SourceFacts[]) {
+  if (!def?.perNode) return null;
+  const reporting = sources
+    .map((s) => ({ node: s.node, members: membersOf(s.facts.values(), id) }))
+    .filter((s) => s.members.size > 0);
+  return reporting.length > 1 ? reporting : null;
+}
+
+/** A group's facts by key. */
+function membersOf(facts: Iterable<Fact>, group: string): Map<string, Fact> {
+  const out = new Map<string, Fact>();
+  for (const f of facts) if (f.group === group) out.set(f.key, f);
+  return out;
+}
+
+/**
+ * Groups, rows, highlights and the headline for facts that are already one per `group.key` (see
+ * `currentFacts`). A per-node group that several sources report lists each source's rows (see
+ * `FactGroupDef.perNode`); it counts as fresh only while every node's newest row is, and its `observedAt`
+ * is the stalest node's.
+ */
 export function buildFactViews(facts: Iterable<Fact>, ctx: FactViewContext): FactViews {
   const profiles = ctx.profiles ?? listProfiles();
   const all = new Map<string, Fact>();
@@ -242,21 +338,39 @@ export function buildFactViews(facts: Iterable<Fact>, ctx: FactViewContext): Fac
     .map(([id, members]): FactGroupView => {
       const decl = decls.get(id);
       const keyOf = (key: string) => decl?.keys.find((k) => k.key === key);
-      const list = [...members.values()];
-      const rows: FactRowView[] = [];
-      for (const f of list) {
-        const def = keyOf(f.key);
-        const row = factRow(f, def, pctx);
-        index[`${id}.${f.key}`] = row;
-        const folded = def?.foldedInto !== undefined && members.has(def.foldedInto);
-        if (!def?.hidden && !folded) rows.push(row);
-      }
       const pos = (key: string) => {
         const i = decl?.keys.findIndex((k) => k.key === key) ?? -1;
         return i === -1 ? Number.POSITIVE_INFINITY : i;
       };
-      rows.sort((a, b) => pos(a.key) - pos(b.key) || a.label.localeCompare(b.label));
-      const newest = list.reduce((n, f) => (toMs(f.observedAt) > toMs(n.observedAt) ? f : n));
+      const newestOf = (list: readonly Fact[]) =>
+        list.reduce((n, f) => (toMs(f.observedAt) > toMs(n.observedAt) ? f : n));
+      const listed = (part: Map<string, Fact>, on: (f: Fact) => RowNode | null): FactRowView[] => {
+        const rows: FactRowView[] = [];
+        for (const f of part.values()) {
+          const def = keyOf(f.key);
+          const where = on(f);
+          const row = factRow(f, def, pctx, where);
+          index[`${id}.${where?.key ?? f.key}`] = row;
+          const folded = def?.foldedInto !== undefined && part.has(def.foldedInto);
+          if (!def?.hidden && !folded) rows.push(row);
+        }
+        return rows.sort((a, b) => pos(a.key) - pos(b.key) || a.label.localeCompare(b.label));
+      };
+      const nodes = nodesOf(decl?.def, id, ctx.sources ?? pctx.sources);
+      // Per node: the rows of the fact the view shows keep their key, the other nodes' are `<key>@<node>`.
+      const rows = nodes
+        ? nodes.flatMap((n) =>
+            listed(n.members, (f) => ({
+              node: n.node,
+              key: all.get(`${id}.${f.key}`)?.source === f.source ? f.key : `${f.key}@${n.node}`,
+            })),
+          )
+        : listed(members, () => null);
+      const newest = nodes
+        ? nodes
+            .map((n) => newestOf([...n.members.values()]))
+            .reduce((o, f) => (toMs(f.observedAt) < toMs(o.observedAt) ? f : o))
+        : newestOf([...members.values()]);
       return {
         id,
         title: decl?.def.title ?? humanize(id),

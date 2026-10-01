@@ -293,6 +293,11 @@ export interface FactRowView {
   /** 0..100 when the fact is a percentage (drives a gauge). */
   percent: number | null;
   observedAt: string;
+  /**
+   * The node the row describes (contract addition), set only on the rows of a per-node group
+   * (`FactGroupDef.perNode`) that more than one source reports; the label already names it.
+   */
+  node?: string;
 }
 
 export interface ActivityItem {

@@ -52,7 +52,7 @@ import {
   retiredServiceOf,
 } from "../monitors/schema";
 import { activeProfiles } from "../profiles";
-import { buildFactViews, latestFacts, markTopologyGroups, profileContext } from "./facts";
+import { buildFactViews, currentFacts, markTopologyGroups, profileContext } from "./facts";
 import { clock, formatDuration, formatPercent, iso, mean, round, toMs } from "./format";
 import type { DayCell, ViewInput } from "./input";
 import { worstState } from "./state";
@@ -211,14 +211,16 @@ export function buildSiteView(input: ViewInput): SiteView {
   const up = count("up");
   const maintenance = count("maintenance");
 
-  const currentFacts = latestFacts(model.facts);
   const profiles = activeProfiles(config);
-  const factCtx = { nowMs, thresholds: config.thresholds, config, profiles, sourceStale };
-  const facts = buildFactViews(currentFacts.values(), factCtx);
+  const baseCtx = { nowMs, thresholds: config.thresholds, config, profiles, sourceStale };
+  // One fact per key (a profile picks when several sources report the same keys), and each source's own.
+  const current = currentFacts(model.facts, baseCtx);
+  const factCtx = { ...baseCtx, sources: current.sources };
+  const facts = buildFactViews(current.facts.values(), factCtx);
   const topology = buildTopology({
     topology: config.topology,
     profiles,
-    ctx: profileContext(currentFacts, factCtx),
+    ctx: profileContext(current.facts, factCtx),
     services: all,
   });
 

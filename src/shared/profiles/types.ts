@@ -21,11 +21,29 @@ export type FactFormat =
   | "list" // comma or newline separated -> readable list
   | "timestamp"; // absolute UTC time
 
+/** The current facts one source reports (contract addition), e.g. one node of a failover pair. */
+export interface SourceFacts {
+  /** The source id, e.g. `facts:app-2`. */
+  source: string;
+  /** The node the facts come from (`Profile.nodeOf`), else the source id's name (`facts:app-2` -> `app-2`). */
+  node: string;
+  /** Its current facts by `group.key`. */
+  facts: ReadonlyMap<string, Fact>;
+}
+
 export interface ProfileContext {
   config: SiteConfig;
   nowMs: number;
-  /** Current facts by `group.key`. */
+  /**
+   * Current facts by `group.key`, one per key: the newest observation across sources, unless an active
+   * profile picks (`Profile.selectFacts`). With one facts source, simply that source's facts.
+   */
   facts: ReadonlyMap<string, Fact>;
+  /**
+   * Each source's own current facts (contract addition), ordered by node then source id. Always set; a
+   * context built without it (an older caller) gets the sources of `facts`.
+   */
+  sources: readonly SourceFacts[];
   /** True when the source's data is stale or has never arrived. */
   sourceStale(sourceId: string): boolean;
 }
@@ -87,6 +105,13 @@ export interface FactGroupDef {
    * the group out of its fact lists; a theme without a topology diagram keeps listing it.
    */
   inTopology?(topology: TopologyView): boolean;
+  /**
+   * True when the group describes one node, not the system (contract addition), e.g. a node's disk. When
+   * more than one source reports it, the group lists every source's rows, each labelled with its node
+   * (`FactRowView.node`); the rows of the source behind `ProfileContext.facts` keep their keys, the others
+   * are keyed `<key>@<node>`. With one source nothing changes.
+   */
+  perNode?: boolean;
 }
 
 /** A fact a theme may place in its summary box, with a short label. */
@@ -122,6 +147,18 @@ export interface Profile {
    * fence stamp) from this profile's facts. Profiles run in the order the site lists them.
    */
   topology?(ctx: ProfileContext, topology: TopologyView): TopologyView;
+  /**
+   * The node a source's facts come from (contract addition), e.g. its `forgejo.node`; null when they do
+   * not say. The first active profile that names one wins.
+   */
+  nodeOf?(facts: ReadonlyMap<string, Fact>): string | null;
+  /**
+   * Picks the facts the view shows when several sources report (contract addition), e.g. the primary's of
+   * a failover pair, from `ctx.sources`; `ctx.facts` holds the default (the newest per key). Returns the
+   * map that becomes `ProfileContext.facts` for every hook, or null to keep the default. The first active
+   * profile that picks wins. Not asked when only one source reports facts.
+   */
+  selectFacts?(ctx: ProfileContext): ReadonlyMap<string, Fact> | null;
   /** Path (in the repo) of the producer's install guide, e.g. `profiles/forgejo-ha/README.md`. */
   producerGuide?: string;
 }

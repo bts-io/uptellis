@@ -74,6 +74,16 @@ summaryParts: (ctx) =>
 
 A fact has a freshness window (`freshForS`). Past it, or while its source is stale, a profile keeps showing the fact's last value and marks it, never replacing it with a word that hides the number. `src/shared/profiles/read.ts` has two helpers for any profile: `staleAge(ctx, "group.key")` is how long ago such a fact was observed ("13 min ago", null while current or never seen) and `lastKnown(ctx, "group.key", text)` appends it ("lag 0 s, 13 min ago"). `forgejo-ha` shows a stale replication lag this way on the edge, on the standby's `wal` card row (state `stale`), in the group's summary (muted) and in the headline ("replication lag 0 s, 40 min ago"), unless the replication state says why nothing streams ("no standby streaming").
 
+## Several sources
+
+Two producers may report the same keys, for example a pusher on each node of a failover pair. Uptellis stores each source's facts apart (the `facts` table is keyed by site, source, group and key), and the view combines them:
+
+- `ProfileContext.facts` holds one fact per `group.key`. With one facts source it is that source's facts, exactly as before. With several, the first active profile whose `selectFacts(ctx)` hook (contract addition) returns a map decides; otherwise the newest observation per key wins, which suits sources that report different keys.
+- `ProfileContext.sources` (contract addition) lists each source's own current facts as `{ source, node, facts }`, ordered by node. `node` comes from the first active profile whose `nodeOf(facts)` hook (contract addition) names one (`forgejo-ha` reads `forgejo.node`), else from the source id (`facts:app-2` -> `app-2`).
+- A group marked `perNode` (contract addition) describes one node, not the system. When more than one source reports it, the group lists every source's rows, each labelled with its node (`Root filesystem (app-2)`) and carrying `FactRowView.node` (contract addition). The rows of the source behind `ctx.facts` keep their keys (`disk.percent` in `factIndex`); the others are keyed `<key>@<node>` (`disk.percent@app-2`). Such a group counts as fresh only while every node's rows are, and its `observedAt` is the stalest node's.
+
+`forgejo-ha` reads the pair from the primary while its facts are current, else from the other node, and shows disk per node; the rule is in [profiles/forgejo-ha/README.md](../profiles/forgejo-ha/README.md#two-pushers-one-page).
+
 ## Groups the topology draws
 
 A group's `inTopology(topology)` hook (contract addition) returns true when the profile's topology hook already draws the group's facts into the refined topology. `forgejo-ha` marks `replication` while the topology has a replication edge (its liveness and lag, the pair's `postgres` and `wal` card rows) and `fence` while it has a fence stamp (decision, reason, timelines). The view sets `FactGroupView.inTopology` from it, and always false when the site has no topology. A theme that draws that part of the topology (B and C draw the failover pair) leaves such a group out of its fact tiles or lines; a theme without a topology diagram, or a site without a topology, lists it as usual.
