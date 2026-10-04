@@ -2,6 +2,12 @@
 
 All notable changes to Uptellis are recorded here. The format follows [Conventional Commits](https://www.conventionalcommits.org) and the project uses [Semantic Versioning](https://semver.org). Each release adds its section in the release PR, from the Conventional Commits since the previous tag.
 
+## 0.8.4 (2026-10-04)
+
+### Build
+
+* **ci:** Bun 1.4.2 instead of 1.3.6 in CI, the staging deploy and the release workflow, so the agent binaries attached to this release are compiled with Bun 1.4.2. `bun.lock` is unchanged (1.4.2 reads the lockfile 1.3.6 wrote). The Docker images are unchanged (`oven/bun` 1.3.14).
+
 ## 0.8.3 (2026-10-01)
 
 ### Bug Fixes

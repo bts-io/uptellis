@@ -1,6 +1,6 @@
 {
   "name": "uptellis-agent",
-  "version": "0.8.3",
+  "version": "0.8.4",
   "private": true,
   "type": "module",
   "description": "Uptellis agent: runs a site's monitors inside a private network and posts buffered results",
