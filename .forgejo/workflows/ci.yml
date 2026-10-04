@@ -27,8 +27,9 @@ jobs:
           fetch-depth: 0
       - uses: https://github.com/oven-sh/setup-bun@v2
         with:
-          # Same Bun that wrote bun.lock, so --frozen-lockfile agrees with it.
-          bun-version: 1.3.6
+          # bun.lock was written by 1.3.6; 1.4.2 reads it unchanged with --frozen-lockfile and, unlike 1.3.x,
+          # honours the registry setting (the runner npm cache) when bun.lock exists.
+          bun-version: 1.4.2
       - run: bun install --frozen-lockfile
       # The collector and the agent have their own lockfiles; their typechecks (in `check`) and bun tests (in
       # `verify`) need them.
